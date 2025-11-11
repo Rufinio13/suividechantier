@@ -5,13 +5,31 @@ import { useChantier } from '@/context/ChantierContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChantierCard } from '@/components/ChantierCard';
-import { HardHat, Plus, Clock, CheckCircle, Calendar, GanttChartSquare, Wrench } from 'lucide-react';
+import { HardHat, Plus, Clock, CheckCircle, GanttChartSquare, Wrench } from 'lucide-react';
 import { GlobalGanttChart } from '@/components/dashboard/GlobalGanttChart';
 import { subWeeks, startOfDay } from 'date-fns';
+import { AuthProvider } from '@/context/AuthProvider';
+import { useAuth } from '@/hooks/useAuth';
 
 export function Dashboard() {
-  const { chantiers, taches, sousTraitants, demandesSAV, loading } = useChantier();
+  const { chantiers, taches, sousTraitants, demandesSAV, loading: chantierLoading } = useChantier();
+  const { user, signOut, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+
+  // 🔹 Redirection automatique si pas connecté
+ if (!authLoading && !user) {
+  navigate('/login');
+  return null;
+ }
+
+  if (authLoading || chantierLoading) {
+    return <div className="flex justify-center items-center h-64">Chargement...</div>;
+  }
+
+  const handleSignOut = async () => {
+    await signOut(); 
+    navigate('/login');    // Redirige vers login
+  };
 
   const chantiersEnCoursCount = chantiers.filter(c => c.statut === 'En cours').length;
   const chantiersReceptionnesCount = chantiers.filter(c => c.statut === 'Réceptionné').length;
@@ -28,30 +46,29 @@ export function Dashboard() {
   const handleStatutCardClick = (statut) => {
     navigate(`/chantiers?statut=${encodeURIComponent(statut)}`);
   };
-  
-  const chantiersEnCoursPourGantt = useMemo(() => {
-    return chantiers.filter(c => c.statut === 'En cours');
-  }, [chantiers]);
 
-  const defaultStartDateForGantt = useMemo(() => {
-    return subWeeks(startOfDay(new Date()), 1);
-  }, []);
+  const chantiersEnCoursPourGantt = useMemo(
+    () => chantiers.filter(c => c.statut === 'En cours'),
+    [chantiers]
+  );
 
-
-  if (loading) {
-    return <div className="flex justify-center items-center h-64">Chargement...</div>;
-  }
+  const defaultStartDateForGantt = useMemo(
+    () => subWeeks(startOfDay(new Date()), 1),
+    []
+  );
 
   return (
     <div className="space-y-8">
+      {/* Header */}
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Tableau de bord</h1>
-          <p className="text-muted-foreground">Bienvenue sur votre application de suivi de chantiers</p>
+          <p className="text-muted-foreground">Bienvenue, {user.prenom} {user.nom}</p>
         </div>
-        {/* Bouton "Voir tous les chantiers" supprimé */}
+        <Button onClick={handleSignOut} variant="outline">Se déconnecter</Button>
       </div>
 
+      {/* Statistiques */}
       <motion.div 
         className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
         initial={{ opacity: 0, y: 20 }}
@@ -59,8 +76,8 @@ export function Dashboard() {
         transition={{ duration: 0.3, delay: 0.1 }}
       >
         <Card 
-            className="bg-gradient-to-br from-blue-500 to-blue-600 text-white hover:shadow-xl cursor-pointer transition-all"
-            onClick={() => handleStatutCardClick('En cours')}
+          className="bg-gradient-to-br from-blue-500 to-blue-600 text-white hover:shadow-xl cursor-pointer transition-all"
+          onClick={() => handleStatutCardClick('En cours')}
         >
           <CardHeader className="pb-2">
             <CardTitle className="text-xl">Chantiers en cours</CardTitle>
@@ -72,12 +89,10 @@ export function Dashboard() {
             </div>
           </CardContent>
         </Card>
-        
 
-        
         <Card 
-            className="bg-gradient-to-br from-green-500 to-green-600 text-white hover:shadow-xl cursor-pointer transition-all"
-            onClick={() => handleStatutCardClick('Réceptionné')}
+          className="bg-gradient-to-br from-green-500 to-green-600 text-white hover:shadow-xl cursor-pointer transition-all"
+          onClick={() => handleStatutCardClick('Réceptionné')}
         >
           <CardHeader className="pb-2">
             <CardTitle className="text-xl">Chantiers réceptionnés</CardTitle>
@@ -89,7 +104,7 @@ export function Dashboard() {
             </div>
           </CardContent>
         </Card>
-        
+
         <Link to="/sav">
           <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white h-full hover:shadow-xl transition-all">
             <CardHeader className="pb-2">
@@ -105,6 +120,7 @@ export function Dashboard() {
         </Link>
       </motion.div>
 
+      {/* Planning Gantt */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -112,27 +128,30 @@ export function Dashboard() {
       >
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl flex items-center"><GanttChartSquare className="mr-3 h-6 w-6 text-primary"/>Planning des chantiers en cours</CardTitle>
+            <CardTitle className="text-2xl flex items-center">
+              <GanttChartSquare className="mr-3 h-6 w-6 text-primary"/>
+              Planning des chantiers en cours
+            </CardTitle>
           </CardHeader>
           <CardContent>
-             {chantiersEnCoursPourGantt.length > 0 ? (
-                <GlobalGanttChart 
-                  chantiers={chantiersEnCoursPourGantt} 
-                  taches={taches} 
-                  sousTraitants={sousTraitants}
-                  initialStartDate={defaultStartDateForGantt}
-                />
-             ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                    <GanttChartSquare className="mx-auto h-12 w-12 mb-2" />
-                    Aucun chantier en cours pour afficher le planning.
-                </div>
-             )}
+            {chantiersEnCoursPourGantt.length > 0 ? (
+              <GlobalGanttChart 
+                chantiers={chantiersEnCoursPourGantt} 
+                taches={taches} 
+                sousTraitants={sousTraitants}
+                initialStartDate={defaultStartDateForGantt}
+              />
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <GanttChartSquare className="mx-auto h-12 w-12 mb-2" />
+                Aucun chantier en cours pour afficher le planning.
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>
 
-
+      {/* Chantiers récents */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -141,9 +160,7 @@ export function Dashboard() {
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold">Chantiers récents</h2>
           <Link to="/chantiers">
-            <Button variant="outline" size="sm">
-              Voir tous
-            </Button>
+            <Button variant="outline" size="sm">Voir tous</Button>
           </Link>
         </div>
         
@@ -168,7 +185,6 @@ export function Dashboard() {
           </Card>
         )}
       </motion.div>
-      {/* Section "Chantiers à démarrer" supprimée */}
     </div>
   );
 }

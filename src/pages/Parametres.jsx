@@ -7,20 +7,18 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from "@/components/ui/use-toast";
 import { ReferentielControleQualite } from '@/pages/ReferentielControleQualite';
-import { LotsList } from '@/pages/LotsList'; 
-import { UserPlus, Save, Trash2, Edit, Building, UserCircle, Users, ShieldCheck, ListChecks } from 'lucide-react'; 
+import { LotsList } from '@/pages/LotsList';
+import { UserPlus, Save, Trash2, Edit, Building, UserCircle, Users, ShieldCheck, ListChecks } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseKey = import.meta.env.VITE_SUPABASE_KEY
-
-export const supabase = createClient(supabaseUrl, supabaseKey)
+import { supabase } from '@/lib/supabaseClient'; // Supabase client unique
+import { AuthProvider } from '@/context/AuthProvider';
+import { useAuth } from '@/hooks/useAuth';
 
 export function Parametres() {
+  const { user } = useAuth(); // Récupère l'utilisateur connecté
   const { toast } = useToast();
 
-  // Profil Admin
+  // Profil administrateur
   const [profil, setProfil] = useState({
     nomSociete: '',
     nomAdmin: '',
@@ -45,19 +43,35 @@ export function Parametres() {
 
   const userProfilOptions = ["Administrateur", "Conducteur de travaux", "Chef de chantier", "Bureau d'études", "Utilisateur"];
 
-  // Load data from Supabase
+  // Chargement des données depuis Supabase
   useEffect(() => {
     const fetchData = async () => {
-      // Profil admin
-      const { data: profilData } = await supabase.from('profil').select('*').single();
-      if (profilData) setProfil(profilData);
+      if (!user) return;
 
-      // Utilisateurs
-      const { data: usersData } = await supabase.from('users').select('*');
-      if (usersData) setUsers(usersData);
+      // Profil de l'administrateur de la société de l'utilisateur
+      const { data: profilData, error: profilError } = await supabase
+        .from('profil')
+        .select('*')
+        .eq('nomSociete', user.nomSociete)
+        .single();
+
+      if (profilError) {
+        toast({ title: "Erreur", description: profilError.message });
+      } else if (profilData) {
+        setProfil(profilData);
+      }
+
+      // Utilisateurs liés à la même société
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('nomSociete', user.nomSociete);
+
+      if (usersError) toast({ title: "Erreur", description: usersError.message });
+      else setUsers(usersData || []);
     };
     fetchData();
-  }, []);
+  }, [user]);
 
   // Handlers Profil
   const handleProfilChange = (e) => {
@@ -96,13 +110,16 @@ export function Parametres() {
 
   const handleSaveUser = async (e) => {
     e.preventDefault();
-    let userToSave = { ...currentUserFormData };
+    const userToSave = { ...currentUserFormData, nomSociete: user.nomSociete };
     if (!userToSave.id) userToSave.id = uuidv4();
 
     const { data, error } = await supabase.from('users').upsert([userToSave]);
     if (error) toast({ title: "Erreur", description: error.message });
     else {
-      const { data: updatedUsers } = await supabase.from('users').select('*');
+      const { data: updatedUsers } = await supabase
+        .from('users')
+        .select('*')
+        .eq('nomSociete', user.nomSociete);
       setUsers(updatedUsers || []);
       toast({ title: editingUser ? "Utilisateur modifié" : "Utilisateur ajouté" });
       closeUserModal();
@@ -120,15 +137,8 @@ export function Parametres() {
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="space-y-6"
-    >
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold tracking-tight">Paramètres</h1>
-      </div>
+    <motion.div className="space-y-6" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+      <h1 className="text-3xl font-bold tracking-tight">Paramètres</h1>
 
       <Tabs defaultValue="profil" className="w-full">
         <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 md:grid-cols-4 mb-6">
@@ -138,6 +148,7 @@ export function Parametres() {
           <TabsTrigger value="lots" className="py-3"><ListChecks className="mr-2 h-4 w-4" />Lots</TabsTrigger>
         </TabsList>
 
+        {/* Profil */}
         <TabsContent value="profil">
           <Card>
             <CardHeader>
@@ -149,27 +160,15 @@ export function Parametres() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="nomSociete">Nom de la société</Label>
-                    <Input id="nomSociete" name="nomSociete" value={profil.nomSociete} onChange={handleProfilChange} placeholder="Nom de votre entreprise" />
+                    <Input id="nomSociete" name="nomSociete" value={profil.nomSociete} onChange={handleProfilChange} />
                   </div>
                 </div>
                 <h3 className="text-lg font-medium pt-4 border-t">Informations Administrateur</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="nomAdmin">Nom</Label>
-                    <Input id="nomAdmin" name="nomAdmin" value={profil.nomAdmin} onChange={handleProfilChange} placeholder="Nom de l'administrateur" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="prenomAdmin">Prénom</Label>
-                    <Input id="prenomAdmin" name="prenomAdmin" value={profil.prenomAdmin} onChange={handleProfilChange} placeholder="Prénom de l'administrateur" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="telAdmin">Téléphone</Label>
-                    <Input id="telAdmin" name="telAdmin" type="tel" value={profil.telAdmin} onChange={handleProfilChange} placeholder="Téléphone de l'administrateur" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="mailAdmin">Email</Label>
-                    <Input id="mailAdmin" name="mailAdmin" type="email" value={profil.mailAdmin} onChange={handleProfilChange} placeholder="Email de l'administrateur" />
-                  </div>
+                  <Input id="nomAdmin" name="nomAdmin" value={profil.nomAdmin} onChange={handleProfilChange} placeholder="Nom" />
+                  <Input id="prenomAdmin" name="prenomAdmin" value={profil.prenomAdmin} onChange={handleProfilChange} placeholder="Prénom" />
+                  <Input id="telAdmin" name="telAdmin" type="tel" value={profil.telAdmin} onChange={handleProfilChange} placeholder="Téléphone" />
+                  <Input id="mailAdmin" name="mailAdmin" type="email" value={profil.mailAdmin} onChange={handleProfilChange} placeholder="Email" />
                 </div>
                 <div className="flex justify-end">
                   <Button type="submit"><Save className="mr-2 h-4 w-4" />Sauvegarder le profil</Button>
@@ -179,106 +178,58 @@ export function Parametres() {
           </Card>
         </TabsContent>
 
+        {/* Utilisateurs */}
         <TabsContent value="utilisateurs">
           <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5 text-primary"/>Gestion des utilisateurs</CardTitle>
-                  <CardDescription>Ajoutez, modifiez ou supprimez des utilisateurs.</CardDescription>
-                </div>
-                <Button onClick={() => openUserModal()}>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Ajouter un utilisateur
-                </Button>
-              </div>
+            <CardHeader className="flex justify-between items-center">
+              <CardTitle className="flex items-center"><Users className="mr-2 h-5 w-5 text-primary"/>Gestion des utilisateurs</CardTitle>
+              <Button onClick={() => openUserModal()}><UserPlus className="mr-2 h-4 w-4"/>Ajouter</Button>
             </CardHeader>
             <CardContent>
-              {users.length > 0 ? (
-                <div className="space-y-4">
-                  {users.map(user => (
-                    <Card key={user.id} className="p-4">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                        <div className="mb-2 sm:mb-0">
-                          <p className="font-semibold">{user.prenom} {user.nom} <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full ml-2">{user.profil}</span></p>
-                          <p className="text-sm text-muted-foreground">{user.mail} - {user.tel}</p>
-                        </div>
-                        <div className="flex space-x-2">
-                          <Button variant="outline" size="sm" onClick={() => openUserModal(user)}>
-                            <Edit className="mr-1 h-3 w-3" /> Modifier
-                          </Button>
-                          <Button variant="destructive" size="sm" onClick={() => handleDeleteUser(user.id)}>
-                            <Trash2 className="mr-1 h-3 w-3" /> Supprimer
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-muted-foreground text-center py-4">Aucun utilisateur configuré.</p>
-              )}
+              {users.length > 0 ? users.map(u => (
+                <Card key={u.id} className="p-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-semibold">{u.prenom} {u.nom} <span className="text-xs bg-primary/10 px-2 rounded-full ml-2">{u.profil}</span></p>
+                      <p className="text-sm">{u.mail} - {u.tel}</p>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button variant="outline" size="sm" onClick={() => openUserModal(u)}><Edit className="mr-1 h-3 w-3"/>Modifier</Button>
+                      <Button variant="destructive" size="sm" onClick={() => handleDeleteUser(u.id)}><Trash2 className="mr-1 h-3 w-3"/>Supprimer</Button>
+                    </div>
+                  </div>
+                </Card>
+              )) : <p className="text-center py-4 text-muted-foreground">Aucun utilisateur configuré.</p>}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="referentiel-cq">
-          <ReferentielControleQualite />
-        </TabsContent>
-
-        <TabsContent value="lots">
-          <LotsList />
-        </TabsContent>
+        <TabsContent value="referentiel-cq"><ReferentielControleQualite /></TabsContent>
+        <TabsContent value="lots"><LotsList /></TabsContent>
       </Tabs>
 
+      {/* Modal ajout/modification utilisateur */}
       {isUserModalOpen && (
-         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <motion.div 
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-card p-6 rounded-lg shadow-xl w-full max-w-lg"
-            >
-                <h2 className="text-xl font-semibold mb-4">{editingUser ? "Modifier l'utilisateur" : "Ajouter un utilisateur"}</h2>
-                <form onSubmit={handleSaveUser} className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                            <Label htmlFor="userNom">Nom</Label>
-                            <Input id="userNom" name="nom" value={currentUserFormData.nom} onChange={handleUserFormChange} required />
-                        </div>
-                        <div className="space-y-1">
-                            <Label htmlFor="userPrenom">Prénom</Label>
-                            <Input id="userPrenom" name="prenom" value={currentUserFormData.prenom} onChange={handleUserFormChange} required />
-                        </div>
-                    </div>
-                    <div className="space-y-1">
-                        <Label htmlFor="userMail">Email</Label>
-                        <Input id="userMail" name="mail" type="email" value={currentUserFormData.mail} onChange={handleUserFormChange} required />
-                    </div>
-                    <div className="space-y-1">
-                        <Label htmlFor="userTel">Téléphone</Label>
-                        <Input id="userTel" name="tel" type="tel" value={currentUserFormData.tel} onChange={handleUserFormChange} />
-                    </div>
-                    <div className="space-y-1">
-                        <Label htmlFor="userProfil">Profil</Label>
-                        <select 
-                            id="userProfil" 
-                            name="profil" 
-                            value={currentUserFormData.profil} 
-                            onChange={handleUserFormChange}
-                            className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                            {userProfilOptions.map(option => (
-                                <option key={option} value={option}>{option}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="flex justify-end space-x-2 pt-4">
-                        <Button type="button" variant="outline" onClick={closeUserModal}>Annuler</Button>
-                        <Button type="submit">{editingUser ? "Sauvegarder" : "Ajouter"}</Button>
-                    </div>
-                </form>
-            </motion.div>
-         </div>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="bg-card p-6 rounded-lg shadow-xl w-full max-w-lg">
+            <h2 className="text-xl font-semibold mb-4">{editingUser ? "Modifier l'utilisateur" : "Ajouter un utilisateur"}</h2>
+            <form onSubmit={handleSaveUser} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input name="nom" value={currentUserFormData.nom} onChange={handleUserFormChange} placeholder="Nom" required />
+                <Input name="prenom" value={currentUserFormData.prenom} onChange={handleUserFormChange} placeholder="Prénom" required />
+              </div>
+              <Input name="mail" type="email" value={currentUserFormData.mail} onChange={handleUserFormChange} placeholder="Email" required />
+              <Input name="tel" type="tel" value={currentUserFormData.tel} onChange={handleUserFormChange} placeholder="Téléphone" />
+              <select name="profil" value={currentUserFormData.profil} onChange={handleUserFormChange}>
+                {userProfilOptions.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button type="button" variant="outline" onClick={closeUserModal}>Annuler</Button>
+                <Button type="submit">{editingUser ? "Sauvegarder" : "Ajouter"}</Button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
       )}
     </motion.div>
   );
