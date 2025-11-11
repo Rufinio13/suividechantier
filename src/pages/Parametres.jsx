@@ -10,19 +10,18 @@ import { ReferentielControleQualite } from '@/pages/ReferentielControleQualite';
 import { LotsList } from '@/pages/LotsList'; 
 import { UserPlus, Save, Trash2, Edit, Building, UserCircle, Users, ShieldCheck, ListChecks } from 'lucide-react'; 
 import { v4 as uuidv4 } from 'uuid';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js'
 
-// ⚙️ Remplace par tes infos Supabase
-const supabaseUrl = 'https://xxxx.supabase.co';
-const supabaseAnonKey = 'public-anon-key';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseKey = import.meta.env.VITE_SUPABASE_KEY
+
+export const supabase = createClient(supabaseUrl, supabaseKey)
 
 export function Parametres() {
   const { toast } = useToast();
 
   // Profil Admin
   const [profil, setProfil] = useState({
-    id: null,
     nomSociete: '',
     nomAdmin: '',
     prenomAdmin: '',
