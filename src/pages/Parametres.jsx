@@ -8,17 +8,21 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useToast } from "@/components/ui/use-toast";
 import { ReferentielControleQualite } from '@/pages/ReferentielControleQualite';
 import { LotsList } from '@/pages/LotsList'; 
-import { UserPlus, Save, Trash2, Edit, Building, UserCircle, Phone, Mail, Users, ShieldCheck, ListChecks } from 'lucide-react'; 
+import { UserPlus, Save, Trash2, Edit, Building, UserCircle, Users, ShieldCheck, ListChecks } from 'lucide-react'; 
 import { v4 as uuidv4 } from 'uuid';
+import { createClient } from '@supabase/supabase-js';
 
-const PROFIL_STORAGE_KEY = 'monProfil';
-const USERS_STORAGE_KEY = 'appUsers';
+// ⚙️ Remplace par tes infos Supabase
+const supabaseUrl = 'https://xxxx.supabase.co';
+const supabaseAnonKey = 'public-anon-key';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export function Parametres() {
   const { toast } = useToast();
 
-  // Mon Profil State
+  // Profil Admin
   const [profil, setProfil] = useState({
+    id: null,
     nomSociete: '',
     nomAdmin: '',
     prenomAdmin: '',
@@ -27,43 +31,49 @@ export function Parametres() {
     profil: 'Administrateur',
   });
 
-  // Utilisateurs State
+  // Utilisateurs
   const [users, setUsers] = useState([]);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [currentUserFormData, setCurrentUserFormData] = useState({
+    id: null,
     nom: '',
     prenom: '',
     tel: '',
     mail: '',
-    profil: 'Utilisateur' 
+    profil: 'Utilisateur',
   });
 
-  // Load data from localStorage
+  const userProfilOptions = ["Administrateur", "Conducteur de travaux", "Chef de chantier", "Bureau d'études", "Utilisateur"];
+
+  // Load data from Supabase
   useEffect(() => {
-    const storedProfil = localStorage.getItem(PROFIL_STORAGE_KEY);
-    if (storedProfil) {
-      setProfil(JSON.parse(storedProfil));
-    }
-    const storedUsers = localStorage.getItem(USERS_STORAGE_KEY);
-    if (storedUsers) {
-      setUsers(JSON.parse(storedUsers));
-    }
+    const fetchData = async () => {
+      // Profil admin
+      const { data: profilData } = await supabase.from('profil').select('*').single();
+      if (profilData) setProfil(profilData);
+
+      // Utilisateurs
+      const { data: usersData } = await supabase.from('users').select('*');
+      if (usersData) setUsers(usersData);
+    };
+    fetchData();
   }, []);
 
-  // Mon Profil handlers
+  // Handlers Profil
   const handleProfilChange = (e) => {
     const { name, value } = e.target;
     setProfil(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSaveProfil = (e) => {
+  const handleSaveProfil = async (e) => {
     e.preventDefault();
-    localStorage.setItem(PROFIL_STORAGE_KEY, JSON.stringify(profil));
-    toast({ title: "Profil sauvegardé", description: "Vos informations de profil ont été mises à jour." });
+    const { data, error } = await supabase.from('profil').upsert([profil]);
+    if (error) toast({ title: "Erreur", description: error.message });
+    else toast({ title: "Profil sauvegardé", description: "Vos informations ont été mises à jour." });
   };
 
-  // Utilisateurs handlers
+  // Handlers Utilisateurs
   const handleUserFormChange = (e) => {
     const { name, value } = e.target;
     setCurrentUserFormData(prev => ({ ...prev, [name]: value }));
@@ -75,7 +85,7 @@ export function Parametres() {
       setCurrentUserFormData({ ...user });
     } else {
       setEditingUser(null);
-      setCurrentUserFormData({ nom: '', prenom: '', tel: '', mail: '', profil: 'Utilisateur' });
+      setCurrentUserFormData({ id: null, nom: '', prenom: '', tel: '', mail: '', profil: 'Utilisateur' });
     }
     setIsUserModalOpen(true);
   };
@@ -85,32 +95,30 @@ export function Parametres() {
     setEditingUser(null);
   };
 
-  const handleSaveUser = (e) => {
+  const handleSaveUser = async (e) => {
     e.preventDefault();
-    let updatedUsers;
-    if (editingUser) {
-      updatedUsers = users.map(u => u.id === editingUser.id ? { ...currentUserFormData, id: editingUser.id } : u);
-      toast({ title: "Utilisateur modifié", description: "Les informations de l'utilisateur ont été mises à jour." });
-    } else {
-      updatedUsers = [...users, { ...currentUserFormData, id: uuidv4() }];
-      toast({ title: "Utilisateur ajouté", description: "Le nouvel utilisateur a été ajouté avec succès." });
-    }
-    setUsers(updatedUsers);
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(updatedUsers));
-    closeUserModal();
-  };
+    let userToSave = { ...currentUserFormData };
+    if (!userToSave.id) userToSave.id = uuidv4();
 
-  const handleDeleteUser = (userId) => {
-    if (window.confirm("Êtes-vous sûr de vouloir supprimer cet utilisateur ?")) {
-      const updatedUsers = users.filter(u => u.id !== userId);
-      setUsers(updatedUsers);
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(updatedUsers));
-      toast({ title: "Utilisateur supprimé", description: "L'utilisateur a été supprimé." });
+    const { data, error } = await supabase.from('users').upsert([userToSave]);
+    if (error) toast({ title: "Erreur", description: error.message });
+    else {
+      const { data: updatedUsers } = await supabase.from('users').select('*');
+      setUsers(updatedUsers || []);
+      toast({ title: editingUser ? "Utilisateur modifié" : "Utilisateur ajouté" });
+      closeUserModal();
     }
   };
-  
-  const userProfilOptions = ["Administrateur", "Conducteur de travaux", "Chef de chantier", "Bureau d'études", "Utilisateur"];
 
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cet utilisateur ?")) return;
+    const { error } = await supabase.from('users').delete().eq('id', userId);
+    if (error) toast({ title: "Erreur", description: error.message });
+    else {
+      setUsers(users.filter(u => u.id !== userId));
+      toast({ title: "Utilisateur supprimé" });
+    }
+  };
 
   return (
     <motion.div 
@@ -224,7 +232,6 @@ export function Parametres() {
         </TabsContent>
       </Tabs>
 
-      {/* User Form Modal (Dialog) */}
       {isUserModalOpen && (
          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
             <motion.div 
@@ -274,7 +281,6 @@ export function Parametres() {
             </motion.div>
          </div>
       )}
-
     </motion.div>
   );
 }
