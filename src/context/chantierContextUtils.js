@@ -29,11 +29,11 @@ const initialDemoData = (uuidv4) => {
       { id: demoChantierId2, nom: 'Bureau Innovatis', client: 'Tech Solutions SARL', adresse: '45 Avenue des Champs, Paris', dateDebut: '2024-10-15', dateFin: '2025-01-20', budget: 120000, statut: 'Planifié', progression: 0 },
     ],
     sousTraitants: [
-      { id: demoStId1, nomSociete: 'Plomberie Express', nomDirigeant: 'Marc Dubois', email: 'marc.dubois@plomberie-express.fr', telephone: '0601020304', adressePostale: '10 Rue de la Pompe, Lyon', assignedLots: [demoLotId2] },
-      { id: demoStId2, nomSociete: 'Élec Plus', nomDirigeant: 'Sophie Bernard', email: 'sophie.bernard@elecplus.com', telephone: '0705060708', adressePostale: '25 Boulevard Voltaire, Paris', assignedLots: [demoLotId3] },
+      { id: demoStId1, nomsociete: 'Plomberie Express', nomDirigeant: 'Marc Dubois', email: 'marc.dubois@plomberie-express.fr', telephone: '0601020304', adressePostale: '10 Rue de la Pompe, Lyon', assignedLots: [demoLotId2] },
+      { id: demoStId2, nomsociete: 'Élec Plus', nomDirigeant: 'Sophie Bernard', email: 'sophie.bernard@elecplus.com', telephone: '0705060708', adressePostale: '25 Boulevard Voltaire, Paris', assignedLots: [demoLotId3] },
     ],
     fournisseurs: [
-      { id: demoFournisseurId1, nomSociete: 'Béton Pro', nomContact: 'Luc Durand', email: 'luc.durand@betonpro.com', telephone: '0405060708', adresse: 'ZI du Port, Marseille', assignedLots: [demoLotId1] },
+      { id: demoFournisseurId1, nomsociete: 'Béton Pro', nomContact: 'Luc Durand', email: 'luc.durand@betonpro.com', telephone: '0405060708', adresse: 'ZI du Port, Marseille', assignedLots: [demoLotId1] },
     ],
     lots: [
       { id: demoLotId1, nom: 'Gros Œuvre', description: 'Fondations, maçonnerie, structure.' },

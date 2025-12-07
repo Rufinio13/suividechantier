@@ -1,79 +1,101 @@
+// src/pages/ControlQualite.jsx
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useChantier } from '@/context/ChantierContext';
+import { useReferentielCQ } from '@/context/ReferentielCQContext';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft, Search, ShieldAlert, ShieldCheck, Save } from 'lucide-react';
-// import { ControleQualiteFormModal } from '@/components/controle-qualite/ControleQualiteFormModal'; // Retiré
-// import { ControleQualiteAdHocItem } from '@/components/controle-qualite/ControleQualiteListItem'; // Retiré
+import { ArrowLeft, Save, ShieldCheck } from 'lucide-react';
 import { ControleQualiteDomaineItem } from '@/components/controle-qualite/ControleQualiteDomaineItem';
 import { useToast } from "@/components/ui/use-toast";
 import { v4 as uuidv4 } from 'uuid';
-
 
 export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }) {
   const params = useParams();
   const chantierId = isEmbedded ? embeddedChantierId : params.id;
 
-  const { 
-    chantiers, 
-    controles: allControles, 
-    modelesCQ, 
-    saveControleFromModele,
-    updatePointControleChantierSpecific, // Nouvelle fonction du contexte
-    addPointControleChantierSpecific,    // Nouvelle fonction du contexte
-    deletePointControleChantierSpecific, // Nouvelle fonction du contexte
-    // updateNomCategorieChantierSpecific, // Nouvelle fonction du contexte
-    loading 
-  } = useChantier();
-  const { toast } = useToast();
+  const { chantiers } = useChantier();
   
+  // ✅ AJOUT: Récupérer les documents du chantier
+  const { documents = [] } = useChantier();
+  
+  const {
+    modelesCQ,
+    controles,
+    saveControleFromModele,
+    addPointControleChantierSpecific,
+    updatePointControleChantierSpecific,
+    deletePointControleChantierSpecific,
+    loading
+  } = useReferentielCQ();
+
+  const { toast } = useToast();
+
   const [resultatsTousModeles, setResultatsTousModeles] = useState({});
-  // const [searchTerm, setSearchTerm] = useState(''); // Retiré car plus de contrôles ad-hoc listés
+  const [pointsSpecifiquesChantier, setPointsSpecifiquesChantier] = useState({});
+  const [savingModeles, setSavingModeles] = useState({});
 
   const chantier = useMemo(() => chantiers.find(c => c.id === chantierId), [chantiers, chantierId]);
-  
-  // Structure des points de contrôle spécifiques au chantier
-  const [pointsSpecifiquesChantier, setPointsSpecifiquesChantier] = useState({});
 
-
+  // =========================================
+  // INITIALISATION - Charger les résultats existants
+  // =========================================
+// =========================================
+  // INITIALISATION - Charger les résultats existants
+  // =========================================
   useEffect(() => {
+    console.log('🔍 DEBUG - Initialisation contrôles');
+    console.log('controles disponibles:', controles);
+    console.log('chantierId:', chantierId);
+    console.log('modelesCQ:', modelesCQ);
+
     const initialResults = {};
     const initialPointsSpecifiques = {};
 
-    const controlesModelePourCeChantier = allControles.filter(
-      c => c.chantierId === chantierId && c.type === 'modele' && c.modeleCQId
-    );
+    const controlesChantier = controles.filter(c => c.chantier_id === chantierId);
+    console.log('controlesChantier filtrés:', controlesChantier);
 
     modelesCQ.forEach(modele => {
-      const controleExistant = controlesModelePourCeChantier.find(c => c.modeleCQId === modele.id);
-      initialResults[modele.id] = controleExistant ? controleExistant.resultats || {} : {};
-      initialPointsSpecifiques[modele.id] = controleExistant ? controleExistant.pointsSpecifiques || {} : {};
+      const controleExistant = controlesChantier.find(c => c.modele_cq_id === modele.id);
+      console.log(`Modèle ${modele.titre}:`, controleExistant);
+
+      if (controleExistant) {
+        console.log('  - resultats:', controleExistant.resultats);
+        console.log('  - points_specifiques:', controleExistant.points_specifiques);
+      }
+
+      initialResults[modele.id] = controleExistant?.resultats || {};
+      initialPointsSpecifiques[modele.id] = controleExistant?.points_specifiques || {};
     });
+
+    console.log('✅ initialResults:', initialResults);
+    console.log('✅ initialPointsSpecifiques:', initialPointsSpecifiques);
+
     setResultatsTousModeles(initialResults);
     setPointsSpecifiquesChantier(initialPointsSpecifiques);
-  }, [allControles, chantierId, modelesCQ, loading]);
+  }, [controles, chantierId, modelesCQ]);
 
-
-  const handlePointResultatChange = (modeleId, domaineId, sousCategorieId, pointControleId, resultat, explicationNC = '', photoNC = '', planIdNC = '', annotationsNC = '', dateReprisePrevisionnelle = '', repriseValidee = false) => {
+  // =========================================
+  // MISE À JOUR D'UN RÉSULTAT LOCALEMENT
+  // =========================================
+  const handlePointResultatChange = (modeleId, categorieId, sousCategorieId, pointControleId, resultat, explicationNC, photoNC, planIdNC, annotationsNC, dateReprisePrevisionnelle, repriseValidee) => {
     setResultatsTousModeles(prev => ({
       ...prev,
       [modeleId]: {
         ...(prev[modeleId] || {}),
-        [domaineId]: {
-          ...(prev[modeleId]?.[domaineId] || {}),
+        [categorieId]: {
+          ...(prev[modeleId]?.[categorieId] || {}),
           [sousCategorieId]: {
-            ...(prev[modeleId]?.[domaineId]?.[sousCategorieId] || {}),
+            ...(prev[modeleId]?.[categorieId]?.[sousCategorieId] || {}),
             [pointControleId]: {
               resultat,
-              explicationNC: resultat === 'NC' ? explicationNC : '',
-              photoNC: resultat === 'NC' ? photoNC : '',
-              planIdNC: resultat === 'NC' ? planIdNC : '',
-              annotationsNC: resultat === 'NC' ? annotationsNC : '',
-              dateReprisePrevisionnelle: resultat === 'NC' ? dateReprisePrevisionnelle : '',
-              repriseValidee: resultat === 'NC' ? repriseValidee : false,
+              explicationNC,
+              photoNC,
+              planIdNC,
+              annotationsNC,
+              dateReprisePrevisionnelle,
+              repriseValidee
             }
           }
         }
@@ -81,150 +103,199 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
     }));
   };
 
-  const validateAndSaveModele = (modeleId, resultatsPourCeModele, pointsSpecifiquesPourCeModele) => {
-    if ((!resultatsPourCeModele || Object.keys(resultatsPourCeModele).length === 0) && 
-        (!pointsSpecifiquesPourCeModele || Object.keys(pointsSpecifiquesPourCeModele).length === 0)) {
-        return { isValid: true, message: "Aucun résultat ou point spécifique à sauvegarder pour ce modèle." };
-    }
+  // =========================================
+  // VALIDATION + SAVE
+  // =========================================
+  const validateAndSaveModele = async (modeleId) => {
+    const resultatsPourCeModele = resultatsTousModeles[modeleId] || {};
+    const pointsSpecifiquesPourCeModele = pointsSpecifiquesChantier[modeleId] || {};
 
     const modeleStructure = modelesCQ.find(m => m.id === modeleId);
     if (modeleStructure) {
-        // Validation pour les points du modèle
-        for (const dom of modeleStructure.domaines) {
-            for (const sc of dom.sousCategories) {
-                for (const pc of sc.pointsControle) {
-                    const resultatPoint = resultatsPourCeModele?.[dom.id]?.[sc.id]?.[pc.id];
-                    if (resultatPoint && resultatPoint.resultat === 'NC' && !resultatPoint.explicationNC) {
-                        return { 
-                            isValid: false, 
-                            message: `Veuillez fournir une explication pour le point "${pc.libelle}" (Modèle: ${modeleStructure.titre} > ${dom.nom} > ${sc.nom}) marqué Non Conforme.` 
-                        };
-                    }
-                }
+      // Valider les points du modèle
+      for (const cat of modeleStructure.categories || []) {
+        for (const sc of cat.sousCategories || []) {
+          for (const pc of sc.pointsControle || []) {
+            const r = resultatsPourCeModele?.[cat.id]?.[sc.id]?.[pc.id];
+            if (r && r.resultat === 'NC' && (!r.explicationNC || r.explicationNC.trim() === '')) {
+              return { 
+                ok: false, 
+                message: `Le point "${pc.libelle}" (${cat.nom} > ${sc.nom}) est marqué NC : une explication est requise.` 
+              };
             }
+          }
         }
-        // Validation pour les points spécifiques au chantier
-        if (pointsSpecifiquesPourCeModele) {
-            for (const domId in pointsSpecifiquesPourCeModele) {
-                for (const scId in pointsSpecifiquesPourCeModele[domId]) {
-                    for (const pcId in pointsSpecifiquesPourCeModele[domId][scId]) {
-                        const pointSpecifique = pointsSpecifiquesPourCeModele[domId][scId][pcId];
-                        const resultatPoint = resultatsPourCeModele?.[domId]?.[scId]?.[pcId]; // Les résultats des points spécifiques sont aussi dans resultatsPourCeModele
-                        if (resultatPoint && resultatPoint.resultat === 'NC' && !resultatPoint.explicationNC) {
-                             return { 
-                                isValid: false, 
-                                message: `Veuillez fournir une explication pour le point spécifique "${pointSpecifique.libelle}" marqué Non Conforme.` 
-                            };
-                        }
-                    }
-                }
+      }
+
+      // Valider les points spécifiques
+      for (const catId in pointsSpecifiquesPourCeModele) {
+        for (const scId in pointsSpecifiquesPourCeModele[catId]) {
+          for (const pcId in pointsSpecifiquesPourCeModele[catId][scId]) {
+            const r = resultatsPourCeModele?.[catId]?.[scId]?.[pcId];
+            if (r && r.resultat === 'NC' && (!r.explicationNC || r.explicationNC.trim() === '')) {
+              const lib = pointsSpecifiquesPourCeModele[catId][scId][pcId]?.libelle || 'point spécifique';
+              return { 
+                ok: false, 
+                message: `Le point spécifique "${lib}" est marqué NC : une explication est requise.` 
+              };
             }
+          }
         }
+      }
     }
-    saveControleFromModele(chantierId, modeleId, resultatsPourCeModele, pointsSpecifiquesPourCeModele);
-    return { isValid: true, message: `Résultats et points spécifiques du modèle "${modeleStructure.titre}" sauvegardés.` };
+
+    // Sauvegarde via le contexte
+    try {
+      setSavingModeles(prev => ({ ...prev, [modeleId]: true }));
+      await saveControleFromModele(chantierId, modeleId, resultatsPourCeModele, pointsSpecifiquesPourCeModele);
+      setSavingModeles(prev => ({ ...prev, [modeleId]: false }));
+      return { ok: true, message: `Modèle "${modeleStructure?.titre || modeleId}" sauvegardé.` };
+    } catch (err) {
+      setSavingModeles(prev => ({ ...prev, [modeleId]: false }));
+      console.error("Erreur saveControleFromModele:", err);
+      return { ok: false, message: err?.message || "Erreur lors de la sauvegarde." };
+    }
   };
 
-  const handleSaveModeleResultats = (modeleId) => {
-    const resultatsPourCeModele = resultatsTousModeles[modeleId];
-    const pointsSpecifiquesPourCeModele = pointsSpecifiquesChantier[modeleId];
-    const { isValid, message } = validateAndSaveModele(modeleId, resultatsPourCeModele, pointsSpecifiquesPourCeModele);
-    if (!isValid) {
-        toast({ title: "Validation échouée", description: message, variant: "destructive", duration: 7000 });
-    } else {
-        if (message.startsWith("Aucun résultat")) {
-            toast({ title: "Information", description: message, variant: "default" });
-        }
+  const handleSaveModeleResultats = async (modeleId) => {
+    const { ok, message } = await validateAndSaveModele(modeleId);
+    if (!ok) {
+      toast({ title: "Validation", description: message, variant: "destructive", duration: 7000 });
+      return;
     }
+    toast({ title: "Sauvegarde", description: message });
   };
-  
-  const handleSaveAllModelesResultats = () => {
-    let countSaved = 0;
-    let firstErrorMessage = "";
+
+  const handleSaveAllModelesResultats = async () => {
+    let saved = 0;
+    let firstError = null;
 
     for (const modele of modelesCQ) {
-        const resultatsPourCeModele = resultatsTousModeles[modele.id];
-        const pointsSpecifiquesPourCeModele = pointsSpecifiquesChantier[modele.id];
-        if ((resultatsPourCeModele && Object.keys(resultatsPourCeModele).length > 0) ||
-            (pointsSpecifiquesPourCeModele && Object.keys(pointsSpecifiquesPourCeModele).length > 0)) {
-            const { isValid, message } = validateAndSaveModele(modele.id, resultatsPourCeModele, pointsSpecifiquesPourCeModele);
-            if (!isValid) {
-                if (!firstErrorMessage) firstErrorMessage = message;
-            } else if (!message.startsWith("Aucun résultat")){
-                countSaved++;
-            }
-        }
+      const res = resultatsTousModeles[modele.id] || {};
+      const pts = pointsSpecifiquesChantier[modele.id] || {};
+      const hasSomething = Object.keys(res).length > 0 || Object.keys(pts).length > 0;
+      if (!hasSomething) continue;
+
+      const { ok, message } = await validateAndSaveModele(modele.id);
+      if (!ok) {
+        firstError = message;
+        break;
+      } else {
+        saved++;
+      }
     }
 
-    if (firstErrorMessage) {
-        toast({ title: "Validation échouée", description: firstErrorMessage, variant: "destructive", duration: 7000 });
-    } else if (countSaved > 0) {
-        toast({ title: "Sauvegarde Réussie", description: `${countSaved} modèle(s) de contrôle qualité ont été mis à jour.`});
+    if (firstError) {
+      toast({ title: "Erreur", description: firstError, variant: "destructive", duration: 7000 });
+    } else if (saved > 0) {
+      toast({ title: "Sauvegarde", description: `${saved} modèle(s) sauvegardé(s).` });
     } else {
-        toast({ title: "Aucune modification", description: "Aucun résultat ou point spécifique à sauvegarder pour les modèles.", variant: "default" });
+      toast({ title: "Aucune modification", description: "Rien à sauvegarder." });
     }
   };
 
-  const handleAddPointControle = useCallback((modeleId, domaineId, sousCategorieId, pointData) => {
-    const newPointId = uuidv4();
-    const newPoint = { ...pointData, id: newPointId, isChantierSpecific: true };
+  // =========================================
+  // POINTS SPÉCIFIQUES
+  // =========================================
+  const handleAddPointControle = useCallback(async (modeleId, categorieId, sousCategorieId, pointData) => {
+    const newId = uuidv4();
+    const newPoint = { id: newId, ...pointData, isChantierSpecific: true };
 
     setPointsSpecifiquesChantier(prev => {
-        const newPointsModele = { ...(prev[modeleId] || {}) };
-        if (!newPointsModele[domaineId]) newPointsModele[domaineId] = {};
-        if (!newPointsModele[domaineId][sousCategorieId || '_global']) newPointsModele[domaineId][sousCategorieId || '_global'] = {};
-        
-        newPointsModele[domaineId][sousCategorieId || '_global'][newPointId] = newPoint;
-        return { ...prev, [modeleId]: newPointsModele };
+      const next = { ...(prev[modeleId] || {}) };
+      if (!next[categorieId]) next[categorieId] = {};
+      const scKey = sousCategorieId || '_global';
+      if (!next[categorieId][scKey]) next[categorieId][scKey] = {};
+      next[categorieId][scKey][newId] = newPoint;
+      return { ...prev, [modeleId]: next };
     });
-    addPointControleChantierSpecific(chantierId, modeleId, domaineId, sousCategorieId, newPoint);
-    toast({ title: "Point de contrôle ajouté", description: `Le point "${newPoint.libelle}" a été ajouté au chantier.` });
+
+    try {
+      await addPointControleChantierSpecific(chantierId, modeleId, categorieId, sousCategorieId, newPoint);
+      toast({ title: "Point ajouté", description: `Point "${newPoint.libelle}" ajouté.` });
+    } catch (err) {
+      console.error("Erreur addPointControleChantierSpecific:", err);
+      toast({ title: "Erreur", description: "Impossible d'ajouter le point spécifique.", variant: "destructive" });
+    }
   }, [chantierId, addPointControleChantierSpecific, toast]);
 
-  const handleUpdatePointControle = useCallback((modeleId, domaineId, sousCategorieId, pointId, pointData) => {
+  const handleUpdatePointControle = useCallback(async (modeleId, categorieId, sousCategorieId, pointId, updates) => {
     setPointsSpecifiquesChantier(prev => {
-        const newPointsModele = { ...(prev[modeleId] || {}) };
-        if (newPointsModele[domaineId]?.[sousCategorieId || '_global']?.[pointId]) {
-            newPointsModele[domaineId][sousCategorieId || '_global'][pointId] = { 
-                ...newPointsModele[domaineId][sousCategorieId || '_global'][pointId], 
-                ...pointData 
-            };
-        }
-        return { ...prev, [modeleId]: newPointsModele };
+      const next = { ...(prev[modeleId] || {}) };
+      const scKey = sousCategorieId || '_global';
+      if (next[categorieId]?.[scKey]?.[pointId]) {
+        next[categorieId][scKey][pointId] = { ...next[categorieId][scKey][pointId], ...updates };
+      }
+      return { ...prev, [modeleId]: next };
     });
-    updatePointControleChantierSpecific(chantierId, modeleId, domaineId, sousCategorieId, pointId, pointData);
-    toast({ title: "Point de contrôle mis à jour", description: `Le point "${pointData.libelle}" a été mis à jour.` });
+
+    try {
+      await updatePointControleChantierSpecific(chantierId, modeleId, categorieId, sousCategorieId, pointId, updates);
+      toast({ title: "Point mis à jour", description: `Point mis à jour.` });
+    } catch (err) {
+      console.error("Erreur updatePointControleChantierSpecific:", err);
+      toast({ title: "Erreur", description: "Impossible de mettre à jour le point.", variant: "destructive" });
+    }
   }, [chantierId, updatePointControleChantierSpecific, toast]);
 
-  const handleDeletePointControle = useCallback((modeleId, domaineId, sousCategorieId, pointId) => {
+  const handleDeletePointControle = useCallback(async (modeleId, categorieId, sousCategorieId, pointId) => {
     setPointsSpecifiquesChantier(prev => {
-        const newPointsModele = { ...(prev[modeleId] || {}) };
-        if (newPointsModele[domaineId]?.[sousCategorieId || '_global']?.[pointId]) {
-            delete newPointsModele[domaineId][sousCategorieId || '_global'][pointId];
-        }
-        return { ...prev, [modeleId]: newPointsModele };
+      const next = { ...(prev[modeleId] || {}) };
+      const scKey = sousCategorieId || '_global';
+      if (next[categorieId]?.[scKey]?.[pointId]) {
+        delete next[categorieId][scKey][pointId];
+      }
+      return { ...prev, [modeleId]: next };
     });
-    deletePointControleChantierSpecific(chantierId, modeleId, domaineId, sousCategorieId, pointId);
-    toast({ title: "Point de contrôle supprimé", description: "Le point de contrôle spécifique au chantier a été supprimé." });
+
+    try {
+      await deletePointControleChantierSpecific(chantierId, modeleId, categorieId, sousCategorieId, pointId);
+      toast({ title: "Point supprimé", description: "Point spécifique supprimé." });
+    } catch (err) {
+      console.error("Erreur deletePointControleChantierSpecific:", err);
+      toast({ title: "Erreur", description: "Impossible de supprimer le point.", variant: "destructive" });
+    }
   }, [chantierId, deletePointControleChantierSpecific, toast]);
 
-//   const handleUpdateNomCategorie = useCallback((modeleId, domaineId, sousCategorieId, nouveauNom) => {
-//       // Cette fonction mettrait à jour le nom dans pointsSpecifiquesChantier si nécessaire
-//       // et appellerait updateNomCategorieChantierSpecific
-//       console.log("Mise à jour nom catégorie/domaine:", modeleId, domaineId, sousCategorieId, nouveauNom);
-//       // updateNomCategorieChantierSpecific(chantierId, modeleId, domaineId, sousCategorieId, nouveauNom);
-//       toast({ title: "Nom de catégorie mis à jour", description: `Le nom a été changé en "${nouveauNom}".` });
-//   }, [chantierId, /*updateNomCategorieChantierSpecific,*/ toast]);
+  // =========================================
+  // COMBINER MODÈLE + POINTS SPÉCIFIQUES
+  // =========================================
+  const getCombinedPointsControle = (modele) => {
+    const combinedCategories = JSON.parse(JSON.stringify(modele.categories || []));
+    const pointsSpecifiqueModele = pointsSpecifiquesChantier[modele.id] || {};
 
+    combinedCategories.forEach(cat => {
+      const categorieGlobalPoints = pointsSpecifiqueModele[cat.id]?.['_global'] || {};
+      if (Object.keys(categorieGlobalPoints).length > 0) {
+        if (!cat.sousCategories.some(sc => sc.id === '_global_categorie_points')) {
+          cat.sousCategories.unshift({
+            id: '_global_categorie_points',
+            nom: `Points spécifiques (Catégorie: ${cat.nom})`,
+            pointsControle: Object.values(categorieGlobalPoints),
+            isChantierSpecificContainer: true
+          });
+        }
+      }
+      cat.sousCategories.forEach(sc => {
+        const spec = pointsSpecifiqueModele[cat.id]?.[sc.id] || {};
+        sc.pointsControle = [...(sc.pointsControle || []), ...Object.values(spec)];
+      });
+    });
+
+    return combinedCategories;
+  };
 
   if (loading && !isEmbedded) {
     return <div className="flex justify-center items-center h-64">Chargement...</div>;
   }
+
   if (!chantier && !isEmbedded) {
     return (
       <div className="text-center py-10">
         <h2 className="text-2xl font-bold">Chantier non trouvé</h2>
-        <Button asChild className="mt-4"><Link to="/chantiers"><ArrowLeft className="mr-2 h-4 w-4" />Retour</Link></Button>
+        <Button asChild className="mt-4">
+          <Link to="/chantiers"><ArrowLeft className="mr-2 h-4 w-4" />Retour</Link>
+        </Button>
       </div>
     );
   }
@@ -241,37 +312,8 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
         <h1 className="text-3xl font-bold">Contrôle Qualité du Chantier</h1>
         <p className="text-muted-foreground">{chantier?.nom}</p>
       </div>
-      {/* Bouton Contrôle Ad-Hoc retiré */}
     </div>
-  ) : null; // Pas de header si embarqué, ou un header minimal si besoin
-
-  const getCombinedPointsControle = (modele) => {
-    const combinedDomaines = JSON.parse(JSON.stringify(modele.domaines)); // Deep copy
-    const pointsSpecifiquesModele = pointsSpecifiquesChantier[modele.id] || {};
-
-    combinedDomaines.forEach(dom => {
-        // Points spécifiques au niveau du domaine (sans sous-catégorie)
-        const pointsDomaineGlobal = pointsSpecifiquesModele[dom.id]?.['_global'] || {};
-        if (!dom.sousCategories.find(sc => sc.id === '_global_domaine_points')) { // Eviter doublons si on recharge
-            if (Object.keys(pointsDomaineGlobal).length > 0) {
-                 dom.sousCategories.unshift({ 
-                    id: '_global_domaine_points', 
-                    nom: `Points spécifiques (Domaine: ${dom.nom})`, 
-                    pointsControle: Object.values(pointsDomaineGlobal),
-                    isChantierSpecificContainer: true 
-                });
-            }
-        }
-
-
-        dom.sousCategories.forEach(sc => {
-            const pointsSpecifiquesSC = pointsSpecifiquesModele[dom.id]?.[sc.id] || {};
-            sc.pointsControle = [...(sc.pointsControle || []), ...Object.values(pointsSpecifiquesSC)];
-        });
-    });
-    return combinedDomaines;
-  };
-
+  ) : null;
 
   return (
     <div className={`space-y-6 ${isEmbedded ? 'py-0' : ''}`}>
@@ -280,65 +322,79 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
       <Card className={`bg-gradient-to-br from-sky-50 to-cyan-50 border-sky-200 shadow-lg ${isEmbedded ? 'shadow-none border-0' : ''}`}>
         {!isEmbedded && (
           <CardHeader>
-            <CardTitle className="text-xl">Référentiel de Contrôle Qualité Global</CardTitle>
+            <CardTitle className="text-xl">Référentiel de Contrôle Qualité</CardTitle>
             <CardDescription>
-              Appliquez les points de contrôle de vos modèles. Vous pouvez ajouter des points spécifiques à ce chantier directement dans les catégories ou sous-catégories.
-              Les noms des catégories/domaines des modèles se modifient dans le Référentiel CQ (Paramètres).
+              Appliquez les points de contrôle de vos modèles. Vous pouvez ajouter des points spécifiques à ce chantier.
             </CardDescription>
           </CardHeader>
         )}
         <CardContent className={`space-y-6 ${isEmbedded ? 'p-0 pt-4 sm:p-0' : ''}`}>
           {modelesCQ.length > 0 ? modelesCQ.map(modele => {
-            const domainesAvecPointsSpecifiques = getCombinedPointsControle(modele);
+            const categoriesAvecPointsSpecifiques = getCombinedPointsControle(modele);
+            const isSaving = !!savingModeles[modele.id];
+
             return (
-            <motion.div 
+              <motion.div
                 key={modele.id}
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="space-y-3 p-4 border rounded-lg bg-white shadow"
-            >
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-slate-800">{modele.titre}</h3>
-                <Button size="sm" onClick={() => handleSaveModeleResultats(modele.id)} variant="outline" className="bg-sky-100 hover:bg-sky-200 border-sky-300 text-sky-700">
-                    <Save className="mr-2 h-4 w-4" /> Sauvegarder ce modèle
-                </Button>
-              </div>
-              {domainesAvecPointsSpecifiques.map(dom => (
-                 <ControleQualiteDomaineItem
-                    key={dom.id}
-                    domaine={dom}
-                    resultatsDomaine={resultatsTousModeles[modele.id]?.[dom.id] || {}}
+              >
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-semibold text-slate-800">{modele.titre}</h3>
+                  <div className="flex items-center space-x-2">
+                    <Button 
+                      size="sm" 
+                      onClick={() => handleSaveModeleResultats(modele.id)} 
+                      variant="outline" 
+                      className="bg-sky-100 hover:bg-sky-200 border-sky-300 text-sky-700" 
+                      disabled={isSaving}
+                    >
+                      <Save className="mr-2 h-4 w-4" /> 
+                      {isSaving ? 'Enregistrement...' : 'Sauvegarder ce modèle'}
+                    </Button>
+                  </div>
+                </div>
+
+                {categoriesAvecPointsSpecifiques.map(cat => (
+                  <ControleQualiteDomaineItem
+                    key={cat.id}
+                    domaine={cat}
+                    resultatsDomaine={resultatsTousModeles[modele.id]?.[cat.id] || {}}
                     chantierId={chantierId}
                     modeleId={modele.id}
-                    onPointResultatChangeForDomaine={(scId, pcId, res, expl, photo, planId, annotations, dateRepPrev, repValidee) => handlePointResultatChange(modele.id, dom.id, scId, pcId, res, expl, photo, planId, annotations, dateRepPrev, repValidee)}
-                    pointsControleStructure={dom.sousCategories.reduce((acc, sc) => {
-                        acc[sc.id] = { pointsControle: sc.pointsControle };
-                        return acc;
+                    onPointResultatChangeForDomaine={(scId, pcId, resultat, explicationNC, photoNC, planIdNC, annotationsNC, dateReprisePrevisionnelle, repriseValidee) => 
+                      handlePointResultatChange(modele.id, cat.id, scId, pcId, resultat, explicationNC, photoNC, planIdNC, annotationsNC, dateReprisePrevisionnelle, repriseValidee)
+                    }
+                    pointsControleStructure={cat.sousCategories.reduce((acc, sc) => {
+                      acc[sc.id] = { pointsControle: sc.pointsControle };
+                      return acc;
                     }, {})}
                     onAddPointControle={handleAddPointControle}
                     onUpdatePointControle={handleUpdatePointControle}
                     onDeletePointControle={handleDeletePointControle}
-                    // onUpdateNomCategorie={handleUpdateNomCategorie}
+                    documents={documents}
                   />
-              ))}
-              {domainesAvecPointsSpecifiques.length === 0 && (
-                  <p className="text-sm text-slate-500 italic">Ce modèle ne contient aucun domaine.</p>
-               )}
-            </motion.div>
-          )}) : (
+                ))}
+
+                {categoriesAvecPointsSpecifiques.length === 0 && (
+                  <p className="text-sm text-slate-500 italic">Ce modèle ne contient aucune catégorie.</p>
+                )}
+              </motion.div>
+            );
+          }) : (
             <div className="p-4 text-sm text-muted-foreground text-center">
-                Aucun modèle dans le référentiel. <Link to="/parametres" className="underline text-primary">Ajoutez-en via l'onglet Référentiel CQ dans les Paramètres pour commencer.</Link>
+              Aucun modèle dans le référentiel. <Link to="/parametres" className="underline text-primary">Ajoutez-en via le Référentiel CQ</Link>
             </div>
           )}
+
           {modelesCQ.length > 0 && (
             <Button onClick={handleSaveAllModelesResultats} className="w-full sm:w-auto bg-sky-600 hover:bg-sky-700 mt-4">
-                <ShieldCheck className="mr-2 h-4 w-4" /> Sauvegarder Tous les Résultats Modifiés
+              <ShieldCheck className="mr-2 h-4 w-4" /> Sauvegarder Tous les Résultats Modifiés
             </Button>
           )}
         </CardContent>
       </Card>
-      
-      {/* Section des contrôles Ad-Hoc retirée */}
     </div>
   );
 }

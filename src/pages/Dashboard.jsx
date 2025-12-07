@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from "react";
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useChantier } from '@/context/ChantierContext';
@@ -11,16 +11,28 @@ import { subWeeks, startOfDay } from 'date-fns';
 import { AuthProvider } from '@/context/AuthProvider';
 import { useAuth } from '@/hooks/useAuth';
 
+
 export function Dashboard() {
   const { chantiers, taches, sousTraitants, demandesSAV, loading: chantierLoading } = useChantier();
-  const { user, signOut, loading: authLoading } = useAuth();
+  const { user, signOut, loading: authLoading } = useAuth()
   const navigate = useNavigate();
 
   // 🔹 Redirection automatique si pas connecté
- if (!authLoading && !user) {
-  navigate('/login');
-  return null;
- }
+useEffect(() => {
+  if (!authLoading && !user) {
+    navigate('/login');
+  }
+}, [authLoading, user]);
+
+  const chantiersEnCoursPourGantt = useMemo(
+    () => chantiers.filter(c => c.statut === 'En cours'),
+    [chantiers]
+  );
+
+  const defaultStartDateForGantt = useMemo(
+    () => subWeeks(startOfDay(new Date()), 1),
+    []
+  );
 
   if (authLoading || chantierLoading) {
     return <div className="flex justify-center items-center h-64">Chargement...</div>;
@@ -47,15 +59,7 @@ export function Dashboard() {
     navigate(`/chantiers?statut=${encodeURIComponent(statut)}`);
   };
 
-  const chantiersEnCoursPourGantt = useMemo(
-    () => chantiers.filter(c => c.statut === 'En cours'),
-    [chantiers]
-  );
 
-  const defaultStartDateForGantt = useMemo(
-    () => subWeeks(startOfDay(new Date()), 1),
-    []
-  );
 
   return (
     <div className="space-y-8">

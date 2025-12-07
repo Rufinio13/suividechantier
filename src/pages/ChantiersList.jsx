@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useChantier } from '@/context/ChantierContext';
 import { Button } from '@/components/ui/button';
@@ -17,55 +17,56 @@ export function ChantiersList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState(searchParams.get('statut') || '');
   const [isDialogOpen, setIsDialogOpen] = useState(searchParams.get('action') === 'new');
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+  const [viewMode, setViewMode] = useState('grid');
 
   useEffect(() => {
     const statutParam = searchParams.get('statut');
-    if (statutParam) {
-      setStatusFilter(statutParam);
-    }
-    if (searchParams.get('action') === 'new') {
-        setIsDialogOpen(true);
-    }
+    if (statutParam) setStatusFilter(statutParam);
+
+    setIsDialogOpen(searchParams.get('action') === 'new');
   }, [searchParams]);
 
   const handleStatusFilterChange = (value) => {
     setStatusFilter(value);
-    if (value) {
-      setSearchParams({ statut: value });
-    } else {
-      setSearchParams({});
-    }
+    setSearchParams(value ? { statut: value } : {});
   };
-  
+
   const handleOpenDialog = () => {
-    setSearchParams({ action: 'new' }); // Met à jour l'URL
+    setSearchParams({ action: 'new' });
     setIsDialogOpen(true);
   };
 
   const handleCloseDialog = () => {
     setIsDialogOpen(false);
-    // Optionnel: nettoyer le paramètre 'action' de l'URL quand la modale est fermée
+
     const currentParams = Object.fromEntries([...searchParams]);
     delete currentParams.action;
     setSearchParams(currentParams);
   };
 
-
   const filteredChantiers = useMemo(() => {
-    return chantiers.filter(chantier => {
-      const searchTermLower = searchTerm.toLowerCase();
-      const matchesSearch = 
-        chantier.nom?.toLowerCase().includes(searchTermLower) ||
-        chantier.adresse?.toLowerCase().includes(searchTermLower) ||
-        `${chantier.prenomClient || ''} ${chantier.nomClient || ''}`.toLowerCase().includes(searchTermLower) ||
-        chantier.mailClient?.toLowerCase().includes(searchTermLower) ||
-        chantier.telClient?.toLowerCase().includes(searchTermLower);
-      
-      const matchesStatus = statusFilter === '' || chantier.statut === statusFilter;
-      
-      return matchesSearch && matchesStatus;
-    }).sort((a,b) => (a.nom || '').localeCompare(b.nom || '')); 
+    const searchLower = searchTerm.toLowerCase();
+
+    return chantiers
+      .filter((chantier) => {
+        const matchesSearch =
+          // ✅ CORRIGÉ : nomchantier au lieu de nom
+          chantier.nomchantier?.toLowerCase().includes(searchLower) ||
+          chantier.adresse?.toLowerCase().includes(searchLower) ||
+          // ✅ CORRIGÉ : client_prenom, client_nom avec underscore
+          `${chantier.client_prenom || ''} ${chantier.client_nom || ''}`
+            .toLowerCase()
+            .includes(searchLower) ||
+          // ✅ CORRIGÉ : client_mail, client_tel avec underscore
+          chantier.client_mail?.toLowerCase().includes(searchLower) ||
+          chantier.client_tel?.toLowerCase().includes(searchLower);
+
+        const matchesStatus = !statusFilter || chantier.statut === statusFilter;
+
+        return matchesSearch && matchesStatus;
+      })
+      // ✅ CORRIGÉ : nomchantier au lieu de nom pour le tri
+      .sort((a, b) => (a.nomchantier || '').localeCompare(b.nomchantier || ''));
   }, [chantiers, searchTerm, statusFilter]);
 
   if (loading) {
@@ -95,6 +96,7 @@ export function ChantiersList() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+
         <div className="w-full sm:w-[200px]">
           <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
             <SelectTrigger>
@@ -111,24 +113,35 @@ export function ChantiersList() {
             </SelectContent>
           </Select>
         </div>
+
         <div className="flex items-center space-x-1">
-            <Button variant={viewMode === 'grid' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewMode('grid')} title="Vue Grille">
-                <LayoutGrid className="h-5 w-5" />
-            </Button>
-            <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="icon" onClick={() => setViewMode('list')} title="Vue Liste">
-                <List className="h-5 w-5" />
-            </Button>
+          <Button
+            variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+            size="icon"
+            onClick={() => setViewMode('grid')}
+            title="Vue Grille"
+          >
+            <LayoutGrid className="h-5 w-5" />
+          </Button>
+          <Button
+            variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+            size="icon"
+            onClick={() => setViewMode('list')}
+            title="Vue Liste"
+          >
+            <List className="h-5 w-5" />
+          </Button>
         </div>
       </div>
 
       {filteredChantiers.length > 0 ? (
-        <motion.div 
-          className={viewMode === 'grid' ? "grid gap-6 md:grid-cols-2 lg:grid-cols-3" : "space-y-4"}
+        <motion.div
+          className={viewMode === 'grid' ? 'grid gap-6 md:grid-cols-2 lg:grid-cols-3' : 'space-y-4'}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ staggerChildren: 0.05 }}
         >
-          {filteredChantiers.map(chantier => (
+          {filteredChantiers.map((chantier) => (
             <ChantierCard key={chantier.id} chantier={chantier} />
           ))}
         </motion.div>
@@ -139,10 +152,11 @@ export function ChantiersList() {
           </div>
           <h3 className="text-lg font-medium">Aucun chantier trouvé</h3>
           <p className="text-muted-foreground mt-1 mb-4">
-            {searchTerm || statusFilter 
-              ? "Aucun chantier ne correspond à vos critères de recherche." 
-              : "Commencez par créer votre premier chantier."}
+            {searchTerm || statusFilter
+              ? 'Aucun chantier ne correspond à vos critères de recherche.'
+              : 'Commencez par créer votre premier chantier.'}
           </p>
+
           {!searchTerm && !statusFilter && (
             <Button onClick={handleOpenDialog}>
               <Plus className="mr-2 h-4 w-4" />

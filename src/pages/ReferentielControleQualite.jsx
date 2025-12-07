@@ -1,24 +1,33 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { useChantier } from '@/context/ChantierContext';
+import { useReferentielCQ } from '@/context/ReferentielCQContext'; // ✅ CORRIGÉ
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Plus, Search, ShieldCheck, Edit, Trash2 } from 'lucide-react';
+import { Plus, Search, ShieldCheck } from 'lucide-react';
 import { ModeleCQForm } from '@/components/referentiel-cq/ModeleCQForm';
 import { ModeleCQItem } from '@/components/referentiel-cq/ModeleCQItem';
 
 export function ReferentielControleQualite() {
-  const { modelesCQ, addModeleCQ, updateModeleCQ, deleteModeleCQ, loading } = useChantier();
+  // ✅ CORRIGÉ : Utilise useReferentielCQ au lieu de useChantier
+  const { modelesCQ, addModeleCQ, updateModeleCQ, deleteModeleCQ, loading, nomsociete } = useReferentielCQ();
+  
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingModele, setEditingModele] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // 🔍 Appliquer recherche + tri (plus besoin de filtrer par société, c'est fait dans le Context)
   const filteredModeles = useMemo(() => {
-    return modelesCQ.filter(modele => 
-      modele.titre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      modele.categories.some(cat => cat.nom.toLowerCase().includes(searchTerm.toLowerCase()))
-    ).sort((a, b) => a.titre.localeCompare(b.titre));
+    return (modelesCQ || [])
+      .filter(modele => {
+        const titreMatch = modele.titre?.toLowerCase().includes(searchTerm.toLowerCase());
+        const categoriesMatch = Array.isArray(modele.categories)
+          ? modele.categories.some(cat =>
+              cat?.nom?.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+          : false;
+        return titreMatch || categoriesMatch;
+      })
+      .sort((a, b) => a.titre.localeCompare(b.titre));
   }, [modelesCQ, searchTerm]);
 
   const handleOpenModal = (modele = null) => {
@@ -33,13 +42,21 @@ export function ReferentielControleQualite() {
 
   const handleDeleteModele = (id) => {
     const modeleToDelete = modelesCQ.find(m => m.id === id);
-    if (window.confirm(`Êtes-vous sûr de vouloir supprimer le modèle "${modeleToDelete?.titre}" ? Cette action est irréversible si le modèle n'est pas utilisé.`)) {
+    if (
+      window.confirm(
+        `Êtes-vous sûr de vouloir supprimer le modèle "${modeleToDelete?.titre}" ?`
+      )
+    ) {
       deleteModeleCQ(id);
     }
   };
 
   if (loading) {
-    return <div className="flex justify-center items-center h-64">Chargement du référentiel...</div>;
+    return (
+      <div className="flex justify-center items-center h-64">
+        Chargement du référentiel...
+      </div>
+    );
   }
 
   return (
@@ -47,7 +64,9 @@ export function ReferentielControleQualite() {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Référentiel Contrôle Qualité</h1>
-          <p className="text-muted-foreground">Gérez vos modèles de contrôle qualité pour tous les chantiers.</p>
+          <p className="text-muted-foreground">
+            Gérez vos modèles de contrôle qualité (Société : {nomsociete})
+          </p>
         </div>
         <Button onClick={() => handleOpenModal()}>
           <Plus className="mr-2 h-4 w-4" />
@@ -66,16 +85,16 @@ export function ReferentielControleQualite() {
       </div>
 
       {filteredModeles.length > 0 ? (
-        <motion.div 
+        <motion.div
           className="space-y-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ staggerChildren: 0.1 }}
         >
           {filteredModeles.map(modele => (
-            <ModeleCQItem 
-              key={modele.id} 
-              modele={modele} 
+            <ModeleCQItem
+              key={modele.id}
+              modele={modele}
               onEdit={() => handleOpenModal(modele)}
               onDelete={() => handleDeleteModele(modele.id)}
             />
@@ -86,12 +105,13 @@ export function ReferentielControleQualite() {
           <div className="rounded-full bg-muted p-3 mb-4">
             <ShieldCheck className="h-8 w-8 text-muted-foreground" />
           </div>
-          <h3 className="text-lg font-medium">Aucun modèle de contrôle qualité trouvé</h3>
+          <h3 className="text-lg font-medium">Aucun modèle trouvé</h3>
           <p className="text-muted-foreground mt-1 mb-4">
-            {searchTerm 
-              ? "Aucun modèle ne correspond à votre recherche." 
+            {searchTerm
+              ? "Aucun modèle ne correspond à votre recherche."
               : "Commencez par créer des modèles pour standardiser vos contrôles."}
           </p>
+
           {!searchTerm && (
             <Button onClick={() => handleOpenModal()}>
               <Plus className="mr-2 h-4 w-4" />
@@ -108,6 +128,7 @@ export function ReferentielControleQualite() {
           modele={editingModele}
           addModeleCQ={addModeleCQ}
           updateModeleCQ={updateModeleCQ}
+          nomsociete={nomsociete}
         />
       )}
     </div>

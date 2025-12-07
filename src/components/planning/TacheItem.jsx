@@ -8,13 +8,13 @@ import { Label } from '@/components/ui/label';
 import { Calendar, Edit, Trash2, User, Truck, AlertTriangle } from 'lucide-react';
 import { useChantier } from '@/context/ChantierContext';
 
-export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
-  const { sousTraitants, fournisseurs, updateTache, chantiers } = useChantier();
+export function TacheItem({ tache, lots, onEdit, onDelete }) {
+  const { sousTraitants, fournisseurs, updateTache, chantiers, conflictsByChantier } = useChantier();
 
   const formatDate = (dateString) => {
     try {
       return format(new Date(dateString), 'dd/MM/yyyy', { locale: fr });
-    } catch (error) {
+    } catch {
       return 'Date invalide';
     }
   };
@@ -23,46 +23,61 @@ export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
     updateTache(tache.id, { ...tache, terminee: checked });
   };
 
-  const lot = lots.find(l => l.id === tache.lotId);
-  
+  // --------------------- LOT ---------------------
+  const lot = lots.find(l => l.id === tache.lotid);
+
+  // --------------------- ASSIGNÉ ---------------------
   let assigneEntity = null;
-  let AssigneIcon = User; 
-  if (tache.assigneType === 'soustraitant' && tache.assigneId) {
-    assigneEntity = sousTraitants.find(st => st.id === tache.assigneId);
-    AssigneIcon = User;
-  } else if (tache.assigneType === 'fournisseur' && tache.assigneId) {
-    assigneEntity = fournisseurs.find(f => f.id === tache.assigneId);
+  let AssigneIcon = User;
+
+  if (tache.assignetype === 'soustraitant' && tache.assigneid) {
+    assigneEntity = sousTraitants.find(st => st.id === tache.assigneid);
+  } 
+  else if (tache.assignetype === 'fournisseur' && tache.assigneid) {
+    assigneEntity = fournisseurs.find(f => f.id === tache.assigneid);
     AssigneIcon = Truck;
   }
-  const assigneNom = assigneEntity ? (assigneEntity.nomSociete || assigneEntity.nomDirigeant || assigneEntity.nomContact) : 'Non assigné';
 
-  const isRetard = !tache.terminee && tache.dateFin && isPast(parseISO(tache.dateFin));
-  
+  // ✅ CORRIGÉ : Utilise les bons noms de colonnes selon la table
+  const assigneNom = assigneEntity
+    ? (tache.assignetype === 'soustraitant' 
+        ? (assigneEntity.nomsocieteST || `${assigneEntity.PrenomST || ''} ${assigneEntity.nomST || ''}`.trim() || 'Artisan')
+        : (assigneEntity.nomsocieteF || assigneEntity.nomcontact || 'Fournisseur'))
+    : 'Non assigné';
+
+  // --------------------- RETARD ---------------------
+  const isRetard = !tache.terminee && tache.datefin && isPast(parseISO(tache.datefin));
+
+  // --------------------- CONFLITS ---------------------
   const tacheConflictInfo = useMemo(() => {
-    if (!conflicts || !tache.assigneId || tache.assigneType !== 'soustraitant') return null;
-    
-    const conflictKey = `${tache.assigneId}-${format(parseISO(tache.dateDebut), 'yyyy-MM-dd')}`;
-    const conflictDetails = conflicts[conflictKey];
+    if (!tache.assigneid || tache.assignetype !== 'soustraitant') return null;
 
-    if (conflictDetails && conflictDetails.count > 1 && conflictDetails.chantierIds.includes(tache.chantierId)) {
-      const otherChantierIds = conflictDetails.chantierIds.filter(id => id !== tache.chantierId);
-      if (otherChantierIds.length > 0) {
-        const otherChantierNames = otherChantierIds.map(id => chantiers.find(c => c.id === id)?.nom).filter(Boolean);
+    const key = `${tache.assigneid}-${format(parseISO(tache.datedebut), 'yyyy-MM-dd')}`;
+    const conflict = conflictsByChantier[key];
+
+    if (conflict && conflict.count > 1 && conflict.chantierids.includes(tache.chantierid)) {
+      const otherIds = conflict.chantierids.filter(id => id !== tache.chantierid);
+
+      if (otherIds.length > 0) {
+        const otherNames = otherIds
+          // ✅ CORRIGÉ : nomchantier au lieu de nom
+          .map(id => chantiers.find(c => c.id === id)?.nomchantier)
+          .filter(Boolean);
+
         return {
-          message: `Artisan en conflit le ${formatDate(tache.dateDebut)} avec chantier(s): ${otherChantierNames.join(', ')}.`,
-          conflictingChantierNames: otherChantierNames
+          message: `Artisan en conflit le ${formatDate(tache.datedebut)} avec chantier(s): ${otherNames.join(', ')}.`,
         };
       }
     }
     return null;
-  }, [conflicts, tache, chantiers]);
-
+  }, [tache, conflictsByChantier, chantiers]);
 
   const hasConflict = !!tacheConflictInfo;
+
   const cardClasses = `p-4 border rounded-lg hover:bg-gray-50 transition-colors 
     ${hasConflict ? 'border-red-600 bg-red-100' : (isRetard ? 'border-red-500 bg-red-50' : '')}`;
-  const titleClasses = `font-medium ${hasConflict ? 'text-red-700' : (isRetard ? 'text-red-700' : '')}`;
 
+  const titleClasses = `font-medium ${hasConflict ? 'text-red-700' : (isRetard ? 'text-red-700' : '')}`;
 
   return (
     <motion.div
@@ -73,7 +88,8 @@ export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
       <div className="flex justify-between items-start mb-2">
         <div>
           <h3 className={titleClasses}>{tache.nom}</h3>
-          {lot && <p className="text-xs text-muted-foreground">Lot: {lot.nom}</p>}
+          {/* ✅ CORRIGÉ : lot.lot au lieu de lot.nom */}
+          {lot && <p className="text-xs text-muted-foreground">Lot: {lot.lot}</p>}
         </div>
         <div className="flex space-x-2">
           <Button variant="ghost" size="icon" onClick={onEdit} className="h-8 w-8">
@@ -84,13 +100,21 @@ export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
           </Button>
         </div>
       </div>
-      {tache.description && <p className="text-sm text-muted-foreground mb-2">{tache.description}</p>}
+
+      {/* DESCRIPTION */}
+      {tache.description && (
+        <p className="text-sm text-muted-foreground mb-2">{tache.description}</p>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:justify-between gap-3 items-start">
         <div className="flex items-center text-sm text-muted-foreground">
           <Calendar className="mr-2 h-4 w-4" />
-          <span>Du {formatDate(tache.dateDebut)} au {formatDate(tache.dateFin)}</span>
-          {isRetard && !hasConflict && <span className="ml-2 text-xs font-semibold text-red-600">(En retard)</span>}
+          <span>Du {formatDate(tache.datedebut)} au {formatDate(tache.datefin)}</span>
+          {isRetard && !hasConflict && (
+            <span className="ml-2 text-xs font-semibold text-red-600">(En retard)</span>
+          )}
         </div>
+
         <div className="flex items-center space-x-2">
           <Checkbox
             id={`terminee-${tache.id}`}
@@ -103,12 +127,19 @@ export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
           </Label>
         </div>
       </div>
-      {tache.assigneId && (
+
+      {/* ASSIGNÉ */}
+      {tache.assigneid && (
         <div className="flex items-center text-sm text-muted-foreground mt-2 pt-2 border-t">
           <AssigneIcon className="mr-2 h-4 w-4" />
-          <span>{tache.assigneType === 'soustraitant' ? 'Artisan: ' : 'Fournisseur: '} {assigneNom}</span>
+          <span>
+            {tache.assignetype === 'soustraitant' ? 'Artisan: ' : 'Fournisseur: '}
+            {assigneNom}
+          </span>
         </div>
       )}
+
+      {/* CONFLIT */}
       {hasConflict && (
         <div className="mt-2 p-2 bg-red-200 border border-red-400 rounded-md text-xs text-red-800 flex items-center">
           <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />

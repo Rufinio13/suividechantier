@@ -1,155 +1,256 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import { useToast } from '@/components/ui/use-toast';
-import { 
-  loadDataFromLocalStorage, 
-  saveDataToLocalStorage,
-  calculateDateFinLogic
-} from '@/context/chantierContextUtils';
-import { 
-  addChantierLogic, updateChantierLogic, deleteChantierLogic,
-  addSousTraitantLogic, updateSousTraitantLogic, deleteSousTraitantLogic, assignLotsToSousTraitantLogic,
-  addFournisseurLogic, updateFournisseurLogic, deleteFournisseurLogic,
-  addLotLogic, updateLotLogic, deleteLotLogic,
-  addTacheLogic, updateTacheLogic, deleteTacheLogic,
-  addControleAdHocLogic, updateControleAdHocLogic, saveControleFromModeleLogic, deleteControleLogic,
-  addModeleCQLogic, updateModeleCQLogic, deleteModeleCQLogic,
-  addCompteRenduLogic, updateCompteRenduLogic, deleteCompteRenduLogic,
-  addDocumentLogic, updateDocumentLogic, deleteDocumentLogic,
-  addCommentaireChantierLogic, deleteCommentaireChantierLogic, toggleCommentairePrisEnCompteLogic, 
-  updatePointControleRepriseLogic,
-  addDemandeSAVLogic, updateDemandeSAVLogic, deleteDemandeSAVLogic,
-  addPointControleChantierSpecificLogic, updatePointControleChantierSpecificLogic, deletePointControleChantierSpecificLogic,
-  // --- AJOUT ---
-  updateCommentaireChantierLogic
-  // -------------
-} from '@/context/chantierContextLogics';
+import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/hooks/useAuth";
+import { parseISO, format } from "date-fns";
 
-const ChantierContext = createContext();
+export const ChantierContext = createContext();
 
-export const useChantier = () => useContext(ChantierContext);
+export function ChantierProvider({ children }) {
+  const { user, profile } = useAuth();
+  const [loading, setLoading] = useState(true);
 
-export const ChantierProvider = ({ children }) => {
   const [chantiers, setChantiers] = useState([]);
   const [sousTraitants, setSousTraitants] = useState([]);
   const [fournisseurs, setFournisseurs] = useState([]);
-  const [lots, setLots] = useState([]);
+  const [sav, setSav] = useState([]);
   const [taches, setTaches] = useState([]);
-  const [controles, setControles] = useState([]);
-  const [modelesCQ, setModelesCQ] = useState([]);
-  const [comptesRendus, setComptesRendus] = useState([]);
-  const [documents, setDocuments] = useState([]);
-  const [demandesSAV, setDemandesSAV] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
+  const [lots, setLots] = useState([]);
 
-  const contextState = {
-    chantiers, setChantiers,
-    sousTraitants, setSousTraitants,
-    fournisseurs, setFournisseurs,
-    lots, setLots,
-    taches, setTaches,
-    controles, setControles,
-    modelesCQ, setModelesCQ,
-    comptesRendus, setComptesRendus,
-    documents, setDocuments,
-    demandesSAV, setDemandesSAV,
-    toast,
-    calculateDateFin: calculateDateFinLogic
+  // ---------------------
+  // CHARGEMENT DES DONNÉES
+  // ---------------------
+  const loadChantiers = async () => {
+    if (!profile?.nomsociete) return;
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("chantiers")
+      .select("*")
+      .eq("nomsociete", profile.nomsociete)
+      .order("created_at", { ascending: false });
+    if (error) console.error("❌ Erreur loadChantiers :", error);
+    setChantiers(data || []);
+    setLoading(false);
   };
 
-  useEffect(() => {
-    loadDataFromLocalStorage(contextState, setLoading, uuidv4);
-  }, []);
+  const loadSousTraitants = async () => {
+    if (!profile?.nomsociete) return;
+    const { data, error } = await supabase
+      .from("soustraitants")
+      .select("*")
+      .eq("nomsociete", profile.nomsociete)
+      .order("id", { ascending: false });
+    if (error) console.error("❌ Erreur loadSousTraitants :", error);
+    setSousTraitants(data || []);
+  };
 
-  useEffect(() => {
-    if (!loading) {
-      saveDataToLocalStorage(contextState);
+  const loadFournisseurs = async () => {
+    if (!profile?.nomsociete) return;
+    const { data, error } = await supabase
+      .from("fournisseurs")
+      .select("*")
+      .eq("nomsociete", profile.nomsociete)
+      .order("created_at", { ascending: false });
+    if (error) console.error("❌ Erreur loadFournisseurs :", error);
+    setFournisseurs(data || []);
+  };
+
+  const loadSAV = async () => {
+    if (!profile?.nomsociete) return;
+    const { data, error } = await supabase
+      .from("sav")
+      .select("*, chantiers(nomchantier, nomsociete)")
+      .order("created_at", { ascending: false });
+    if (error) console.error("❌ Erreur loadSAV :", error);
+    setSav((data || []).filter(s => s.chantiers?.nomsociete === profile.nomsociete));
+  };
+
+  const loadTaches = async () => {
+    const { data, error } = await supabase
+      .from("taches")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error("❌ Erreur loadTaches :", error);
+      setTaches([]);
+      return;
     }
-  }, [chantiers, sousTraitants, fournisseurs, lots, taches, controles, modelesCQ, comptesRendus, documents, demandesSAV, loading]);
-
-  const value = {
-    chantiers, sousTraitants, fournisseurs, lots, taches, controles, modelesCQ, comptesRendus, documents, demandesSAV, loading,
-
-    // Chantiers
-    addChantier: (data) => addChantierLogic(data, contextState, uuidv4),
-    updateChantier: (id, data) => updateChantierLogic(id, data, contextState),
-    deleteChantier: (id) => deleteChantierLogic(id, contextState),
-    
-    // Sous-traitants
-    addSousTraitant: (data) => addSousTraitantLogic(data, contextState, uuidv4),
-    updateSousTraitant: (id, data) => updateSousTraitantLogic(id, data, contextState),
-    deleteSousTraitant: (id) => deleteSousTraitantLogic(id, contextState),
-    assignLotsToSousTraitant: (stId, lotIds) => assignLotsToSousTraitantLogic(stId, lotIds, contextState),
-
-    // Fournisseurs
-    addFournisseur: (data) => addFournisseurLogic(data, contextState, uuidv4),
-    updateFournisseur: (id, data) => updateFournisseurLogic(id, data, contextState),
-    deleteFournisseur: (id) => deleteFournisseurLogic(id, contextState),
-
-    // Lots
-    addLot: (data) => addLotLogic(data, contextState, uuidv4),
-    updateLot: (id, data) => updateLotLogic(id, data, contextState),
-    deleteLot: (id) => deleteLotLogic(id, contextState),
-    
-    // Tâches
-    addTache: (data) => addTacheLogic(data, contextState, uuidv4),
-    updateTache: (id, data) => updateTacheLogic(id, data, contextState),
-    deleteTache: (id) => deleteTacheLogic(id, contextState),
-    
-    // Contrôles qualité
-    addControleAdHoc: (data) => addControleAdHocLogic(data, contextState, uuidv4),
-    updateControleAdHoc: (id, data) => updateControleAdHocLogic(id, data, contextState),
-    saveControleFromModele: (chId, modId, results, pointsSpecifiques) => saveControleFromModeleLogic(chId, modId, results, pointsSpecifiques, contextState, uuidv4),
-    deleteControle: (id) => deleteControleLogic(id, contextState),
-    
-    // Modèles CQ
-    addModeleCQ: (data) => addModeleCQLogic(data, contextState, uuidv4),
-    updateModeleCQ: (id, data) => updateModeleCQLogic(id, data, contextState, uuidv4),
-    deleteModeleCQ: (id) => deleteModeleCQLogic(id, contextState),
-    
-    // Comptes-rendus
-    addCompteRendu: (data) => addCompteRenduLogic(data, contextState, uuidv4),
-    updateCompteRendu: (id, data) => updateCompteRenduLogic(id, data, contextState),
-    deleteCompteRendu: (id) => deleteCompteRenduLogic(id, contextState),
-    
-    // Documents
-    addDocument: (data) => addDocumentLogic(data, contextState, uuidv4),
-    updateDocument: (id, data) => updateDocumentLogic(id, data, contextState),
-    deleteDocument: (id) => deleteDocumentLogic(id, contextState),
-
-    // Commentaires chantier
-    addCommentaireChantier: (chantierId, titre, texte) => addCommentaireChantierLogic(chantierId, titre, texte, contextState, uuidv4),
-    deleteCommentaireChantier: (chantierId, commentaireId) => deleteCommentaireChantierLogic(chantierId, commentaireId, contextState),
-    toggleCommentairePrisEnCompte: (chantierId, commentaireId) => toggleCommentairePrisEnCompteLogic(chantierId, commentaireId, contextState),
-    // --- AJOUT : mise à jour d’un commentaire
-    updateCommentaireChantier: (chantierId, commentaireId, data) =>
-      updateCommentaireChantierLogic(chantierId, commentaireId, data, contextState),
-    // ----------------------------------------
-
-    // Reprise sur points de contrôle
-    updatePointControleReprise: (chantierId, modeleId, domaineId, sousCategorieId, pointControleId, repriseData) =>
-      updatePointControleRepriseLogic(chantierId, modeleId, domaineId, sousCategorieId, pointControleId, repriseData, contextState),
-
-    // SAV
-    addDemandeSAV: (data) => addDemandeSAVLogic(data, contextState, uuidv4),
-    updateDemandeSAV: (id, data) => updateDemandeSAVLogic(id, data, contextState),
-    deleteDemandeSAV: (id) => deleteDemandeSAVLogic(id, contextState),
-
-    // Points de contrôle spécifiques au chantier
-    addPointControleChantierSpecific: (chantierId, modeleId, domaineId, sousCategorieId, pointData) =>
-      addPointControleChantierSpecificLogic(chantierId, modeleId, domaineId, sousCategorieId, pointData, contextState, uuidv4),
-    updatePointControleChantierSpecific: (chantierId, modeleId, domaineId, sousCategorieId, pointId, pointData) =>
-      updatePointControleChantierSpecificLogic(chantierId, modeleId, domaineId, sousCategorieId, pointId, pointData, contextState),
-    deletePointControleChantierSpecific: (chantierId, modeleId, domaineId, sousCategorieId, pointId) =>
-      deletePointControleChantierSpecificLogic(chantierId, modeleId, domaineId, sousCategorieId, pointId, contextState),
-    // updateNomCategorieChantierSpecific: (chantierId, modeleId, domaineId, sousCategorieId, nouveauNom) =>
-    //   updateNomCategorieChantierSpecificLogic(chantierId, modeleId, domaineId, sousCategorieId, nouveauNom, contextState),
+    setTaches(data || []);
   };
+
+  const loadLots = async () => {
+    const { data, error } = await supabase
+      .from("lots")
+      .select("*");
+    if (error) console.error("❌ Erreur loadLots :", error);
+    setLots(data || []);
+  };
+
+  useEffect(() => {
+    async function loadAll() {
+      await Promise.all([
+        loadChantiers(),
+        loadSousTraitants(),
+        loadFournisseurs(),
+        loadSAV(),
+        loadTaches(),
+        loadLots(),
+      ]);
+      setLoading(false);
+    }
+    loadAll();
+  }, [profile?.nomsociete]);
+
+  // ---------------------
+  // CONFLITS ARTISANS
+  // ---------------------
+  const conflictsByChantier = useMemo(() => {
+    const conflicts = {};
+    taches.forEach(t => {
+      if (!t.assigneid || t.assignetype !== "soustraitant" || !t.datedebut) return;
+      const key = `${t.assigneid}-${format(parseISO(t.datedebut), "yyyy-MM-dd")}`;
+      if (!conflicts[key]) conflicts[key] = { count: 0, chantierids: [] };
+      conflicts[key].count += 1;
+      if (!conflicts[key].chantierids.includes(t.chantierid)) conflicts[key].chantierids.push(t.chantierid);
+    });
+    return conflicts;
+  }, [taches]);
+
+  // ---------------------
+  // CRUD TACHES
+  // ---------------------
+  const addTache = async (tache) => {
+  // Vérification des UUID
+  if (!tache.chantierid || typeof tache.chantierid !== "string") {
+    throw new Error("chantierid doit être un UUID valide.");
+  }
+  if (!tache.lotid || typeof tache.lotid !== "string") {
+    throw new Error("lotid doit être un UUID valide.");
+  }
+  if (tache.assigneid && typeof tache.assigneid !== "string") {
+    throw new Error("assigneid doit être un UUID valide si renseigné.");
+  }
+
+  const { data, error } = await supabase
+    .from("taches")
+    .insert([{
+      nom: tache.nom ?? null,
+      description: tache.description ?? null,
+      chantierid: tache.chantierid,
+      lotid: tache.lotid,
+      assigneid: tache.assigneid ?? null,
+      assignetype: tache.assignetype ?? null, // 'soustraitant' ou 'fournisseur'
+      datedebut: tache.datedebut ?? null,
+      datefin: tache.datefin ?? null,
+      terminee: tache.terminee ?? false,
+    }])
+    .select("*")
+    .single();
+
+  if (error) {
+    console.error("❌ Erreur save tâche:", error);
+    throw error;
+  }
+
+  setTaches(prev => [data, ...prev]);
+  return data;
+};
+
+  const updateTache = async (id, updates) => {
+    if (updates.lotid && typeof updates.lotid !== "string") {
+      throw new Error("lotid doit être un UUID valide.");
+    }
+    const { data, error } = await supabase
+      .from("taches")
+      .update({
+        nom: updates.nom,
+        description: updates.description ?? null,
+        chantierid: updates.chantierid ?? null,
+        lotid: updates.lotid ?? null,
+        assigneid: updates.assigneid ?? null,
+        assignetype: updates.assignetype ?? null,
+        datedebut: updates.datedebut ?? null,
+        datefin: updates.datefin ?? null,
+        terminee: updates.terminee ?? false,
+      })
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    setTaches(prev => prev.map(t => t.id === id ? data : t));
+    return data;
+  };
+
+// Remplace ta fonction deleteTache dans ChantierContext.jsx par celle-ci :
+
+const deleteTache = async (id) => {
+  console.log("🗑️ Tentative de suppression tâche:", id);
+  
+  const { data, error } = await supabase
+    .from("taches")
+    .delete()
+    .eq("id", id)
+    .select(); // Ajoute .select() pour voir ce qui est supprimé
+  
+  console.log("🗑️ Résultat suppression:", { data, error });
+  
+  if (error) {
+    console.error("❌ Erreur suppression tâche:", error);
+    throw error;
+  }
+  
+  setTaches(prev => prev.filter(t => t.id !== id));
+  console.log("✅ Tâche supprimée du state local");
+};
+
+  // ---------------------
+  // CRUD CHANTIERS / SOUS-TRAITANTS / FOURNISSEURS / SAV
+  // ---------------------
+  const addChantier = async (chantier) => {
+    const { data, error } = await supabase.from("chantiers").insert([chantier]).select().single();
+    if (error) throw error;
+    setChantiers(prev => [data, ...prev]);
+    return data;
+  };
+  const updateChantier = async (id, updates) => {
+    const { data, error } = await supabase.from("chantiers").update(updates).eq("id", id).select().single();
+    if (error) throw error;
+    setChantiers(prev => prev.map(c => c.id === id ? data : c));
+    return data;
+  };
+  const deleteChantier = async (id) => {
+    const { error } = await supabase.from("chantiers").delete().eq("id", id);
+    if (error) throw error;
+    setChantiers(prev => prev.filter(c => c.id !== id));
+  };
+
+  const addSousTraitant = async (st) => setSousTraitants(prev => [st, ...prev]);
+  const updateSousTraitant = async (id, updates) => setSousTraitants(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+  const deleteSousTraitant = async (id) => setSousTraitants(prev => prev.filter(s => s.id !== id));
+
+  const addFournisseur = async (f) => setFournisseurs(prev => [f, ...prev]);
+  const updateFournisseur = async (id, updates) => setFournisseurs(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
+  const deleteFournisseur = async (id) => setFournisseurs(prev => prev.filter(f => f.id !== id));
+
+  const addSAV = async (s) => setSav(prev => [s, ...prev]);
+  const updateSAV = async (id, updates) => setSav(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+  const deleteSAV = async (id) => setSav(prev => prev.filter(s => s.id !== id));
 
   return (
-    <ChantierContext.Provider value={value}>
+    <ChantierContext.Provider value={{
+      loading,
+      chantiers, loadChantiers, addChantier, updateChantier, deleteChantier,
+      sousTraitants, loadSousTraitants, addSousTraitant, updateSousTraitant, deleteSousTraitant,
+      fournisseurs, loadFournisseurs, addFournisseur, updateFournisseur, deleteFournisseur,
+      sav, loadSAV, addSAV, updateSAV, deleteSAV,
+      taches, loadTaches, addTache, updateTache, deleteTache,
+      lots, loadLots,
+      conflictsByChantier
+    }}>
       {children}
     </ChantierContext.Provider>
   );
-};
+}
+
+export function useChantier() {
+  return useContext(ChantierContext);
+}

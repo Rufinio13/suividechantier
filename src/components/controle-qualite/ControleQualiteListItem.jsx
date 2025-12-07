@@ -1,15 +1,12 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { format, parseISO } from 'date-fns';
-import { fr } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar, Edit, Trash2, CheckCircle, AlertCircle, HelpCircle, XCircle, Camera, Paperclip, FileImage, Edit3, CalendarPlus, Edit2 as EditIcon } from 'lucide-react';
-import { useChantier } from '@/context/ChantierContext';
+import { CheckCircle, AlertCircle, HelpCircle, XCircle, Camera, Paperclip, Edit3, CalendarPlus, Edit2 as EditIcon, Trash2 } from 'lucide-react';
 import { PointControleFormModal } from '@/components/controle-qualite/PointControleFormModal';
 
 const getResultatStyle = (resultat) => {
@@ -39,13 +36,15 @@ export function PointControleResultatItem({
     sousCategorieId, 
     onResultatChange,
     onUpdatePointControle,
-    onDeletePointControle
+    onDeletePointControle,
+    documents = [] // ✅ AJOUT: Valeur par défaut pour éviter undefined
 }) {
-  const { documents } = useChantier();
   const [isExpanded, setIsExpanded] = useState(resultatData?.resultat === 'NC');
   const [isPointFormModalOpen, setIsPointFormModalOpen] = useState(false);
   
+  // ✅ CORRIGÉ: Vérifier que documents existe et est un tableau
   const plansDuChantier = useMemo(() => {
+    if (!Array.isArray(documents)) return [];
     return documents.filter(doc => doc.chantierId === chantierId && doc.type === 'Plan');
   }, [documents, chantierId]);
 

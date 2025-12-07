@@ -17,12 +17,11 @@ import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, ChevronDown, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { corrigerTachesPourGantt } from '@/lib/ganttUtils';
 
 // === Constantes pour une vue par SEMAINE ===
 const MIN_WEEK_WIDTH = 24;
 const MAX_WEEK_WIDTH = 120;
-const DEFAULT_WEEK_WIDTH = 56; // largeur d'une colonne semaine
+const DEFAULT_WEEK_WIDTH = 56;
 const ROW_HEIGHT = 36;
 const TASK_ROW_HEIGHT = 32;
 
@@ -39,8 +38,9 @@ const calculerPeriodeChantier = (tachesDuChantier) => {
   const fins = [];
 
   tachesDuChantier.forEach(tache => {
-    const debut = safeParseDate(tache.dateDebut);
-    const fin = safeParseDate(tache.dateFin);
+    // ✅ CORRIGÉ : datedebut, datefin en minuscules
+    const debut = safeParseDate(tache.datedebut);
+    const fin = safeParseDate(tache.datefin);
     if (isValidDate(debut)) debuts.push(startOfDay(debut));
     if (isValidDate(fin)) fins.push(endOfDay(fin));
   });
@@ -68,21 +68,22 @@ const isOverlap = (startA, endA, startB, endB) => {
 
 const detectGlobalConflicts = (allTaches) => {
   const taskConflicts = new Set();
-  const stAssignments = {}; // key: ST id -> assignments
+  const stAssignments = {};
 
   allTaches.forEach(tache => {
-    if (tache.assigneType === 'soustraitant' && tache.assigneId && tache.dateDebut && tache.dateFin) {
-      const startDate = startOfDay(parseISO(tache.dateDebut));
-      const endDate = endOfDay(parseISO(tache.dateFin));
+    // ✅ CORRIGÉ : assignetype, assigneid, datedebut, datefin en minuscules
+    if (tache.assignetype === 'soustraitant' && tache.assigneid && tache.datedebut && tache.datefin) {
+      const startDate = startOfDay(parseISO(tache.datedebut));
+      const endDate = endOfDay(parseISO(tache.datefin));
       if (!isValidDate(startDate) || !isValidDate(endDate)) return;
 
-      const stId = tache.assigneId;
+      const stId = tache.assigneid;
       if (!stAssignments[stId]) stAssignments[stId] = [];
       stAssignments[stId].push({
         tacheId: tache.id,
         start: startDate,
         end: endDate,
-        chantierId: tache.chantierId,
+        chantierid: tache.chantierid, // ✅ minuscule
       });
     }
   });
@@ -93,7 +94,7 @@ const detectGlobalConflicts = (allTaches) => {
       for (let j = i + 1; j < assignments.length; j++) {
         const assignA = assignments[i];
         const assignB = assignments[j];
-        if (assignA.chantierId !== assignB.chantierId && isOverlap(assignA.start, assignA.end, assignB.start, assignB.end)) {
+        if (assignA.chantierid !== assignB.chantierid && isOverlap(assignA.start, assignA.end, assignB.start, assignB.end)) {
           taskConflicts.add(assignA.tacheId);
           taskConflicts.add(assignB.tacheId);
         }
@@ -110,12 +111,11 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
   const cleanTaches = useMemo(() => taches || [], [taches]);
   const conflictingTaskIdsAcrossAllChantiers = useMemo(() => detectGlobalConflicts(cleanTaches), [cleanTaches]);
 
-  // ====== Préparation des items (chantier + tâches) ======
   const ganttData = useMemo(() => {
     if (chantiers.length === 0) {
       const defaultStart = initialStartDate || startOfDay(new Date());
       const defaultStartWeek = startOfWeek(defaultStart, { weekStartsOn: 1 });
-      const defaultEndWeek = endOfWeek(addWeeks(defaultStartWeek, 4), { weekStartsOn: 1 }); // ~5 semaines
+      const defaultEndWeek = endOfWeek(addWeeks(defaultStartWeek, 4), { weekStartsOn: 1 });
       const totalWeeks = differenceInWeeks(defaultEndWeek, defaultStartWeek) + 1;
       return { items: [], overallStartDate: defaultStartWeek, overallEndDate: defaultEndWeek, totalWeeks };
     }
@@ -123,11 +123,13 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
     const today = startOfDay(new Date());
 
     const items = chantiers.map(chantier => {
+      // ✅ CORRIGÉ : chantierid en minuscule
       const chantierTaches = cleanTaches
-        .filter(t => t.chantierId === chantier.id)
+        .filter(t => t.chantierid === chantier.id)
         .sort((a,b) => {
-          const dateA = parseISO(a.dateDebut);
-          const dateB = parseISO(b.dateDebut);
+          // ✅ CORRIGÉ : datedebut en minuscule
+          const dateA = parseISO(a.datedebut);
+          const dateB = parseISO(b.datedebut);
           if (!isValidDate(dateA) || !isValidDate(dateB)) return 0;
           return dateA - dateB;
         });
@@ -152,15 +154,17 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
 
       return {
         id: chantier.id,
-        name: chantier.nom,
+        // ✅ CORRIGÉ : nomchantier au lieu de nom
+        name: chantier.nomchantier,
         start: startOfDay(chantierOverallStart),
         end: endOfDay(chantierOverallEnd),
         type: 'chantier',
         color: hasConflictInChantier ? 'bg-red-300' : 'bg-blue-300',
         tasks: chantierTaches
           .map(tache => {
-            const tacheDateDebut = parseISO(tache.dateDebut);
-            const tacheDateFin = parseISO(tache.dateFin);
+            // ✅ CORRIGÉ : datedebut, datefin en minuscules
+            const tacheDateDebut = parseISO(tache.datedebut);
+            const tacheDateFin = parseISO(tache.datefin);
             const isConflict = conflictingTaskIdsAcrossAllChantiers.has(tache.id);
             let taskColor = 'bg-gray-400';
 
@@ -171,9 +175,10 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
             } else if (tache.terminee) {
               taskColor = 'bg-green-500';
             } else if (isValidDate(tacheDateFin) && (isFuture(tacheDateFin) || format(tacheDateFin, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'))) {
-              if (tache.assigneType === 'fournisseur') {
+              // ✅ CORRIGÉ : assignetype en minuscule
+              if (tache.assignetype === 'fournisseur') {
                 taskColor = 'bg-blue-500';
-              } else if (tache.assigneType === 'soustraitant') {
+              } else if (tache.assignetype === 'soustraitant') {
                 taskColor = 'bg-orange-400';
               }
             }
@@ -185,7 +190,8 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
               end: isValidDate(tacheDateFin) ? endOfDay(tacheDateFin) : endOfDay(startOfDay(initialStartDate || new Date())),
               type: 'task',
               color: taskColor,
-              chantierId: chantier.id,
+              // ✅ CORRIGÉ : chantierid en minuscule
+              chantierid: chantier.id,
               hasConflict: isConflict,
             };
           })
@@ -201,7 +207,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
       return { items: [], overallStartDate: defaultStartWeek, overallEndDate: defaultEndWeek, totalWeeks };
     }
 
-    // bornes globales alignées sur les semaines (lundi-dimanche)
     let overallStartDate = items.reduce((minDt, item) => (item.start < minDt ? item.start : minDt), items[0].start);
     let overallEndDate = items.reduce((maxDt, item) => (item.end > maxDt ? item.end : maxDt), items[0].end);
 
@@ -210,7 +215,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
     const overallStartAligned = startOfWeek(overallStartDate, { weekStartsOn: 1 });
     const overallEndAligned = endOfWeek(overallEndDate, { weekStartsOn: 1 });
 
-    // garantie d'un minimum d'horizon (5 semaines)
     const minEnd = endOfWeek(addWeeks(overallStartAligned, 4), { weekStartsOn: 1 });
     const finalOverallEnd = overallEndAligned < minEnd ? minEnd : overallEndAligned;
 
@@ -239,7 +243,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
   const handleZoomIn = () => setWeekWidth(prev => Math.min(MAX_WEEK_WIDTH, prev + 6));
   const handleZoomOut = () => setWeekWidth(prev => Math.max(MIN_WEEK_WIDTH, prev - 6));
 
-  // === Génération des entêtes de mois et de semaines ===
   const getWeekHeaders = () => {
     const headers = [];
     if (!isValidDate(overallStartDate) || !isValidDate(overallEndDate)) return headers;
@@ -252,7 +255,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
         label: format(current, "'S'ww", { locale: fr })
       });
       current = addWeeks(current, 1);
-      if (!isValidDate(current) || headers.length > 520) break; // sécurité
+      if (!isValidDate(current) || headers.length > 520) break;
     }
     return headers;
   };
@@ -260,7 +263,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
   const weekHeaders = getWeekHeaders();
 
   const getMonthHeaders = () => {
-    // Regroupe les semaines consécutives appartenant au même mois
     const months = [];
     if (weekHeaders.length === 0) return months;
 
@@ -285,13 +287,11 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
       if (idx === weekHeaders.length - 1) months.push({ ...group });
     });
 
-    // ajoute largeur en px
     return months.map(m => ({ ...m, width: m.weeksCount * weekWidth }));
   };
 
   const monthHeaders = getMonthHeaders();
 
-  // === Placement des items (alignés sur les semaines) ===
   let currentTopOffset = 0;
   const renderedItems = [];
 
@@ -318,6 +318,12 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
     currentTopOffset += ROW_HEIGHT;
 
     if (expandedChantiers[chantierItem.id]) {
+      // ✅ NOUVEAU : Organisation des tâches sur 2 lignes maximum
+      const ligne1EndDate = null;
+      const ligne2EndDate = null;
+      let ligne1End = null;
+      let ligne2End = null;
+      
       chantierItem.tasks.forEach((taskItem) => {
         if (!isValidDate(taskItem.start) || !isValidDate(taskItem.end)) return;
 
@@ -329,25 +335,45 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
 
         if (taskStartOffsetWeeks < -taskDurationWeeks || taskDurationWeeks <= 0) return;
 
+        // Détermine sur quelle ligne placer la tâche
+        let rowOffset = 0; // Par défaut ligne 1
+        
+        // Si la ligne 1 est libre ou si la tâche commence après la fin de la dernière tâche de la ligne 1
+        if (!ligne1End || taskItem.start > ligne1End) {
+          rowOffset = 0; // Place sur ligne 1
+          ligne1End = taskItem.end;
+        }
+        // Sinon, essaie la ligne 2
+        else if (!ligne2End || taskItem.start > ligne2End) {
+          rowOffset = TASK_ROW_HEIGHT; // Place sur ligne 2
+          ligne2End = taskItem.end;
+        }
+        // Si les 2 lignes sont occupées, place sur ligne 2 en superposition
+        else {
+          rowOffset = TASK_ROW_HEIGHT;
+          ligne2End = taskItem.end > ligne2End ? taskItem.end : ligne2End;
+        }
+
         renderedItems.push({
           ...taskItem,
           displayProps: {
             left: Math.max(0, taskStartOffsetWeeks) * weekWidth,
             width: Math.max(0, (taskDurationWeeks - Math.max(0, -taskStartOffsetWeeks)) * weekWidth - 2),
-            top: currentTopOffset,
+            top: currentTopOffset + rowOffset,
             height: TASK_ROW_HEIGHT - 4,
           }
         });
-        currentTopOffset += TASK_ROW_HEIGHT;
       });
+      
+      // Avance de 2 lignes après les tâches
+      currentTopOffset += TASK_ROW_HEIGHT * 2;
     }
   });
 
-  const chartHeight = currentTopOffset + 50 + 20; // 2 barres d'entêtes
+  const chartHeight = currentTopOffset + 50 + 20;
 
   return (
     <div className="overflow-x-auto pb-4 bg-slate-50 p-1 rounded-lg shadow-inner relative">
-      {/* Zoom */}
       <div className="absolute top-1 right-1 z-30 flex space-x-1">
         <Button variant="outline" size="icon" onClick={handleZoomIn} disabled={weekWidth >= MAX_WEEK_WIDTH} className="h-7 w-7">
           <ZoomIn className="h-3.5 w-3.5" />
@@ -358,7 +384,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
       </div>
 
       <div style={{ width: totalWeeks * weekWidth + 250, minWidth: '100%' }}>
-        {/* Ligne des mois */}
         <div className="flex sticky top-0 bg-slate-100 z-20" style={{ marginLeft: 250 }}>
           {monthHeaders.map((month, index) => (
             <div key={`month-${index}`} className="h-7 flex items-center justify-center border-r border-slate-300" style={{ width: month.width }}>
@@ -367,7 +392,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
           ))}
         </div>
 
-        {/* Ligne des semaines */}
         <div className="flex sticky top-7 bg-slate-100 z-20" style={{ marginLeft: 250 }}>
           {weekHeaders.map((w, idx) => (
             <div key={`week-${idx}`} className="h-5 flex flex-col items-center justify-center border-r border-slate-200/80" style={{ width: weekWidth }}>
@@ -376,14 +400,12 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
           ))}
         </div>
 
-        {/* Grille verticale */}
         <div className="absolute top-0 left-250 h-full pointer-events-none z-0">
           {Array.from({ length: totalWeeks + 1 }).map((_, i) => (
             <div key={`gridline-v-${i}`} className="absolute h-full border-l border-slate-200/60" style={{ left: i * weekWidth, top: 50 + 20 }} />
           ))}
         </div>
 
-        {/* Items */}
         <div className="relative" style={{ height: chartHeight - (50 + 20) }}>
           {renderedItems.map((item, index) => {
             if (!isValidDate(item.start) || !isValidDate(item.end) || item.displayProps.width <= 0) return null;
@@ -400,32 +422,32 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
                   }}
                 />
 
-                {/* Libellé à gauche */}
-                <div
-                  className={`absolute flex items-center px-2 ${item.type === 'task' ? 'pl-8 text-slate-700' : 'font-semibold text-slate-800'}`}
-                  style={{
-                    left: 0,
-                    width: 250,
-                    top: item.displayProps.top,
-                    height: item.type === 'chantier' ? ROW_HEIGHT : TASK_ROW_HEIGHT,
-                    zIndex: 10
-                  }}
-                >
-                  {item.type === 'chantier' && (
+                {/* ✅ MODIFIÉ : Libellé à gauche - Seulement pour les chantiers */}
+                {item.type === 'chantier' && (
+                  <div
+                    className="absolute flex items-center px-2 font-semibold text-slate-800"
+                    style={{
+                      left: 0,
+                      width: 250,
+                      top: item.displayProps.top,
+                      height: ROW_HEIGHT,
+                      zIndex: 10
+                    }}
+                  >
                     <Button variant="ghost" size="icon" onClick={() => toggleChantierExpand(item.id)} className="mr-1 h-7 w-7">
                       {expandedChantiers[item.id] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </Button>
-                  )}
-                  <Link
-                    to={item.type === 'chantier' ? `/chantiers/${item.id}` : `/chantiers/${item.chantierId}/planning`}
-                    className="truncate hover:underline"
-                    title={item.name}
-                  >
-                    {item.name}
-                  </Link>
-                </div>
+                    <Link
+                      to={`/chantiers/${item.id}`}
+                      className="truncate hover:underline"
+                      title={item.name}
+                    >
+                      {item.name}
+                    </Link>
+                  </div>
+                )}
 
-                {/* Barre */}
+                {/* Barre dans le Gantt */}
                 <motion.div
                   className={`absolute flex items-center rounded-sm shadow-sm px-1.5 ${itemTextColor} text-[10px] overflow-hidden ${item.hasConflict && item.type === 'task' ? 'ring-2 ring-offset-1 ring-red-500' : 'hover:ring-1 hover:ring-offset-1 hover:ring-indigo-300'}`}
                   style={{
@@ -441,9 +463,8 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
                   title={`${item.name}\nDu ${format(item.start, 'dd/MM/yy')} au ${format(item.end, 'dd/MM/yy')}${item.hasConflict && item.type === 'task' ? `\nConflit` : ''}`}
                 >
                   <div className={`absolute inset-0 ${item.color} ${item.type === 'task' ? 'opacity-80' : 'opacity-95'}`}></div>
-                  {item.type !== 'chantier' && (
+                  {/* ✅ MODIFIÉ : Affiche le nom DANS la barre pour les tâches ET les chantiers */}
                   <span className="relative z-10 truncate">{item.name}</span>
-                  )}
                   {item.hasConflict && item.type === 'task' && <AlertTriangle className="h-3 w-3 ml-auto text-yellow-300 flex-shrink-0" />}
                 </motion.div>
               </React.Fragment>

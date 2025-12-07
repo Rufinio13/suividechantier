@@ -30,35 +30,65 @@ export function ChantierCard({ chantier }) {
         <Card className="h-full w-full overflow-hidden border-2 hover:border-primary/50 transition-all flex flex-col">
           <CardHeader className="pb-3">
             <div className="flex justify-between items-start">
-              <CardTitle className="text-lg font-bold text-primary truncate" title={chantier.nom}>
-                {chantier.nom}
+              <CardTitle
+                className="text-lg font-bold text-primary truncate"
+                title={chantier.nomchantier}
+              >
+                {chantier.nomchantier}
               </CardTitle>
-              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusColor(chantier.statut)}`}>
+              <span
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusColor(
+                  chantier.statut
+                )}`}
+              >
                 {chantier.statut || 'N/D'}
               </span>
             </div>
           </CardHeader>
           <CardContent className="flex-grow space-y-2.5">
-            <div className="flex items-center text-sm">
-              <User className="mr-2 h-4 w-4 text-gray-600 flex-shrink-0" />
-              <span className="font-semibold text-gray-800 truncate" title={`${chantier.prenomClient || ''} ${chantier.nomClient || ''}`}>
-                {chantier.prenomClient} {chantier.nomClient}
-              </span>
-            </div>
-            <div className="flex items-start text-sm text-gray-600">
-              <MapPin className="mr-2 h-4 w-4 mt-0.5 flex-shrink-0" />
-              <span className="truncate" title={chantier.adresse}>{chantier.adresse}</span>
-            </div>
-            {chantier.telClient && (
-              <div className="flex items-center text-sm text-gray-600">
-                <Phone className="mr-2 h-4 w-4 flex-shrink-0" />
-                <span className="truncate" title={chantier.telClient}>{chantier.telClient}</span>
+            {/* Client */}
+            {(chantier.client_prenom || chantier.client_nom) && (
+              <div className="flex items-center text-sm">
+                <User className="mr-2 h-4 w-4 text-gray-600 flex-shrink-0" />
+                <span
+                  className="font-semibold text-gray-800 truncate"
+                  title={`${chantier.client_prenom || ''} ${chantier.client_nom || ''}`}
+                >
+                  {chantier.client_prenom} {chantier.client_nom}
+                </span>
               </div>
             )}
-            {chantier.mailClient && (
+
+            {/* Adresse complète */}
+            {chantier.adresse && (
+              <div className="flex items-start text-sm text-gray-600">
+                <MapPin className="mr-2 h-4 w-4 mt-0.5 flex-shrink-0" />
+                <span
+                  className="truncate"
+                  title={`${chantier.adresse}${chantier.ville ? ', ' + chantier.ville : ''}${chantier.codepostal ? ' - ' + chantier.codepostal : ''}`}
+                >
+                  {chantier.adresse}{chantier.ville ? `, ${chantier.ville}` : ''}{chantier.codepostal ? ` - ${chantier.codepostal}` : ''}
+                </span>
+              </div>
+            )}
+
+            {/* Téléphone */}
+            {chantier.client_tel && (
+              <div className="flex items-center text-sm text-gray-600">
+                <Phone className="mr-2 h-4 w-4 flex-shrink-0" />
+                <span className="truncate" title={chantier.client_tel}>
+                  {chantier.client_tel}
+                </span>
+              </div>
+            )}
+
+            {/* Email */}
+            {chantier.client_mail && (
               <div className="flex items-center text-sm text-gray-600">
                 <Mail className="mr-2 h-4 w-4 flex-shrink-0" />
-                <span className="truncate" title={chantier.mailClient}>{chantier.mailClient}</span>
+                <span className="truncate" title={chantier.client_mail}>
+                  {chantier.client_mail}
+                </span>
               </div>
             )}
           </CardContent>

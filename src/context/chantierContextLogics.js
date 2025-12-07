@@ -95,7 +95,7 @@ export const addSousTraitantLogic = (sousTraitant, contextState, uuidv4) => {
   const { sousTraitants, setSousTraitants, toast } = contextState;
   const newSousTraitant = { ...sousTraitant, id: uuidv4(), assignedLots: sousTraitant.assignedLots || [] };
   setSousTraitants([...sousTraitants, newSousTraitant]);
-  toast({ title: 'Sous-traitant ajouté', description: `Le sous-traitant "${newSousTraitant.nomSociete || `${newSousTraitant.prenomDirigeant} ${newSousTraitant.nomDirigeant}`.trim()}" a été ajouté.` });
+  toast({ title: 'Sous-traitant ajouté', description: `Le sous-traitant "${newSousTraitant.nomsociete || `${newSousTraitant.prenomDirigeant} ${newSousTraitant.nomDirigeant}`.trim()}" a été ajouté.` });
   return newSousTraitant;
 };
 
@@ -110,7 +110,7 @@ export const deleteSousTraitantLogic = (id, contextState) => {
   const stToDelete = sousTraitants.find(st => st.id === id);
   setSousTraitants(sousTraitants.filter(st => st.id !== id));
   setTaches(taches.map(tache => (tache.assigneType === 'soustraitant' && tache.assigneId === id) ? { ...tache, assigneId: null, assigneType: null } : tache));
-  toast({ title: 'Sous-traitant supprimé', description: `Le sous-traitant "${stToDelete?.nomSociete || `${stToDelete?.prenomDirigeant} ${stToDelete?.nomDirigeant}`.trim()}" a été supprimé.` });
+  toast({ title: 'Sous-traitant supprimé', description: `Le sous-traitant "${stToDelete?.nomsociete || `${stToDelete?.prenomDirigeant} ${stToDelete?.nomDirigeant}`.trim()}" a été supprimé.` });
 };
 
 export const assignLotsToSousTraitantLogic = (sousTraitantId, lotIdsToAssign, contextState) => {
@@ -123,7 +123,7 @@ export const addFournisseurLogic = (fournisseur, contextState, uuidv4) => {
   const { fournisseurs, setFournisseurs, toast } = contextState;
   const newFournisseur = { ...fournisseur, id: uuidv4(), assignedLots: fournisseur.assignedLots || [] };
   setFournisseurs([...fournisseurs, newFournisseur]);
-  toast({ title: 'Fournisseur ajouté', description: `Le fournisseur "${newFournisseur.nomSociete}" a été ajouté.` });
+  toast({ title: 'Fournisseur ajouté', description: `Le fournisseur "${newFournisseur.nomsociete}" a été ajouté.` });
   return newFournisseur;
 };
 
@@ -138,7 +138,7 @@ export const deleteFournisseurLogic = (id, contextState) => {
   const fToDelete = fournisseurs.find(f => f.id === id);
   setFournisseurs(fournisseurs.filter(f => f.id !== id));
   setTaches(taches.map(tache => (tache.assigneType === 'fournisseur' && tache.assigneId === id) ? { ...tache, assigneId: null, assigneType: null } : tache));
-  toast({ title: 'Fournisseur supprimé', description: `Le fournisseur "${fToDelete?.nomSociete}" a été supprimé.` });
+  toast({ title: 'Fournisseur supprimé', description: `Le fournisseur "${fToDelete?.nomsociete}" a été supprimé.` });
 };
 
 

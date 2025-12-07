@@ -1,18 +1,20 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, Outlet } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Menu, X, LogOut, HardHat, Briefcase, Truck, Wrench, Settings, Users } from 'lucide-react';
+import { LayoutDashboard, Menu, X, LogOut, HardHat, Truck, Wrench, Settings, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
-export function Layout({ children }) {
+export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
-  
+  const { signOut } = useAuth();
+
   const navItems = [
     { name: 'Tableau de bord', href: '/', icon: LayoutDashboard },
     { name: 'Chantiers', href: '/chantiers', icon: HardHat },
-    { name: 'Artisans', href: '/sous-traitants-list', icon: Users }, // Changé ici
+    { name: 'Artisans', href: '/sous-traitants', icon: Users },
     { name: 'Fournisseurs', href: '/fournisseurs', icon: Truck },
     { name: 'SAV', href: '/sav', icon: Wrench },
     { name: 'Paramètres', href: '/parametres', icon: Settings },
@@ -22,6 +24,7 @@ export function Layout({ children }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Mobile hamburger */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <Button 
           variant="outline" 
@@ -33,6 +36,7 @@ export function Layout({ children }) {
         </Button>
       </div>
 
+      {/* Sidebar */}
       <motion.aside 
         className={cn(
           "fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0",
@@ -41,6 +45,7 @@ export function Layout({ children }) {
         initial={false}
       >
         <div className="h-full flex flex-col">
+          {/* Logo */}
           <div className="flex items-center justify-center h-16 px-4 border-b">
             <Link to="/" className="flex items-center space-x-2">
               <HardHat className="h-8 w-8 text-primary" />
@@ -50,15 +55,15 @@ export function Layout({ children }) {
             </Link>
           </div>
           
+          {/* Menu */}
           <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
             {navItems.map((item) => {
-              const isActive = location.pathname === item.href || 
-                               (item.href === '/sous-traitants-list' && (location.pathname.startsWith('/sous-traitant-details/') || location.pathname === '/sous-traitants-list')) ||
-                               (item.href === '/fournisseurs' && (location.pathname.startsWith('/fournisseurs') || location.pathname === '/fournisseurs-list')) || // Assurez-vous que FournisseursList a une route cohérente
-                               (item.href === '/sav' && location.pathname.startsWith('/sav')) ||
-                               (item.href === '/parametres' && location.pathname.startsWith('/parametres')); 
+              const isActive =
+                location.pathname === item.href ||
+                location.pathname.startsWith(item.href);
+
               const Icon = item.icon;
-              
+
               return (
                 <Link
                   key={item.name}
@@ -78,8 +83,13 @@ export function Layout({ children }) {
             })}
           </nav>
           
+          {/* Logout */}
           <div className="p-4 border-t">
-            <Button variant="outline" className="w-full justify-start text-gray-700">
+            <Button 
+              variant="outline" 
+              className="w-full justify-start text-gray-700"
+              onClick={signOut}
+            >
               <LogOut className="mr-2 h-4 w-4" />
               Déconnexion
             </Button>
@@ -87,12 +97,10 @@ export function Layout({ children }) {
         </div>
       </motion.aside>
 
-      <main className={cn(
-        "transition-all duration-300 ease-in-out",
-        "lg:ml-64 min-h-screen"
-      )}>
+      {/* PAGE CONTENT */}
+      <main className="transition-all duration-300 ease-in-out lg:ml-64 min-h-screen">
         <div className="p-4 sm:p-6 lg:p-8">
-          {children}
+          <Outlet />     {/* ⬅️ IMPORTANT : les pages s’affichent ici */}
         </div>
       </main>
     </div>

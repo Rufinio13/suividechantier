@@ -18,11 +18,16 @@ export function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    const { error, user } = await signIn(email, password);
+
+    const { data, error } = await signIn(email, password);
+
     if (error) {
       toast({ title: 'Erreur', description: error.message });
-    } else if (user) {
-      navigate('/'); // Redirection vers le dashboard
+      return;
+    }
+
+    if (data?.user) {
+      navigate('/');
     }
   };
 

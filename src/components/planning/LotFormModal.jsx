@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-// Select, chantiers, sousTraitants, initialChantierId ne sont plus nécessaires ici pour les lots GLOBAUX.
+import { useAuth } from '@/hooks/useAuth';
 
 export function LotFormModal({ 
   isOpen, 
@@ -12,23 +12,24 @@ export function LotFormModal({
   lot, 
   addLot, 
   updateLot,
-  isGlobalContext = false // Ce prop reste pour clarifier le contexte, mais les champs liés disparaissent
+  isGlobalContext = false
 }) {
+  const { profile } = useAuth();
+  
   const [formData, setFormData] = useState({
-    nom: '',
+    lot: '', // ✅ CORRIGÉ : "lot" au lieu de "nom" (correspond à ta table)
     description: '',
-    // Les champs chantierId, dateDebut, dateFin, sousTraitantId sont supprimés pour les lots génériques
   });
 
   useEffect(() => {
     if (lot) {
       setFormData({
-        nom: lot.nom || '',
+        lot: lot.lot || '', // ✅ CORRIGÉ : lot.lot
         description: lot.description || '',
       });
     } else {
       setFormData({
-        nom: '',
+        lot: '',
         description: '',
       });
     }
@@ -39,15 +40,30 @@ export function LotFormModal({
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Pas besoin de vérifier chantierId si c'est global et que le champ n'existe plus
-    if (lot) {
-      updateLot(lot.id, formData);
-    } else {
-      addLot(formData);
+    
+    console.log("📦 Création/Modification lot:", formData);
+    
+    try {
+      if (lot) {
+        // Modification
+        await updateLot(lot.id, formData);
+      } else {
+        // Création - ajoute nomsociete
+        const payload = {
+          ...formData,
+          nomsociete: profile?.nomsociete
+        };
+        
+        console.log("📦 Payload création lot:", payload);
+        await addLot(payload);
+      }
+      onClose();
+    } catch (error) {
+      console.error("❌ Erreur lot:", error);
+      alert(`Erreur: ${error.message}`);
     }
-    onClose();
   };
 
   return (
@@ -57,13 +73,12 @@ export function LotFormModal({
           <DialogTitle>{lot ? 'Modifier le type de lot' : 'Ajouter un type de lot'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
-          {/* Le select pour le chantier est supprimé car le lot est générique */}
           <div className="space-y-2">
-            <Label htmlFor="lot-nom">Nom du type de lot <span className="text-red-500">*</span></Label>
+            <Label htmlFor="lot-name">Nom du type de lot <span className="text-red-500">*</span></Label>
             <Input
-              id="lot-nom"
-              name="nom"
-              value={formData.nom}
+              id="lot-name"
+              name="lot" // ✅ CORRIGÉ : name="lot"
+              value={formData.lot}
               onChange={handleChange}
               placeholder="Ex: Maçonnerie, Plomberie, Électricité"
               required
@@ -81,8 +96,6 @@ export function LotFormModal({
               rows={3}
             />
           </div>
-          
-          {/* Les champs dates et sous-traitant sont supprimés */}
           
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>

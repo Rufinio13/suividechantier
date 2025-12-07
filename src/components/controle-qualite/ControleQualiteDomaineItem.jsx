@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, Layers, PieChart as PieChartIcon, PlusCircle, Edit2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Layers, PieChart as PieChartIcon, PlusCircle } from 'lucide-react';
 import { CategorieStatsPieChart } from '@/components/controle-qualite/CategorieStatsPieChart';
 import { ControleQualiteSousCategorieItem } from '@/components/controle-qualite/ControleQualiteSousCategorieItem';
-import { PointControleFormModal } from '@/components/controle-qualite/PointControleFormModal'; // Assurez-vous que ce composant existe
+import { PointControleFormModal } from '@/components/controle-qualite/PointControleFormModal';
 
 export function ControleQualiteDomaineItem({ 
     domaine, 
@@ -16,16 +16,14 @@ export function ControleQualiteDomaineItem({
     onAddPointControle,
     onUpdatePointControle,
     onDeletePointControle,
-    onUpdateNomCategorie // Nouvelle prop
+    onUpdateNomCategorie,
+    documents = [] // ✅ AJOUT: Passer les documents
 }) {
     const [isOpen, setIsOpen] = useState(true);
     const [showStats, setShowStats] = useState(false);
     const [isPointFormModalOpen, setIsPointFormModalOpen] = useState(false);
     const [editingPoint, setEditingPoint] = useState(null);
     const [parentInfoForModal, setParentInfoForModal] = useState({});
-    
-    // const [isEditingNom, setIsEditingNom] = useState(false); // Pour modifier le nom du domaine
-    // const [nouveauNomDomaine, setNouveauNomDomaine] = useState(domaine.nom);
 
     const allPointsInDomaine = domaine.sousCategories.flatMap(sc => 
         (pointsControleStructure?.[sc.id]?.pointsControle || sc.pointsControle || [])
@@ -39,14 +37,6 @@ export function ControleQualiteDomaineItem({
         setParentInfoForModal({ domaineId: domaine.id, sousCategorieId });
         setIsPointFormModalOpen(true);
     };
-    
-    // const handleSaveNomDomaine = () => {
-    //     if (nouveauNomDomaine.trim() !== domaine.nom) {
-    //         onUpdateNomCategorie(modeleId, domaine.id, null, nouveauNomDomaine.trim());
-    //     }
-    //     setIsEditingNom(false);
-    // };
-
 
     return (
         <div className="py-2">
@@ -55,26 +45,10 @@ export function ControleQualiteDomaineItem({
             >
                 <div onClick={() => setIsOpen(!isOpen)} className="flex-grow flex items-center">
                      {isOpen ? <ChevronUp size={18} className="text-blue-500 mr-2" /> : <ChevronDown size={18} className="text-blue-500 mr-2" />}
-                    {/* {isEditingNom ? (
-                        <div className="flex items-center">
-                            <Input 
-                                value={nouveauNomDomaine} 
-                                onChange={(e) => setNouveauNomDomaine(e.target.value)} 
-                                className="h-8 text-md mr-2"
-                                autoFocus
-                                onBlur={handleSaveNomDomaine}
-                                onKeyDown={(e) => e.key === 'Enter' && handleSaveNomDomaine()}
-                            />
-                        </div>
-                    ) : ( */}
-                        <h4 className="font-semibold text-md text-blue-700 flex items-center">
-                            <Layers size={18} className="mr-2 text-blue-500" />
-                            {domaine.nom}
-                            {/* <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setIsEditingNom(true); }} className="h-6 w-6 ml-2 text-blue-400 hover:text-blue-600">
-                                <Edit2 size={14} />
-                            </Button> */}
-                        </h4>
-                    {/* )} */}
+                    <h4 className="font-semibold text-md text-blue-700 flex items-center">
+                        <Layers size={18} className="mr-2 text-blue-500" />
+                        {domaine.nom}
+                    </h4>
                 </div>
                 <div className="flex items-center">
                     <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleOpenPointFormModal(null, null); }} className="h-7 w-7 ml-2 text-blue-500 hover:text-blue-700">
@@ -121,6 +95,7 @@ export function ControleQualiteDomaineItem({
                                 onUpdatePointControle={onUpdatePointControle}
                                 onDeletePointControle={onDeletePointControle}
                                 onUpdateNomCategorie={onUpdateNomCategorie}
+                                documents={documents} // ✅ AJOUT: Passer les documents
                             />
                         ))}
                         {domaine.sousCategories.length === 0 && (

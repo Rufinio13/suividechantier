@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, ListChecks, PieChart as PieChartIcon, PlusCircle, Edit2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, ListChecks, PieChart as PieChartIcon, PlusCircle } from 'lucide-react';
 import { CategorieStatsPieChart } from '@/components/controle-qualite/CategorieStatsPieChart';
 import { PointControleResultatItem } from '@/components/controle-qualite/ControleQualiteListItem';
-import { PointControleFormModal } from '@/components/controle-qualite/PointControleFormModal'; // Assurez-vous que ce composant existe
+import { PointControleFormModal } from '@/components/controle-qualite/PointControleFormModal';
 
 export function ControleQualiteSousCategorieItem({ 
     sousCategorie, 
@@ -17,15 +17,13 @@ export function ControleQualiteSousCategorieItem({
     onAddPointControle,
     onUpdatePointControle,
     onDeletePointControle,
-    onUpdateNomCategorie // Nouvelle prop
+    onUpdateNomCategorie,
+    documents = [] // ✅ AJOUT: Passer les documents
 }) {
     const [isOpen, setIsOpen] = useState(true);
     const [showStats, setShowStats] = useState(false);
     const [isPointFormModalOpen, setIsPointFormModalOpen] = useState(false);
     const [editingPoint, setEditingPoint] = useState(null);
-
-    // const [isEditingNom, setIsEditingNom] = useState(false); // Pour modifier le nom de la sous-catégorie
-    // const [nouveauNomSousCategorie, setNouveauNomSousCategorie] = useState(sousCategorie.nom);
     
     const pointsDeCetteSousCategorie = pointsControleStructure || sousCategorie.pointsControle || [];
 
@@ -34,13 +32,6 @@ export function ControleQualiteSousCategorieItem({
         setIsPointFormModalOpen(true);
     };
 
-    // const handleSaveNomSousCategorie = () => {
-    //     if (nouveauNomSousCategorie.trim() !== sousCategorie.nom) {
-    //         onUpdateNomCategorie(modeleId, domaineId, sousCategorie.id, nouveauNomSousCategorie.trim());
-    //     }
-    //     setIsEditingNom(false);
-    // };
-
     return (
         <div className="py-2 pl-4 border-l-2 border-slate-300">
             <div 
@@ -48,26 +39,10 @@ export function ControleQualiteSousCategorieItem({
             >
                 <div onClick={() => setIsOpen(!isOpen)} className="flex-grow flex items-center">
                     {isOpen ? <ChevronUp size={16} className="text-slate-500 mr-2" /> : <ChevronDown size={16} className="text-slate-500 mr-2" />}
-                    {/* {isEditingNom ? (
-                        <div className="flex items-center">
-                            <Input 
-                                value={nouveauNomSousCategorie} 
-                                onChange={(e) => setNouveauNomSousCategorie(e.target.value)} 
-                                className="h-7 text-sm mr-2"
-                                autoFocus
-                                onBlur={handleSaveNomSousCategorie}
-                                onKeyDown={(e) => e.key === 'Enter' && handleSaveNomSousCategorie()}
-                            />
-                        </div>
-                    ) : ( */}
-                        <h5 className="font-medium text-sm text-slate-700 flex items-center">
-                            <ListChecks size={16} className="mr-2 text-slate-500" />
-                            {sousCategorie.nom}
-                            {/* <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setIsEditingNom(true); }} className="h-5 w-5 ml-1 text-slate-400 hover:text-slate-600">
-                                <Edit2 size={12} />
-                            </Button> */}
-                        </h5>
-                    {/* )} */}
+                    <h5 className="font-medium text-sm text-slate-700 flex items-center">
+                        <ListChecks size={16} className="mr-2 text-slate-500" />
+                        {sousCategorie.nom}
+                    </h5>
                 </div>
                 <div className="flex items-center">
                     <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleOpenPointFormModal(null); }} className="h-7 w-7 ml-2 text-slate-500 hover:text-slate-700">
@@ -112,6 +87,7 @@ export function ControleQualiteSousCategorieItem({
                                 onResultatChange={onPointResultatChange}
                                 onUpdatePointControle={onUpdatePointControle}
                                 onDeletePointControle={onDeletePointControle}
+                                documents={documents} // ✅ AJOUT: Passer les documents
                             />
                         ))}
                         {pointsDeCetteSousCategorie.length === 0 && (
