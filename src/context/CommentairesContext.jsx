@@ -8,7 +8,7 @@ export const useCommentaires = () => {
   const context = useContext(CommentairesContext);
   if (!context) {
     throw new Error('useCommentaires doit être utilisé dans CommentairesProvider');
-  }
+  } 
   return context;
 };
 
