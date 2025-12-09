@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useChantier } from '@/context/ChantierContext';
-import { useReferentielCQ } from '@/context/ReferentielCQContext';
-import { useCommentaires } from '@/context/CommentairesContext';
+import { useChantier } from '@/context/ChantierContext.jsx';
+import { useReferentielCQ } from '@/context/ReferentielCQContext.jsx';
+import { useCommentaires } from '@/context/CommentairesContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';

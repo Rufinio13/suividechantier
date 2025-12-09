@@ -4,8 +4,8 @@ import { Plus, Search, Edit, Trash2, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { useSousTraitant } from "@/context/SousTraitantContext";
-import { SousTraitantForm } from "@/components/SousTraitantForm";
+import { useSousTraitant } from "@/context/SousTraitantContext.jsx";
+import { SousTraitantForm } from "@/components/SousTraitantForm.jsx";
 
 export function SousTraitantsList() {
   const { sousTraitants = [], loading, deleteSousTraitant } = useSousTraitant();

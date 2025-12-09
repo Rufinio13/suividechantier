@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useChantier } from '@/context/ChantierContext';
+import { useChantier } from '@/context/ChantierContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ChantierCard } from '@/components/ChantierCard';
+import { ChantierCard } from '@/components/ChantierCard.jsx';
 import { HardHat, Plus, Clock, CheckCircle, GanttChartSquare, Wrench } from 'lucide-react';
-import { GlobalGanttChart } from '@/components/dashboard/GlobalGanttChart';
+import { GlobalGanttChart } from '@/components/dashboard/GlobalGanttChart.jsx';
 import { subWeeks, startOfDay } from 'date-fns';
 import { AuthProvider } from '@/context/AuthProvider';
 import { useAuth } from '@/hooks/useAuth';

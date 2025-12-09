@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useChantier } from '@/context/ChantierContext';
+import { useChantier } from '@/context/ChantierContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -9,11 +9,11 @@ import {
   ArrowLeft, Edit, Trash2, Users, Truck, FileText, CheckSquare, ListChecks, 
   MessageSquare, User, Phone, Mail, ExternalLink, Info, MapPin 
 } from 'lucide-react';
-import { ChantierForm } from '@/components/ChantierForm';
-import { Planning } from '@/pages/Planning';
-import { ControlQualite } from '@/pages/ControlQualite';
-import { CompteRendu } from '@/pages/CompteRendu';
-import { ChantierCommentaires } from '@/pages/ChantierCommentaires';
+import { ChantierForm } from '@/components/ChantierForm.jsx';
+import { Planning } from '@/pages/Planning.jsx';
+import { ControlQualite } from '@/pages/ControlQualite.jsx';
+import { CompteRendu } from '@/pages/CompteRendu.jsx';
+import { ChantierCommentaires } from '@/pages/ChantierCommentaires.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';

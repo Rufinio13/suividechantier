@@ -3,9 +3,9 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Search } from "lucide-react";
-import { useLots } from "@/context/LotsContext";
-import { LotForm } from "@/components/LotForm";
-import { LotCard } from "@/components/LotCard";
+import { useLots } from "@/context/LotsContext.jsx";
+import { LotForm } from "@/components/LotForm.jsx";
+import { LotCard } from "@/components/LotCard.jsx";
 
 export function LotsList() {
   const { lots = [], loading, deleteLot } = useLots();

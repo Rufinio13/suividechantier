@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useChantier } from '@/context/ChantierContext';
-import { useCompteRendu } from '@/context/CompteRenduContext';
+import { useChantier } from '@/context/ChantierContext.jsx';
+import { useCompteRendu } from '@/context/CompteRenduContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

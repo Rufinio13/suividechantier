@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useSousTraitant } from '@/context/SousTraitantContext';
-import { useLots } from '@/context/LotsContext';
+import { useSousTraitant } from '@/context/SousTraitantContext.jsx';
+import { useLots } from '@/context/LotsContext.jsx';
 import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';

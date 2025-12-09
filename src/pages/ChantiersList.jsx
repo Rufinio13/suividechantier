@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useChantier } from '@/context/ChantierContext';
+import { useChantier } from '@/context/ChantierContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChantierCard } from '@/components/ChantierCard';
-import { ChantierForm } from '@/components/ChantierForm';
+import { ChantierCard } from '@/components/ChantierCard.jsx';
+import { ChantierForm } from '@/components/ChantierForm.jsx';
 import { Plus, Search, Filter, LayoutGrid, List, HardHat } from 'lucide-react';
 
 export function ChantiersList() {

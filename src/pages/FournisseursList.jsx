@@ -1,13 +1,13 @@
 // src/components/FournisseursList.jsx
 import React, { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { useFournisseur } from "@/context/FournisseurContext";
+import { useFournisseur } from "@/context/FournisseurContext.jsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, Search, Box, Edit, Trash2 } from "lucide-react";
-import { FournisseurForm } from "@/components/FournisseurForm";
-import { FournisseurCard } from "@/components/FournisseurCard";
+import { FournisseurForm } from "@/components/FournisseurForm.jsx";
+import { FournisseurCard } from "@/components/FournisseurCard.jsx";
 
 export function FournisseursList() {
   const { fournisseurs = [], loading, deleteFournisseur } = useFournisseur();

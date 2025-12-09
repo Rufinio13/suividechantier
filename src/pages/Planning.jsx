@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useChantier } from '@/context/ChantierContext';
+import { useChantier } from '@/context/ChantierContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Plus, AlertTriangle } from 'lucide-react';
-import { TacheFormModal } from '@/components/planning/TacheFormModal';
-import { TacheItem } from '@/components/planning/TacheItem';
-import { GanttChart } from '@/components/planning/GanttChart';
+import { TacheFormModal } from '@/components/planning/TacheFormModal.jsx';
+import { TacheItem } from '@/components/planning/TacheItem.jsx';
+import { GanttChart } from '@/components/planning/GanttChart.jsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';

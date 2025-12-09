@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { useReferentielCQ } from '@/context/ReferentielCQContext'; // ✅ CORRIGÉ
+import { useReferentielCQ } from '@/context/ReferentielCQContext.jsx'; // ✅ CORRIGÉ
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Search, ShieldCheck } from 'lucide-react';
-import { ModeleCQForm } from '@/components/referentiel-cq/ModeleCQForm';
-import { ModeleCQItem } from '@/components/referentiel-cq/ModeleCQItem';
+import { ModeleCQForm } from '@/components/referentiel-cq/ModeleCQForm.jsx';
+import { ModeleCQItem } from '@/components/referentiel-cq/ModeleCQItem.jsx';
 
 export function ReferentielControleQualite() {
   // ✅ CORRIGÉ : Utilise useReferentielCQ au lieu de useChantier

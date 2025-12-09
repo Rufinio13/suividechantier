@@ -2,12 +2,12 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useChantier } from '@/context/ChantierContext';
-import { useReferentielCQ } from '@/context/ReferentielCQContext';
+import { useChantier } from '@/context/ChantierContext.jsx';
+import { useReferentielCQ } from '@/context/ReferentielCQContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ArrowLeft, Save, ShieldCheck } from 'lucide-react';
-import { ControleQualiteDomaineItem } from '@/components/controle-qualite/ControleQualiteDomaineItem';
+import { ControleQualiteDomaineItem } from '@/components/controle-qualite/ControleQualiteDomaineItem.jsx';
 import { useToast } from "@/components/ui/use-toast";
 import { v4 as uuidv4 } from 'uuid';
 
