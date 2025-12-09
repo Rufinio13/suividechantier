@@ -21,7 +21,7 @@ export function CommentairesProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   // =========================================
-  // CHARGER LES COMMENTAIRES
+  // CHARGER LES COMMENTAIRES ---
   // =========================================
   const fetchCommentaires = useCallback(async () => {
     if (!nomsociete) return;
