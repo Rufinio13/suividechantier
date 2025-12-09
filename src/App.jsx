@@ -20,7 +20,7 @@ import { LotsProvider } from '@/context/LotsContext.jsx';
 import { SAVProvider } from '@/context/SAVContext.jsx';
 import { ReferentielCQProvider } from '@/context/ReferentielCQContext.jsx';
 import { CommentairesProvider } from '@/context/CommentairesContext.jsx';
-import { CompteRenduProvider } from '@/context/Compterenducontext.jsx';
+import { CompteRenduProvider } from '@/context/CompteRenduContext.jsx'; // ✅ CORRIGÉ ICI
 import { Login } from '@/pages/Login.jsx';
 import { AuthProvider } from '@/context/AuthProvider.jsx';
 import { useAuth } from '@/hooks/useAuth.jsx';
