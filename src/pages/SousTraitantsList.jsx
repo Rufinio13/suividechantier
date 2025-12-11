@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { useSousTraitant } from "@/context/SousTraitantContext.jsx";
-import { SousTraitantForm } from "@/components/SousTraitantForm.jsx";
+import { SousTraitantForm } from "@/components/SoustraitantForm.jsx";
 
 export function SousTraitantsList() {
   const { sousTraitants = [], loading, deleteSousTraitant } = useSousTraitant();
