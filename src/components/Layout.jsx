@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut } = useAuth();
@@ -24,10 +25,41 @@ export function Layout() {
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
-  // ✅ CORRIGÉ : Déconnexion avec redirection
+  // ✅ CORRIGÉ : Déconnexion qui attend vraiment
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/login');
+    if (isLoggingOut) return; // Empêcher double-clic
+    
+    setIsLoggingOut(true);
+    
+    try {
+      console.log('🔓 Déconnexion en cours...');
+      
+      // Déconnexion Supabase
+      await signOut();
+      
+      console.log('✅ Déconnexion Supabase OK');
+      
+      // Attendre un peu que Supabase finisse
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Nettoyer le localStorage
+      localStorage.clear();
+      sessionStorage.clear();
+      
+      console.log('🔄 Redirection vers /login');
+      
+      // Rediriger
+      navigate('/login', { replace: true });
+      
+      // Recharger la page pour être sûr
+      window.location.href = '/login';
+    } catch (error) {
+      console.error('❌ Erreur déconnexion:', error);
+      // Forcer la redirection même en cas d'erreur
+      window.location.href = '/login';
+    } finally {
+      setIsLoggingOut(false);
+    }
   };
 
   return (
@@ -91,15 +123,16 @@ export function Layout() {
             })}
           </nav>
           
-          {/* Logout - ✅ CORRIGÉ */}
+          {/* Logout */}
           <div className="p-4 border-t">
             <Button 
               variant="outline" 
               className="w-full justify-start text-gray-700"
               onClick={handleSignOut}
+              disabled={isLoggingOut}
             >
               <LogOut className="mr-2 h-4 w-4" />
-              Déconnexion
+              {isLoggingOut ? 'Déconnexion...' : 'Déconnexion'}
             </Button>
           </div>
         </div>
