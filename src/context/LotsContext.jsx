@@ -7,7 +7,7 @@ const LotsContext = createContext();
 
 export function LotsProvider({ children }) {
   const { toast } = useToast();
-  const { profile } = useAuth(); // Société de l’utilisateur
+  const { profile } = useAuth();
   const nomsociete = profile?.nomsociete;
 
   const [lots, setLots] = useState([]);
@@ -16,12 +16,13 @@ export function LotsProvider({ children }) {
   // 🎯 Charger tous les lots pour la société
   const loadLots = async () => {
     if (!nomsociete) {
-      console.warn("LotsContext : aucune société définie → stop");
+      console.log("LotsContext : En attente de nomsociete...");
       setLots([]);
       setLoading(false);
       return;
     }
 
+    console.log("⏳ Chargement lots pour société :", nomsociete);
     setLoading(true);
 
     const { data, error } = await supabase
@@ -31,27 +32,35 @@ export function LotsProvider({ children }) {
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error(error);
+      console.error("❌ loadLots :", error);
       toast({
         title: "Erreur",
         description: "Impossible de charger les lots",
         variant: "destructive",
       });
+      setLots([]);
     } else {
+      console.log("✅ Lots chargés :", data?.length || 0);
       setLots(data || []);
     }
 
     setLoading(false);
   };
 
+  // ✅ CORRIGÉ : Attendre que nomsociete soit défini
   useEffect(() => {
-    loadLots();
+    if (nomsociete) {
+      loadLots();
+    } else {
+      console.log("LotsContext : En attente de nomsociete...");
+      setLoading(false);
+    }
   }, [nomsociete]);
 
   // 🎯 Ajouter un lot
   const addLot = async (lotData) => {
     if (!nomsociete) throw new Error("Société non définie");
-    // lotData doit contenir { lot, description }
+    
     const { data, error } = await supabase
       .from("lots")
       .insert([{ ...lotData, nomsociete }])
@@ -59,10 +68,11 @@ export function LotsProvider({ children }) {
       .single();
 
     if (error) {
-      console.error(error);
+      console.error("❌ addLot :", error);
       throw error;
     }
 
+    console.log("✅ Lot ajouté :", data);
     setLots((prev) => [...prev, data]);
     return data;
   };
@@ -71,17 +81,18 @@ export function LotsProvider({ children }) {
   const updateLot = async (id, lotData) => {
     const { data, error } = await supabase
       .from("lots")
-      .update({ ...lotData }) // lotData = { lot, description }
+      .update({ ...lotData })
       .eq("id", id)
       .eq("nomsociete", nomsociete)
       .select()
       .single();
 
     if (error) {
-      console.error(error);
+      console.error("❌ updateLot :", error);
       throw error;
     }
 
+    console.log("✅ Lot mis à jour :", data);
     setLots((prev) => prev.map((l) => (l.id === id ? data : l)));
     return data;
   };
@@ -95,7 +106,7 @@ export function LotsProvider({ children }) {
       .eq("nomsociete", nomsociete);
 
     if (error) {
-      console.error(error);
+      console.error("❌ deleteLot :", error);
       toast({
         title: "Erreur",
         description: "Impossible de supprimer le lot",
@@ -104,6 +115,7 @@ export function LotsProvider({ children }) {
       return;
     }
 
+    console.log("✅ Lot supprimé");
     setLots((prev) => prev.filter((l) => l.id !== id));
   };
 

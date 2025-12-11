@@ -13,7 +13,7 @@ export function SousTraitantProvider({ children }) {
   // ---- 1 : Charger les sous-traitants ----
   const loadSousTraitants = async () => {
     if (!profile?.nomsociete) {
-      console.warn("⚠ loadSousTraitants : aucune société dans profile → stop");
+      console.log("SousTraitantContext : En attente de nomsociete...");
       setSousTraitants([]);
       setLoading(false);
       return;
@@ -75,7 +75,7 @@ export function SousTraitantProvider({ children }) {
     return data;
   };
 
-  // ---- 3 : Mise à jour d’un sous-traitant ----
+  // ---- 3 : Mise à jour d'un sous-traitant ----
   const updateSousTraitant = async (id, updates) => {
     console.log("📤 Update ST :", id, updates);
 
@@ -100,7 +100,7 @@ export function SousTraitantProvider({ children }) {
     return data;
   };
 
-  // ---- 4 : Suppression d’un ST ----
+  // ---- 4 : Suppression d'un ST ----
   const deleteSousTraitant = async (id) => {
     console.log("📤 Delete ST :", id);
 
@@ -122,22 +122,28 @@ export function SousTraitantProvider({ children }) {
   };
 
   // ---- 5 : Auto-load + realtime ----
+  // ✅ CORRIGÉ : Attendre que nomsociete soit défini
   useEffect(() => {
-    loadSousTraitants();
+    if (profile?.nomsociete) {
+      loadSousTraitants();
 
-    const channel = supabase
-      .channel("soustraitants-changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "soustraitants" },
-        () => {
-          console.log("🔄 Realtime : modification détectée sur soustraitants → reload");
-          loadSousTraitants();
-        }
-      )
-      .subscribe();
+      const channel = supabase
+        .channel("soustraitants-changes")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "soustraitants" },
+          () => {
+            console.log("🔄 Realtime : modification détectée sur soustraitants → reload");
+            loadSousTraitants();
+          }
+        )
+        .subscribe();
 
-    return () => supabase.removeChannel(channel);
+      return () => supabase.removeChannel(channel);
+    } else {
+      console.log("SousTraitantContext : En attente de nomsociete...");
+      setLoading(false);
+    }
   }, [profile?.nomsociete]);
 
   return (
