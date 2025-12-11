@@ -12,7 +12,7 @@ import { ControlQualite } from '@/pages/ControlQualite.jsx';
 import { CompteRendu } from '@/pages/CompteRendu.jsx';
 import { LotsList } from '@/pages/LotsList.jsx';
 import { SAVList } from '@/pages/SAVList.jsx';
-import { Parametres } from '@/pages/Parametres.jsx';
+import { ReferentielControleQualite } from '@/pages/ReferentielControleQualite.jsx'; // ✅ AJOUTÉ
 import { ChantierProvider } from '@/context/ChantierContext.jsx';
 import { FournisseurProvider } from '@/context/FournisseurContext.jsx';
 import { SousTraitantProvider } from '@/context/SousTraitantContext.jsx';
@@ -20,7 +20,7 @@ import { LotsProvider } from '@/context/LotsContext.jsx';
 import { SAVProvider } from '@/context/SAVContext.jsx';
 import { ReferentielCQProvider } from '@/context/ReferentielCQContext.jsx';
 import { CommentairesProvider } from '@/context/CommentairesContext.jsx';
-import { CompteRenduProvider } from '@/context/CompteRenduContext.jsx'; // ✅ CORRIGÉ ICI
+import { CompteRenduProvider } from '@/context/CompteRenduContext.jsx';
 import { Login } from '@/pages/Login.jsx';
 import { AuthProvider } from '@/context/AuthProvider.jsx';
 import { useAuth } from '@/hooks/useAuth.jsx';
@@ -40,56 +40,58 @@ function App() {
           <SousTraitantProvider>
             <LotsProvider>
               <SAVProvider>
-                  <ReferentielCQProvider>
-                   <CommentairesProvider>
-                     <CompteRenduProvider>
+                <ReferentielCQProvider>
+                  <CommentairesProvider>
+                    <CompteRenduProvider>
 
-                  <Routes>
+                      <Routes>
 
-                    {/* PUBLIC */}
-                    <Route path="/login" element={<Login />} />
+                        {/* PUBLIC */}
+                        <Route path="/login" element={<Login />} />
 
-                    {/* PRIVATE + Layout */}
-                    <Route
-                      path="/"
-                      element={
-                        <PrivateRoute>
-                          <Layout />
-                        </PrivateRoute>
-                      }
-                    >
-                      <Route index element={<Dashboard />} />
+                        {/* PRIVATE + Layout */}
+                        <Route
+                          path="/"
+                          element={
+                            <PrivateRoute>
+                              <Layout />
+                            </PrivateRoute>
+                          }
+                        >
+                          <Route index element={<Dashboard />} />
 
-                      {/* Chantiers */}
-                      <Route path="chantiers" element={<ChantiersList />} />
-                      <Route path="chantiers/:id" element={<ChantierDetails />} />
-                      <Route path="chantiers/:id/planning" element={<Planning />} />
-                      <Route path="chantiers/:id/controle-qualite" element={<ControlQualite />} />
-                      <Route path="chantiers/:id/compte-rendu" element={<CompteRendu />} />
-                     
-                      {/* Lots */}
-                      <Route path="lots" element={<LotsList />} />
+                          {/* Chantiers */}
+                          <Route path="chantiers" element={<ChantiersList />} />
+                          <Route path="chantiers/:id" element={<ChantierDetails />} />
+                          <Route path="chantiers/:id/planning" element={<Planning />} />
+                          <Route path="chantiers/:id/controle-qualite" element={<ControlQualite />} />
+                          <Route path="chantiers/:id/compte-rendu" element={<CompteRendu />} />
 
-                      {/* Sous-traitants */}
-                      <Route path="sous-traitants" element={<SousTraitantsList />} />
-                      <Route path="sous-traitants/:id" element={<SousTraitantDetails />} />
+                          {/* Référentiel CQ - ✅ AJOUTÉ */}
+                          <Route path="referentiel-cq" element={<ReferentielControleQualite />} />
 
-                      {/* Fournisseurs */}
-                      <Route path="fournisseurs" element={<FournisseursList />} />
+                          {/* Lots */}
+                          <Route path="lots" element={<LotsList />} />
 
-                      {/* SAV */}
-                      <Route path="sav" element={<SAVList />} />
+                          {/* Sous-traitants */}
+                          <Route path="sous-traitants" element={<SousTraitantsList />} />
+                          <Route path="sous-traitants/:id" element={<SousTraitantDetails />} />
 
-                      {/* Paramètres */}
-                      <Route path="parametres" element={<Parametres />} />
-                    </Route>
+                          {/* Fournisseurs */}
+                          <Route path="fournisseurs" element={<FournisseursList />} />
 
-                    {/* fallback */}
-                    <Route path="*" element={<Navigate to="/" replace />} />
+                          {/* SAV */}
+                          <Route path="sav" element={<SAVList />} />
 
-                  </Routes>
-        
-                   </CompteRenduProvider>
+                          {/* ❌ SUPPRIMÉ : Paramètres */}
+                        </Route>
+
+                        {/* fallback */}
+                        <Route path="*" element={<Navigate to="/" replace />} />
+
+                      </Routes>
+
+                    </CompteRenduProvider>
                   </CommentairesProvider>
                 </ReferentielCQProvider>
               </SAVProvider>

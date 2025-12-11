@@ -8,21 +8,19 @@ import { ChantierCard } from '@/components/ChantierCard.jsx';
 import { HardHat, Plus, Clock, CheckCircle, GanttChartSquare, Wrench } from 'lucide-react';
 import { GlobalGanttChart } from '@/components/dashboard/GlobalGanttChart.jsx';
 import { subWeeks, startOfDay } from 'date-fns';
-import { AuthProvider } from '@/context/AuthProvider';
 import { useAuth } from '@/hooks/useAuth';
-
 
 export function Dashboard() {
   const { chantiers, taches, sousTraitants, demandesSAV, loading: chantierLoading } = useChantier();
-  const { user, signOut, loading: authLoading } = useAuth()
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   // 🔹 Redirection automatique si pas connecté
-useEffect(() => {
-  if (!authLoading && !user) {
-    navigate('/login');
-  }
-}, [authLoading, user]);
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate('/login');
+    }
+  }, [authLoading, user, navigate]);
 
   const chantiersEnCoursPourGantt = useMemo(
     () => chantiers.filter(c => c.statut === 'En cours'),
@@ -37,11 +35,6 @@ useEffect(() => {
   if (authLoading || chantierLoading) {
     return <div className="flex justify-center items-center h-64">Chargement...</div>;
   }
-
-  const handleSignOut = async () => {
-    await signOut(); 
-    navigate('/login');    // Redirige vers login
-  };
 
   const chantiersEnCoursCount = chantiers.filter(c => c.statut === 'En cours').length;
   const chantiersReceptionnesCount = chantiers.filter(c => c.statut === 'Réceptionné').length;
@@ -59,17 +52,14 @@ useEffect(() => {
     navigate(`/chantiers?statut=${encodeURIComponent(statut)}`);
   };
 
-
-
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Tableau de bord</h1>
-          <p className="text-muted-foreground">Bienvenue, {user.prenom} {user.nom}</p>
-        </div>
-        <Button onClick={handleSignOut} variant="outline">Se déconnecter</Button>
+      {/* Header - ❌ BOUTON DÉCONNEXION SUPPRIMÉ */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Tableau de bord</h1>
+        <p className="text-muted-foreground">
+          Bienvenue, {user?.prenom} {user?.nom}
+        </p>
       </div>
 
       {/* Statistiques */}

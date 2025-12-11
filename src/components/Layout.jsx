@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Link, useLocation, Outlet } from 'react-router-dom';
+import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Menu, X, LogOut, HardHat, Truck, Wrench, Settings, Users } from 'lucide-react';
+import { LayoutDashboard, Menu, X, LogOut, HardHat, Truck, Wrench, Users, ShieldCheck, ListChecks } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const { signOut } = useAuth();
 
   const navItems = [
@@ -16,11 +17,18 @@ export function Layout() {
     { name: 'Chantiers', href: '/chantiers', icon: HardHat },
     { name: 'Artisans', href: '/sous-traitants', icon: Users },
     { name: 'Fournisseurs', href: '/fournisseurs', icon: Truck },
+    { name: 'Référentiel CQ', href: '/referentiel-cq', icon: ShieldCheck },
+    { name: 'Lots', href: '/lots', icon: ListChecks },
     { name: 'SAV', href: '/sav', icon: Wrench },
-    { name: 'Paramètres', href: '/parametres', icon: Settings },
   ];
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
+
+  // ✅ CORRIGÉ : Déconnexion avec redirection
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -60,7 +68,7 @@ export function Layout() {
             {navItems.map((item) => {
               const isActive =
                 location.pathname === item.href ||
-                location.pathname.startsWith(item.href);
+                (item.href !== '/' && location.pathname.startsWith(item.href));
 
               const Icon = item.icon;
 
@@ -83,12 +91,12 @@ export function Layout() {
             })}
           </nav>
           
-          {/* Logout */}
+          {/* Logout - ✅ CORRIGÉ */}
           <div className="p-4 border-t">
             <Button 
               variant="outline" 
               className="w-full justify-start text-gray-700"
-              onClick={signOut}
+              onClick={handleSignOut}
             >
               <LogOut className="mr-2 h-4 w-4" />
               Déconnexion
@@ -100,7 +108,7 @@ export function Layout() {
       {/* PAGE CONTENT */}
       <main className="transition-all duration-300 ease-in-out lg:ml-64 min-h-screen">
         <div className="p-4 sm:p-6 lg:p-8">
-          <Outlet />     {/* ⬅️ IMPORTANT : les pages s’affichent ici */}
+          <Outlet />
         </div>
       </main>
     </div>
