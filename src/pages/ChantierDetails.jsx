@@ -193,20 +193,29 @@ export function ChantierDetails() {
             </CardContent>
           </Card>
 
-          {/* TABS - SANS L'ONGLET DOCUMENTS */}
+          {/* TABS - ✅ RESPONSIVE MOBILE */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="overflow-x-auto inline-flex w-max">
-              <TabsTrigger value="planning">
-                <ListChecks className="mr-2 h-4 w-4" /> Planning
+            {/* ✅ CORRIGÉ : Grid responsive au lieu de inline-flex */}
+            <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 gap-2 h-auto p-2">
+              <TabsTrigger value="planning" className="flex items-center justify-center">
+                <ListChecks className="mr-2 h-4 w-4" /> 
+                <span className="hidden sm:inline">Planning</span>
+                <span className="sm:hidden">Plan</span>
               </TabsTrigger>
-              <TabsTrigger value="controle-qualite">
-                <CheckSquare className="mr-2 h-4 w-4" /> Contrôle Qualité
+              <TabsTrigger value="controle-qualite" className="flex items-center justify-center">
+                <CheckSquare className="mr-2 h-4 w-4" /> 
+                <span className="hidden sm:inline">Contrôle Qualité</span>
+                <span className="sm:hidden">CQ</span>
               </TabsTrigger>
-              <TabsTrigger value="compte-rendu">
-                <FileText className="mr-2 h-4 w-4" /> Compte Rendu
+              <TabsTrigger value="compte-rendu" className="flex items-center justify-center">
+                <FileText className="mr-2 h-4 w-4" /> 
+                <span className="hidden sm:inline">Compte Rendu</span>
+                <span className="sm:hidden">CR</span>
               </TabsTrigger>
-              <TabsTrigger value="commentaires">
-                <MessageSquare className="mr-2 h-4 w-4" /> Commentaires
+              <TabsTrigger value="commentaires" className="flex items-center justify-center">
+                <MessageSquare className="mr-2 h-4 w-4" /> 
+                <span className="hidden sm:inline">Commentaires</span>
+                <span className="sm:hidden">💬</span>
               </TabsTrigger>
             </TabsList>
 
