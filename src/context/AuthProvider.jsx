@@ -4,123 +4,75 @@ import { supabase, setSupabaseRLSContext } from "@/lib/supabaseClient";
 
 export const AuthContext = createContext();
 
-// Fonction helper avec timeout
-const fetchWithTimeout = (promise, timeoutMs = 5000) => {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Timeout')), timeoutMs)
-    )
-  ]);
-};
-
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Charger le profil depuis Supabase
+  // Charger le profil via API REST directement
   const loadProfile = async (userId) => {
-    console.log('🔍 === DÉBUT loadProfile ===');
-    console.log('🔍 userId:', userId);
+    console.log('🔍 loadProfile via API REST pour userId:', userId);
     
     try {
-      console.log('🔍 Avant requête Supabase...');
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
       
-      // Ajouter un timeout de 5 secondes
-      const result = await fetchWithTimeout(
-        supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", userId)
-          .single(),
-        5000
+      console.log('📡 Appel API REST...');
+      
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=*`,
+        {
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          }
+        }
       );
       
-      console.log('🔍 Après requête Supabase');
-      console.log('🔍 result:', result);
+      console.log('📡 Réponse API:', response.status);
       
-      const { data, error } = result;
-      
-      console.log('🔍 data:', data);
-      console.log('🔍 error:', error);
-      
-      if (error) {
-        console.error("❌ Erreur loadProfile:", error);
-        console.error("❌ error.message:", error.message);
-        
-        // TEMPORAIRE : Si erreur, créer un profile par défaut
-        console.log('⚠️ Création profile temporaire...');
-        const tempProfile = {
-          id: userId,
-          nomsociete: 'EVABOIS',
-          nom: 'EVARISTE',
-          prenom: 'Raphaël',
-          mail: 'revariste@maisonsnaturea.fr',
-          tel: '0663262974'
-        };
-        
-        setProfile(tempProfile);
-        setLoading(false);
-        
-        if (tempProfile.nomsociete) {
-          await setSupabaseRLSContext(tempProfile.nomsociete);
-        }
-        return;
-      }
-
-      if (!data) {
-        console.warn('⚠️ Pas de data retourné');
+      if (!response.ok) {
+        console.error('❌ Erreur HTTP:', response.status, response.statusText);
         setProfile(null);
         setLoading(false);
         return;
       }
-
-      console.log('✅ Profile chargé:', data);
-      setProfile(data);
+      
+      const data = await response.json();
+      console.log('📡 Data reçue:', data);
+      
+      if (!data || data.length === 0) {
+        console.error('❌ Aucun profile trouvé');
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+      
+      const profileData = data[0];
+      console.log('✅ Profile chargé:', profileData);
+      
+      setProfile(profileData);
       setLoading(false);
       
-      if (data?.nomsociete) {
-        await setSupabaseRLSContext(data.nomsociete);
+      if (profileData?.nomsociete) {
+        await setSupabaseRLSContext(profileData.nomsociete);
       }
       
-      console.log('🔍 === FIN loadProfile (succès) ===');
     } catch (err) {
-      console.error("❌ Exception/Timeout loadProfile:", err);
-      
-      // Si timeout, utiliser profile temporaire
-      if (err.message === 'Timeout') {
-        console.log('⏰ TIMEOUT détecté - utilisation profile temporaire');
-        const tempProfile = {
-          id: userId,
-          nomsociete: 'EVABOIS',
-          nom: 'EVARISTE',
-          prenom: 'Raphaël',
-          mail: 'revariste@maisonsnaturea.fr',
-          tel: '0663262974'
-        };
-        
-        setProfile(tempProfile);
-        setLoading(false);
-        
-        if (tempProfile.nomsociete) {
-          await setSupabaseRLSContext(tempProfile.nomsociete);
-        }
-      } else {
-        setProfile(null);
-        setLoading(false);
-      }
-      
-      console.log('🔍 === FIN loadProfile (erreur) ===');
+      console.error("❌ Exception loadProfile:", err);
+      setProfile(null);
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    console.log('🚀 === AuthProvider useEffect DÉMARRE ===');
+    console.log('🚀 AuthProvider useEffect DÉMARRE');
     let mounted = true;
 
     supabase.auth.getSession().then(({ data }) => {
-      console.log('📡 getSession retour:', data);
+      console.log('📡 getSession retour');
       
       if (!mounted) return;
 
