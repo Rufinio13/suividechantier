@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Menu, X, LogOut, HardHat, Truck, Wrench, Users, ShieldCheck, ListChecks } from 'lucide-react';
+import { LayoutDashboard, Menu, X, LogOut, HardHat, Truck, Wrench, Users, ShieldCheck, ListChecks, Package } from 'lucide-react'; // ✅ Package ajouté
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -19,43 +19,32 @@ export function Layout() {
     { name: 'Artisans', href: '/sous-traitants', icon: Users },
     { name: 'Fournisseurs', href: '/fournisseurs', icon: Truck },
     { name: 'Référentiel CQ', href: '/referentiel-cq', icon: ShieldCheck },
+    { name: 'Référentiel Commande', href: '/referentiel-commande', icon: Package }, // ✅ AJOUTÉ
     { name: 'Lots', href: '/lots', icon: ListChecks },
     { name: 'SAV', href: '/sav', icon: Wrench },
   ];
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
 
-  // ✅ CORRIGÉ : Déconnexion qui attend vraiment
   const handleSignOut = async () => {
-    if (isLoggingOut) return; // Empêcher double-clic
+    if (isLoggingOut) return;
     
     setIsLoggingOut(true);
     
     try {
       console.log('🔓 Déconnexion en cours...');
-      
-      // Déconnexion Supabase
       await signOut();
-      
       console.log('✅ Déconnexion Supabase OK');
-      
-      // Attendre un peu que Supabase finisse
       await new Promise(resolve => setTimeout(resolve, 500));
       
-      // Nettoyer le localStorage
       localStorage.clear();
       sessionStorage.clear();
       
       console.log('🔄 Redirection vers /login');
-      
-      // Rediriger
       navigate('/login', { replace: true });
-      
-      // Recharger la page pour être sûr
       window.location.href = '/login';
     } catch (error) {
       console.error('❌ Erreur déconnexion:', error);
-      // Forcer la redirection même en cas d'erreur
       window.location.href = '/login';
     } finally {
       setIsLoggingOut(false);

@@ -14,12 +14,16 @@ import { CompteRendu } from '@/pages/CompteRendu.jsx';
 import { LotsList } from '@/pages/LotsList.jsx';
 import { SAVList } from '@/pages/SAVList.jsx';
 import { ReferentielControleQualite } from '@/pages/ReferentielControleQualite.jsx';
+import { ReferentielCommande } from '@/pages/ReferentielCommande.jsx'; // ✅ AJOUTÉ
+import { Commandes } from '@/pages/Commandes.jsx'; // ✅ AJOUTÉ
 import { ChantierProvider } from '@/context/ChantierContext.jsx';
 import { FournisseurProvider } from '@/context/FournisseurContext.jsx';
 import { SousTraitantProvider } from '@/context/SousTraitantContext.jsx';
 import { LotsProvider } from '@/context/LotsContext.jsx';
 import { SAVProvider } from '@/context/SAVContext.jsx';
 import { ReferentielCQProvider } from '@/context/ReferentielCQContext.jsx';
+import { ReferentielCommandeProvider } from '@/context/ReferentielCommandeContext.jsx'; // ✅ AJOUTÉ
+import { CommandesProvider } from '@/context/CommandesContext.jsx'; // ✅ AJOUTÉ
 import { CommentairesProvider } from '@/context/CommentairesContext.jsx';
 import { CompteRenduProvider } from '@/context/CompteRenduContext.jsx';
 import { Login } from '@/pages/Login.jsx';
@@ -54,54 +58,62 @@ function App() {
               <LotsProvider>
                 <SAVProvider>
                   <ReferentielCQProvider>
-                    <CommentairesProvider>
-                      <CompteRenduProvider>
+                    <ReferentielCommandeProvider> {/* ✅ AJOUTÉ */}
+                      <CommandesProvider> {/* ✅ AJOUTÉ */}
+                        <CommentairesProvider>
+                          <CompteRenduProvider>
 
-                        <Routes>
-                          {/* PUBLIC */}
-                          <Route path="/login" element={<Login />} />
+                            <Routes>
+                              {/* PUBLIC */}
+                              <Route path="/login" element={<Login />} />
 
-                          {/* PRIVATE + Layout */}
-                          <Route
-                            path="/"
-                            element={
-                              <PrivateRoute>
-                                <Layout />
-                              </PrivateRoute>
-                            }
-                          >
-                            <Route index element={<Dashboard />} />
+                              {/* PRIVATE + Layout */}
+                              <Route
+                                path="/"
+                                element={
+                                  <PrivateRoute>
+                                    <Layout />
+                                  </PrivateRoute>
+                                }
+                              >
+                                <Route index element={<Dashboard />} />
 
-                            {/* Chantiers */}
-                            <Route path="chantiers" element={<ChantiersList />} />
-                            <Route path="chantiers/:id" element={<ChantierDetails />} />
-                            <Route path="chantiers/:id/planning" element={<Planning />} />
-                            <Route path="chantiers/:id/controle-qualite" element={<ControlQualite />} />
-                            <Route path="chantiers/:id/compte-rendu" element={<CompteRendu />} />
+                                {/* Chantiers */}
+                                <Route path="chantiers" element={<ChantiersList />} />
+                                <Route path="chantiers/:id" element={<ChantierDetails />} />
+                                <Route path="chantiers/:id/planning" element={<Planning />} />
+                                <Route path="chantiers/:id/controle-qualite" element={<ControlQualite />} />
+                                <Route path="chantiers/:id/compte-rendu" element={<CompteRendu />} />
+                                <Route path="chantiers/:id/commandes" element={<Commandes />} /> {/* ✅ AJOUTÉ */}
 
-                            {/* Référentiel CQ */}
-                            <Route path="referentiel-cq" element={<ReferentielControleQualite />} />
+                                {/* Référentiel CQ */}
+                                <Route path="referentiel-cq" element={<ReferentielControleQualite />} />
 
-                            {/* Lots */}
-                            <Route path="lots" element={<LotsList />} />
+                                {/* Référentiel Commandes */}
+                                <Route path="referentiel-commande" element={<ReferentielCommande />} /> {/* ✅ AJOUTÉ */}
 
-                            {/* Sous-traitants */}
-                            <Route path="sous-traitants" element={<SousTraitantsList />} />
-                            <Route path="sous-traitants/:id" element={<SousTraitantDetails />} />
+                                {/* Lots */}
+                                <Route path="lots" element={<LotsList />} />
 
-                            {/* Fournisseurs */}
-                            <Route path="fournisseurs" element={<FournisseursList />} />
+                                {/* Sous-traitants */}
+                                <Route path="sous-traitants" element={<SousTraitantsList />} />
+                                <Route path="sous-traitants/:id" element={<SousTraitantDetails />} />
 
-                            {/* SAV */}
-                            <Route path="sav" element={<SAVList />} />
-                          </Route>
+                                {/* Fournisseurs */}
+                                <Route path="fournisseurs" element={<FournisseursList />} />
 
-                          {/* fallback */}
-                          <Route path="*" element={<Navigate to="/" replace />} />
-                        </Routes>
+                                {/* SAV */}
+                                <Route path="sav" element={<SAVList />} />
+                              </Route>
 
-                      </CompteRenduProvider>
-                    </CommentairesProvider>
+                              {/* fallback */}
+                              <Route path="*" element={<Navigate to="/" replace />} />
+                            </Routes>
+
+                          </CompteRenduProvider>
+                        </CommentairesProvider>
+                      </CommandesProvider> {/* ✅ AJOUTÉ */}
+                    </ReferentielCommandeProvider> {/* ✅ AJOUTÉ */}
                   </ReferentielCQProvider>
                 </SAVProvider>
               </LotsProvider>

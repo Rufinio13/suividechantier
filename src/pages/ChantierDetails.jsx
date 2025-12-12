@@ -7,13 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   ArrowLeft, Edit, Trash2, Users, Truck, FileText, CheckSquare, ListChecks, 
-  MessageSquare, User, Phone, Mail, ExternalLink, Info, MapPin 
+  MessageSquare, User, Phone, Mail, ExternalLink, Info, MapPin, Package 
 } from 'lucide-react';
 import { ChantierForm } from '@/components/ChantierForm.jsx';
 import { Planning } from '@/pages/Planning.jsx';
 import { ControlQualite } from '@/pages/ControlQualite.jsx';
 import { CompteRendu } from '@/pages/CompteRendu.jsx';
 import { ChantierCommentaires } from '@/pages/ChantierCommentaires.jsx';
+import { Commandes } from '@/pages/Commandes.jsx'; // ✅ AJOUTÉ
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -193,10 +194,10 @@ export function ChantierDetails() {
             </CardContent>
           </Card>
 
-          {/* TABS - ✅ RESPONSIVE MOBILE */}
+          {/* TABS - ✅ AVEC ONGLET COMMANDES */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            {/* ✅ CORRIGÉ : Grid responsive au lieu de inline-flex */}
-            <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 gap-2 h-auto p-2">
+            {/* ✅ Grid responsive avec 5 onglets (ou 3 lignes sur mobile) */}
+            <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 gap-2 h-auto p-2">
               <TabsTrigger value="planning" className="flex items-center justify-center">
                 <ListChecks className="mr-2 h-4 w-4" /> 
                 <span className="hidden sm:inline">Planning</span>
@@ -206,6 +207,11 @@ export function ChantierDetails() {
                 <CheckSquare className="mr-2 h-4 w-4" /> 
                 <span className="hidden sm:inline">Contrôle Qualité</span>
                 <span className="sm:hidden">CQ</span>
+              </TabsTrigger>
+              <TabsTrigger value="commandes" className="flex items-center justify-center"> {/* ✅ AJOUTÉ */}
+                <Package className="mr-2 h-4 w-4" /> 
+                <span className="hidden sm:inline">Commandes</span>
+                <span className="sm:hidden">📦</span>
               </TabsTrigger>
               <TabsTrigger value="compte-rendu" className="flex items-center justify-center">
                 <FileText className="mr-2 h-4 w-4" /> 
@@ -225,6 +231,10 @@ export function ChantierDetails() {
 
             <TabsContent value="controle-qualite" className="mt-6">
               <ControlQualite isEmbedded embeddedChantierId={chantier.id} />
+            </TabsContent>
+
+            <TabsContent value="commandes" className="mt-6"> {/* ✅ AJOUTÉ */}
+              <Commandes isEmbedded embeddedChantierId={chantier.id} />
             </TabsContent>
 
             <TabsContent value="compte-rendu" className="mt-6">
