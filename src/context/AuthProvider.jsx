@@ -1,13 +1,38 @@
 // src/context/AuthProvider.jsx
-import { createContext, useEffect, useState } from "react";
+import { createContext, useEffect, useState, useRef } from "react";
 import { supabase, setSupabaseRLSContext } from "@/lib/supabaseClient";
 
 export const AuthContext = createContext();
+
+const INACTIVITY_TIMEOUT = 30 * 60 * 1000; // 30 minutes en millisecondes
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const inactivityTimer = useRef(null);
+
+  // Fonction pour déconnecter l'utilisateur
+  const forceSignOut = async () => {
+    console.log('⏰ Déconnexion automatique (inactivité)');
+    await supabase.auth.signOut();
+    setUser(null);
+    setProfile(null);
+    window.location.href = '/login';
+  };
+
+  // Réinitialiser le timer d'inactivité
+  const resetInactivityTimer = () => {
+    if (inactivityTimer.current) {
+      clearTimeout(inactivityTimer.current);
+    }
+    
+    if (user) {
+      inactivityTimer.current = setTimeout(() => {
+        forceSignOut();
+      }, INACTIVITY_TIMEOUT);
+    }
+  };
 
   // Fonction pour charger le profil depuis Supabase
   const loadProfile = async (userId) => {
@@ -22,23 +47,30 @@ export function AuthProvider({ children }) {
       
       if (error) {
         console.error("❌ Erreur loadProfile:", error);
-        setProfile(null);
+        // Si le profil ne charge pas après 3 secondes, forcer déconnexion
+        setTimeout(() => {
+          if (!profile) {
+            console.error("❌ Timeout loadProfile - déconnexion forcée");
+            forceSignOut();
+          }
+        }, 3000);
         return;
       }
 
       console.log('✅ Profile chargé:', data);
       setProfile(data || null);
+      setLoading(false);
       
       // ✅ Définir le contexte RLS après avoir chargé le profil
       if (data?.nomsociete) {
         console.log('🔐 Définition RLS context pour:', data.nomsociete);
         await setSupabaseRLSContext(data.nomsociete);
       } else {
-        console.warn('⚠️ Pas de nomsociete dans le profile:', data);
+        console.warn('⚠️ Pas de nomsociete dans le profile');
       }
     } catch (err) {
       console.error("❌ Exception loadProfile:", err);
-      setProfile(null);
+      forceSignOut();
     }
   };
 
@@ -51,12 +83,15 @@ export function AuthProvider({ children }) {
       
       if (error) {
         console.error("❌ Erreur getSession:", error);
+        setLoading(false);
+        return;
       }
       
       if (data?.session?.user) {
         console.log('👤 User trouvé dans session:', data.session.user.id);
         setUser(data.session.user);
         loadProfile(data.session.user.id);
+        resetInactivityTimer();
       } else {
         console.log('❌ Pas de session');
         setLoading(false);
@@ -72,7 +107,7 @@ export function AuthProvider({ children }) {
           console.log('✅ SIGNED_IN - User:', session.user.id);
           setUser(session.user);
           await loadProfile(session.user.id);
-          setLoading(false);
+          resetInactivityTimer();
         }
 
         if (event === "SIGNED_OUT") {
@@ -80,19 +115,50 @@ export function AuthProvider({ children }) {
           setUser(null);
           setProfile(null);
           setLoading(false);
-        }
-
-        if (event === "TOKEN_REFRESHED") {
-          console.log('🔄 TOKEN_REFRESHED');
-          // Ne rien faire, juste loguer
+          if (inactivityTimer.current) {
+            clearTimeout(inactivityTimer.current);
+          }
         }
       }
     );
+
+    // Écouter les événements d'activité pour réinitialiser le timer
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+    events.forEach(event => {
+      document.addEventListener(event, resetInactivityTimer);
+    });
+
+    // Écouter la visibilité de la page
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        console.log('📱 Page cachée');
+      } else {
+        console.log('📱 Page visible - vérification session');
+        // Vérifier si la session est toujours valide
+        supabase.auth.getSession().then(({ data }) => {
+          if (!data?.session) {
+            console.log('❌ Session expirée - redirection');
+            forceSignOut();
+          } else {
+            resetInactivityTimer();
+          }
+        });
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Cleanup
     return () => {
       console.log('🧹 AuthProvider cleanup');
       authListener?.subscription?.unsubscribe();
+      events.forEach(event => {
+        document.removeEventListener(event, resetInactivityTimer);
+      });
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (inactivityTimer.current) {
+        clearTimeout(inactivityTimer.current);
+      }
     };
   }, []);
 
