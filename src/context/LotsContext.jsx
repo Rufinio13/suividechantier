@@ -8,62 +8,55 @@ const LotsContext = createContext();
 export function LotsProvider({ children }) {
   const { toast } = useToast();
   const { profile } = useAuth();
-  const nomsociete = profile?.nomsociete;
 
   const [lots, setLots] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // 🎯 Charger tous les lots pour la société
-  const loadLots = async () => {
-    if (!nomsociete) {
-      console.log("LotsContext : En attente de nomsociete...");
-      setLots([]);
-      setLoading(false);
-      return;
-    }
-
-    console.log("⏳ Chargement lots pour société :", nomsociete);
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from("lots")
-      .select("*")
-      .eq("nomsociete", nomsociete)
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      console.error("❌ loadLots :", error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de charger les lots",
-        variant: "destructive",
-      });
-      setLots([]);
-    } else {
-      console.log("✅ Lots chargés :", data?.length || 0);
-      setLots(data || []);
-    }
-
-    setLoading(false);
-  };
-
-  // ✅ CORRIGÉ : Attendre que nomsociete soit défini
   useEffect(() => {
-    if (nomsociete) {
-      loadLots();
-    } else {
-      console.log("LotsContext : En attente de nomsociete...");
+    const loadLots = async () => {
+      if (!profile?.nomsociete) { // ✅ Utiliser profile?.nomsociete directement
+        console.log("LotsContext : En attente de nomsociete...");
+        setLots([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log("⏳ Chargement lots pour société :", profile.nomsociete);
+      setLoading(true);
+
+      const { data, error } = await supabase
+        .from("lots")
+        .select("*")
+        .eq("nomsociete", profile.nomsociete) // ✅ Utiliser profile.nomsociete
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("❌ loadLots :", error);
+        toast({
+          title: "Erreur",
+          description: "Impossible de charger les lots",
+          variant: "destructive",
+        });
+        setLots([]);
+      } else {
+        console.log("✅ Lots chargés :", data?.length || 0);
+        setLots(data || []);
+      }
+
       setLoading(false);
-    }
-  }, [nomsociete]);
+    };
+
+    loadLots();
+  }, [profile?.nomsociete]); // ✅ Dépendre de profile?.nomsociete
 
   // 🎯 Ajouter un lot
   const addLot = async (lotData) => {
-    if (!nomsociete) throw new Error("Société non définie");
+    if (!profile?.nomsociete) throw new Error("Société non définie");
     
     const { data, error } = await supabase
       .from("lots")
-      .insert([{ ...lotData, nomsociete }])
+      .insert([{ ...lotData, nomsociete: profile.nomsociete }])
       .select()
       .single();
 
@@ -83,7 +76,7 @@ export function LotsProvider({ children }) {
       .from("lots")
       .update({ ...lotData })
       .eq("id", id)
-      .eq("nomsociete", nomsociete)
+      .eq("nomsociete", profile?.nomsociete)
       .select()
       .single();
 
@@ -103,7 +96,7 @@ export function LotsProvider({ children }) {
       .from("lots")
       .delete()
       .eq("id", id)
-      .eq("nomsociete", nomsociete);
+      .eq("nomsociete", profile?.nomsociete);
 
     if (error) {
       console.error("❌ deleteLot :", error);
@@ -117,6 +110,28 @@ export function LotsProvider({ children }) {
 
     console.log("✅ Lot supprimé");
     setLots((prev) => prev.filter((l) => l.id !== id));
+  };
+
+  // 🎯 Rafraîchir les lots
+  const loadLots = async () => {
+    if (!profile?.nomsociete) return;
+
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("lots")
+      .select("*")
+      .eq("nomsociete", profile.nomsociete)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("❌ loadLots :", error);
+      setLots([]);
+    } else {
+      setLots(data || []);
+    }
+
+    setLoading(false);
   };
 
   return (

@@ -10,38 +10,57 @@ export function SousTraitantProvider({ children }) {
   const [sousTraitants, setSousTraitants] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ---- 1 : Charger les sous-traitants ----
-  const loadSousTraitants = async () => {
-    if (!profile?.nomsociete) {
-      console.log("SousTraitantContext : En attente de nomsociete...");
-      setSousTraitants([]);
+  // ---- Charger les sous-traitants ----
+  useEffect(() => {
+    const loadSousTraitants = async () => {
+      if (!profile?.nomsociete) { // ✅ Utiliser profile?.nomsociete directement
+        console.log("SousTraitantContext : En attente de nomsociete...");
+        setSousTraitants([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log("⏳ Chargement sous-traitants pour société :", profile.nomsociete);
+      setLoading(true);
+
+      const { data, error } = await supabase
+        .from("soustraitants")
+        .select("*")
+        .eq("nomsociete", profile.nomsociete) // ✅ Utiliser profile.nomsociete
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("❌ loadSousTraitants :", error);
+        setSousTraitants([]);
+      } else {
+        console.log("✅ Sous-traitants chargés :", data?.length || 0);
+        setSousTraitants(data || []);
+      }
+
       setLoading(false);
-      return;
+    };
+
+    loadSousTraitants();
+
+    // Realtime
+    if (profile?.nomsociete) {
+      const channel = supabase
+        .channel("soustraitants-changes")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "soustraitants" },
+          () => {
+            console.log("🔄 Realtime : modification détectée sur soustraitants → reload");
+            loadSousTraitants();
+          }
+        )
+        .subscribe();
+
+      return () => supabase.removeChannel(channel);
     }
+  }, [profile?.nomsociete]); // ✅ Dépendre de profile?.nomsociete
 
-    console.log("⏳ Chargement sous-traitants pour société :", profile.nomsociete);
-
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from("soustraitants")
-      .select("*")
-      .eq("nomsociete", profile.nomsociete)
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      console.error("❌ loadSousTraitants :", error);
-      setSousTraitants([]);
-    } else {
-      console.log("✅ Sous-traitants chargés :", data?.length || 0);
-      setSousTraitants(data || []);
-    }
-
-    setLoading(false);
-    return data;
-  };
-
-  // ---- 2 : Ajouter un sous-traitant ----
+  // ---- Ajouter un sous-traitant ----
   const addSousTraitant = async (st) => {
     if (!user || !profile?.nomsociete) return;
 
@@ -75,7 +94,7 @@ export function SousTraitantProvider({ children }) {
     return data;
   };
 
-  // ---- 3 : Mise à jour d'un sous-traitant ----
+  // ---- Mise à jour d'un sous-traitant ----
   const updateSousTraitant = async (id, updates) => {
     console.log("📤 Update ST :", id, updates);
 
@@ -83,7 +102,7 @@ export function SousTraitantProvider({ children }) {
       .from("soustraitants")
       .update({ ...updates })
       .eq("id", id)
-      .eq("nomsociete", profile.nomsociete)
+      .eq("nomsociete", profile?.nomsociete)
       .select()
       .single();
 
@@ -100,7 +119,7 @@ export function SousTraitantProvider({ children }) {
     return data;
   };
 
-  // ---- 4 : Suppression d'un ST ----
+  // ---- Suppression d'un ST ----
   const deleteSousTraitant = async (id) => {
     console.log("📤 Delete ST :", id);
 
@@ -108,7 +127,7 @@ export function SousTraitantProvider({ children }) {
       .from("soustraitants")
       .delete()
       .eq("id", id)
-      .eq("nomsociete", profile.nomsociete);
+      .eq("nomsociete", profile?.nomsociete);
 
     if (error) {
       console.error("❌ deleteSousTraitant :", error);
@@ -121,30 +140,28 @@ export function SousTraitantProvider({ children }) {
     return true;
   };
 
-  // ---- 5 : Auto-load + realtime ----
-  // ✅ CORRIGÉ : Attendre que nomsociete soit défini
-  useEffect(() => {
-    if (profile?.nomsociete) {
-      loadSousTraitants();
+  // ---- Rafraîchir manuellement ----
+  const loadSousTraitants = async () => {
+    if (!profile?.nomsociete) return;
 
-      const channel = supabase
-        .channel("soustraitants-changes")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "soustraitants" },
-          () => {
-            console.log("🔄 Realtime : modification détectée sur soustraitants → reload");
-            loadSousTraitants();
-          }
-        )
-        .subscribe();
+    setLoading(true);
 
-      return () => supabase.removeChannel(channel);
+    const { data, error } = await supabase
+      .from("soustraitants")
+      .select("*")
+      .eq("nomsociete", profile.nomsociete)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("❌ loadSousTraitants :", error);
+      setSousTraitants([]);
     } else {
-      console.log("SousTraitantContext : En attente de nomsociete...");
-      setLoading(false);
+      setSousTraitants(data || []);
     }
-  }, [profile?.nomsociete]);
+
+    setLoading(false);
+    return data;
+  };
 
   return (
     <SousTraitantContext.Provider
@@ -162,7 +179,7 @@ export function SousTraitantProvider({ children }) {
   );
 }
 
-// ---- 6 : Hook sécurisé ----
+// ---- Hook sécurisé ----
 export function useSousTraitant() {
   const ctx = useContext(SousTraitantContext);
   if (!ctx) {

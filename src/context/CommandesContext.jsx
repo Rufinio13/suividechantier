@@ -14,8 +14,7 @@ export const useCommandes = () => {
 
 export function CommandesProvider({ children }) {
   const { user, profile } = useAuth();
-  const nomsociete = profile?.nomsociete;
-
+  
   const [commandes, setCommandes] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -24,14 +23,14 @@ export function CommandesProvider({ children }) {
   // =========================================
   useEffect(() => {
     const fetchCommandes = async () => {
-      if (!nomsociete) {
+      if (!profile?.nomsociete) { // ✅ Utiliser profile?.nomsociete directement
         console.log('CommandesContext : En attente de nomsociete...');
         setLoading(false);
         return;
       }
 
       try {
-        console.log('⏳ Chargement commandes pour société:', nomsociete);
+        console.log('⏳ Chargement commandes pour société:', profile.nomsociete);
         setLoading(true);
         
         const { data, error } = await supabase
@@ -41,7 +40,7 @@ export function CommandesProvider({ children }) {
             chantiers!inner(nomchantier),
             fournisseurs("nomsocieteF")
           `)
-          .eq('nomsociete', nomsociete)
+          .eq('nomsociete', profile.nomsociete) // ✅ Utiliser profile.nomsociete
           .order('date_livraison_souhaitee', { ascending: true, nullsFirst: false });
 
         if (error) {
@@ -60,7 +59,7 @@ export function CommandesProvider({ children }) {
     };
 
     fetchCommandes();
-  }, [nomsociete]); // ✅ Dépend seulement de nomsociete
+  }, [profile?.nomsociete]); // ✅ Dépendre de profile?.nomsociete
 
   // =========================================
   // RÉCUPÉRER LES COMMANDES D'UN CHANTIER
@@ -76,7 +75,7 @@ export function CommandesProvider({ children }) {
     try {
       const dataToInsert = {
         ...commandeData,
-        nomsociete,
+        nomsociete: profile?.nomsociete,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -120,7 +119,7 @@ export function CommandesProvider({ children }) {
         .from('commandes')
         .update(dataToUpdate)
         .eq('id', id)
-        .eq('nomsociete', nomsociete)
+        .eq('nomsociete', profile?.nomsociete)
         .select(`
           *,
           chantiers(nomchantier),
@@ -150,7 +149,7 @@ export function CommandesProvider({ children }) {
         .from('commandes')
         .delete()
         .eq('id', id)
-        .eq('nomsociete', nomsociete);
+        .eq('nomsociete', profile?.nomsociete);
 
       if (error) throw error;
 
@@ -181,7 +180,7 @@ export function CommandesProvider({ children }) {
   // RAFRAÎCHIR LES COMMANDES
   // =========================================
   const refreshCommandes = async () => {
-    if (!nomsociete) return;
+    if (!profile?.nomsociete) return;
     
     try {
       setLoading(true);
@@ -193,7 +192,7 @@ export function CommandesProvider({ children }) {
           chantiers!inner(nomchantier),
           fournisseurs("nomsocieteF")
         `)
-        .eq('nomsociete', nomsociete)
+        .eq('nomsociete', profile.nomsociete)
         .order('date_livraison_souhaitee', { ascending: true, nullsFirst: false });
 
       if (error) throw error;
@@ -209,7 +208,7 @@ export function CommandesProvider({ children }) {
   const value = {
     commandes,
     loading,
-    nomsociete,
+    nomsociete: profile?.nomsociete, // ✅ Exposer profile.nomsociete
     addCommande,
     updateCommande,
     deleteCommande,
