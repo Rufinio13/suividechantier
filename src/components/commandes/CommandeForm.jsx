@@ -29,6 +29,7 @@ export function CommandeForm({
     notes: ''
   });
 
+  // ✅ CORRIGÉ : Utiliser l'ID de la commande comme dépendance au lieu de l'objet entier
   useEffect(() => {
     if (commande) {
       setFormData({
@@ -51,7 +52,7 @@ export function CommandeForm({
         notes: ''
       });
     }
-  }, [commande, isOpen]);
+  }, [commande?.id, isOpen]); // ✅ Dépendre de l'ID seulement, pas de l'objet entier
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;

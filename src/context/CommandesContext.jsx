@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -22,48 +22,45 @@ export function CommandesProvider({ children }) {
   // =========================================
   // CHARGER LES COMMANDES
   // =========================================
-  const fetchCommandes = useCallback(async () => {
-    if (!nomsociete) {
-      console.log('CommandesContext : En attente de nomsociete...');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      console.log('⏳ Chargement commandes pour société:', nomsociete);
-      setLoading(true);
-      
-      // ✅ CORRIGÉ : Utiliser des guillemets pour nomsocieteF (case-sensitive)
-      const { data, error } = await supabase
-        .from('commandes')
-        .select(`
-          *,
-          chantiers!inner(nomchantier),
-          fournisseurs("nomsocieteF")
-        `)
-        .eq('nomsociete', nomsociete)
-        .order('date_livraison_souhaitee', { ascending: true });
-
-      if (error) {
-        console.error('❌ Erreur chargement commandes:', error);
-        throw error;
-      }
-      
-      console.log('✅ Commandes chargées:', data?.length || 0);
-      setCommandes(data || []);
-    } catch (error) {
-      console.error('❌ Exception lors du chargement des commandes:', error);
-      setCommandes([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [nomsociete]);
-
   useEffect(() => {
-    if (nomsociete) {
-      fetchCommandes();
-    }
-  }, [nomsociete, fetchCommandes]);
+    const fetchCommandes = async () => {
+      if (!nomsociete) {
+        console.log('CommandesContext : En attente de nomsociete...');
+        setLoading(false);
+        return;
+      }
+
+      try {
+        console.log('⏳ Chargement commandes pour société:', nomsociete);
+        setLoading(true);
+        
+        const { data, error } = await supabase
+          .from('commandes')
+          .select(`
+            *,
+            chantiers!inner(nomchantier),
+            fournisseurs("nomsocieteF")
+          `)
+          .eq('nomsociete', nomsociete)
+          .order('date_livraison_souhaitee', { ascending: true, nullsFirst: false });
+
+        if (error) {
+          console.error('❌ Erreur chargement commandes:', error);
+          throw error;
+        }
+        
+        console.log('✅ Commandes chargées:', data?.length || 0);
+        setCommandes(data || []);
+      } catch (error) {
+        console.error('❌ Exception lors du chargement des commandes:', error);
+        setCommandes([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCommandes();
+  }, [nomsociete]); // ✅ Dépend seulement de nomsociete
 
   // =========================================
   // RÉCUPÉRER LES COMMANDES D'UN CHANTIER
@@ -180,6 +177,35 @@ export function CommandesProvider({ children }) {
     }
   };
 
+  // =========================================
+  // RAFRAÎCHIR LES COMMANDES
+  // =========================================
+  const refreshCommandes = async () => {
+    if (!nomsociete) return;
+    
+    try {
+      setLoading(true);
+      
+      const { data, error } = await supabase
+        .from('commandes')
+        .select(`
+          *,
+          chantiers!inner(nomchantier),
+          fournisseurs("nomsocieteF")
+        `)
+        .eq('nomsociete', nomsociete)
+        .order('date_livraison_souhaitee', { ascending: true, nullsFirst: false });
+
+      if (error) throw error;
+      
+      setCommandes(data || []);
+    } catch (error) {
+      console.error('❌ Erreur refresh commandes:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const value = {
     commandes,
     loading,
@@ -189,7 +215,7 @@ export function CommandesProvider({ children }) {
     deleteCommande,
     validerCommande,
     getCommandesByChantier,
-    refreshCommandes: fetchCommandes
+    refreshCommandes
   };
 
   return (
