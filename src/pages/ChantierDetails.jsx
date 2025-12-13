@@ -14,7 +14,7 @@ import { Planning } from '@/pages/Planning.jsx';
 import { ControlQualite } from '@/pages/ControlQualite.jsx';
 import { CompteRendu } from '@/pages/CompteRendu.jsx';
 import { ChantierCommentaires } from '@/pages/ChantierCommentaires.jsx';
-import { Commandes } from '@/pages/Commandes.jsx'; // ✅ AJOUTÉ
+import { Commandes } from '@/pages/Commandes.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -194,24 +194,23 @@ export function ChantierDetails() {
             </CardContent>
           </Card>
 
-          {/* TABS - ✅ AVEC ONGLET COMMANDES */}
+          {/* TABS - ✅ ORDRE: Planning → Commandes → CQ → CR → Commentaires */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            {/* ✅ Grid responsive avec 5 onglets (ou 3 lignes sur mobile) */}
             <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 gap-2 h-auto p-2">
               <TabsTrigger value="planning" className="flex items-center justify-center">
                 <ListChecks className="mr-2 h-4 w-4" /> 
                 <span className="hidden sm:inline">Planning</span>
                 <span className="sm:hidden">Plan</span>
               </TabsTrigger>
+              <TabsTrigger value="commandes" className="flex items-center justify-center">
+                <Package className="mr-2 h-4 w-4" /> 
+                <span className="hidden sm:inline">Commandes</span>
+                <span className="sm:hidden">📦</span>
+              </TabsTrigger>
               <TabsTrigger value="controle-qualite" className="flex items-center justify-center">
                 <CheckSquare className="mr-2 h-4 w-4" /> 
                 <span className="hidden sm:inline">Contrôle Qualité</span>
                 <span className="sm:hidden">CQ</span>
-              </TabsTrigger>
-              <TabsTrigger value="commandes" className="flex items-center justify-center"> {/* ✅ AJOUTÉ */}
-                <Package className="mr-2 h-4 w-4" /> 
-                <span className="hidden sm:inline">Commandes</span>
-                <span className="sm:hidden">📦</span>
               </TabsTrigger>
               <TabsTrigger value="compte-rendu" className="flex items-center justify-center">
                 <FileText className="mr-2 h-4 w-4" /> 
@@ -229,12 +228,12 @@ export function ChantierDetails() {
               <Planning isEmbedded embeddedChantierId={chantier.id} />
             </TabsContent>
 
-            <TabsContent value="controle-qualite" className="mt-6">
-              <ControlQualite isEmbedded embeddedChantierId={chantier.id} />
+            <TabsContent value="commandes" className="mt-6">
+              <Commandes isEmbedded embeddedChantierId={chantier.id} />
             </TabsContent>
 
-            <TabsContent value="commandes" className="mt-6"> {/* ✅ AJOUTÉ */}
-              <Commandes isEmbedded embeddedChantierId={chantier.id} />
+            <TabsContent value="controle-qualite" className="mt-6">
+              <ControlQualite isEmbedded embeddedChantierId={chantier.id} />
             </TabsContent>
 
             <TabsContent value="compte-rendu" className="mt-6">
