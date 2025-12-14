@@ -18,26 +18,34 @@ export function ReferentielCQProvider({ children }) {
   const [modelesCQ, setModelesCQ] = useState([]);
   const [controles, setControles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [modelesLoaded, setModelesLoaded] = useState(false); // ✅ NOUVEAU
+  const [controlesLoaded, setControlesLoaded] = useState(false); // ✅ NOUVEAU
+
+  // ✅ NOUVEAU : Mettre loading à false quand les deux sont chargés
+  useEffect(() => {
+    if (modelesLoaded && controlesLoaded) {
+      setLoading(false);
+    }
+  }, [modelesLoaded, controlesLoaded]);
 
   // =========================================
   // CHARGER LES MODÈLES CQ
   // =========================================
   useEffect(() => {
     const fetchModelesCQ = async () => {
-      if (!profile?.nomsociete) { // ✅ CORRIGÉ
+      if (!profile?.nomsociete) {
         console.log('ReferentielCQContext : En attente de nomsociete...');
-        setLoading(false);
+        setModelesLoaded(true); // ✅ MODIFIÉ
         return;
       }
 
       try {
         console.log('⏳ Chargement modèles CQ pour société:', profile.nomsociete);
-        setLoading(true);
         
         const { data, error } = await supabase
           .from('referentiels_controle_qualite')
           .select('*')
-          .eq('nomsociete', profile.nomsociete) // ✅ CORRIGÉ
+          .eq('nomsociete', profile.nomsociete)
           .order('titre', { ascending: true });
 
         if (error) throw error;
@@ -48,20 +56,21 @@ export function ReferentielCQProvider({ children }) {
         console.error('❌ Erreur lors du chargement des modèles CQ:', error);
         setModelesCQ([]);
       } finally {
-        setLoading(false);
+        setModelesLoaded(true); // ✅ MODIFIÉ
       }
     };
 
     fetchModelesCQ();
-  }, [profile?.nomsociete]); // ✅ CORRIGÉ
+  }, [profile?.nomsociete]);
 
   // =========================================
   // CHARGER LES CONTRÔLES QUALITÉ
   // =========================================
   useEffect(() => {
     const fetchControles = async () => {
-      if (!profile?.nomsociete) { // ✅ CORRIGÉ
+      if (!profile?.nomsociete) {
         console.log('ReferentielCQContext : En attente de nomsociete pour contrôles...');
+        setControlesLoaded(true); // ✅ MODIFIÉ
         return;
       }
 
@@ -71,7 +80,7 @@ export function ReferentielCQProvider({ children }) {
         const { data, error } = await supabase
           .from('controles_qualite')
           .select('*')
-          .eq('nomsociete', profile.nomsociete) // ✅ CORRIGÉ : Ajouter le filtre
+          .eq('nomsociete', profile.nomsociete)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -81,11 +90,13 @@ export function ReferentielCQProvider({ children }) {
       } catch (error) {
         console.error('❌ Erreur lors du chargement des contrôles:', error);
         setControles([]);
+      } finally {
+        setControlesLoaded(true); // ✅ MODIFIÉ
       }
     };
 
     fetchControles();
-  }, [profile?.nomsociete]); // ✅ CORRIGÉ
+  }, [profile?.nomsociete]);
 
   // =========================================
   // AJOUTER UN MODÈLE CQ

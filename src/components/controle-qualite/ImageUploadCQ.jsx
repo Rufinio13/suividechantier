@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Upload, X, Image as ImageIcon, FileText, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
@@ -14,6 +15,7 @@ export function ImageUploadCQ({
 }) {
   const { profile } = useAuth();
   const [uploading, setUploading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null); // ✅ NOUVEAU : Image en mode fullscreen
   const fileInputRef = useRef(null);
 
   const handleFileSelect = async (e) => {
@@ -180,19 +182,27 @@ export function ImageUploadCQ({
       {images.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {images.map((image, index) => (
-            <Card key={index} className="relative group overflow-hidden">
+            <Card 
+              key={index} 
+              className="relative group overflow-hidden cursor-pointer"
+              onClick={() => setSelectedImage(image)} // ✅ NOUVEAU : Ouvrir en grand
+            >
               <img
                 src={image.url}
                 alt={image.nom}
                 className="w-full h-32 object-cover"
               />
               
+              {/* Bouton suppression au survol */}
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <Button
                   type="button"
                   variant="destructive"
                   size="icon"
-                  onClick={() => handleDelete(image)}
+                  onClick={(e) => {
+                    e.stopPropagation(); // ✅ Empêcher l'ouverture de l'image
+                    handleDelete(image);
+                  }}
                   className="h-8 w-8"
                 >
                   <X className="h-4 w-4" />
@@ -210,6 +220,39 @@ export function ImageUploadCQ({
           {config.emptyText}
         </p>
       )}
+
+      {/* ✅ NOUVEAU : Modal image en grand */}
+      <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden">
+          <div className="relative">
+            {/* Bouton fermer en haut à gauche */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSelectedImage(null)}
+              className="absolute top-2 left-2 z-10 bg-black/50 text-white hover:bg-black/70 rounded-full"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+
+            {/* Image en grand */}
+            {selectedImage && (
+              <img
+                src={selectedImage.url}
+                alt={selectedImage.nom}
+                className="w-full h-auto max-h-[90vh] object-contain"
+              />
+            )}
+
+            {/* Nom du fichier en bas */}
+            {selectedImage && (
+              <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-3 text-sm">
+                {selectedImage.nom}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

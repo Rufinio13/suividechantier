@@ -20,7 +20,7 @@ export function Commandes({ isEmbedded = false, embeddedChantierId = null }) {
   const chantierId = isEmbedded ? embeddedChantierId : params.id;
 
   const { chantiers } = useChantier();
-  const { commandes, addCommande, updateCommande, deleteCommande, loading } = useCommandes();
+  const { commandes, setCommandes, addCommande, updateCommande, deleteCommande, loading } = useCommandes(); // ✅ MODIFIÉ : Ajouter setCommandes
   const { modelesCommande } = useReferentielCommande();
   const { fournisseurs = [] } = useChantier();
 
@@ -36,7 +36,6 @@ export function Commandes({ isEmbedded = false, embeddedChantierId = null }) {
   const commandesChantier = useMemo(() => {
     let filtered = commandes.filter(c => c.chantier_id === chantierId);
     
-    // ✅ MODIFIÉ : Filtrer sur livraison_realisee au lieu de date_commande_reelle
     if (masquerLivrees) {
       filtered = filtered.filter(c => !c.livraison_realisee);
     }
@@ -69,13 +68,23 @@ export function Commandes({ isEmbedded = false, embeddedChantierId = null }) {
     }
   };
 
-  // ✅ MODIFIÉ : Toggle livraison_realisee au lieu de valider
+  // ✅ MODIFIÉ : Mise à jour optimiste pour la checkbox
   const handleToggleLivraison = async (id, isLivree) => {
+    // Mise à jour immédiate dans l'UI
+    setCommandes(prev => prev.map(c => 
+      c.id === id ? { ...c, livraison_realisee: isLivree } : c
+    ));
+    
     try {
       await updateCommande(id, { livraison_realisee: isLivree });
     } catch (error) {
       console.error('Erreur lors de la mise à jour:', error);
       alert('Erreur lors de la mise à jour de la commande');
+      
+      // Rollback en cas d'erreur
+      setCommandes(prev => prev.map(c => 
+        c.id === id ? { ...c, livraison_realisee: !isLivree } : c
+      ));
     }
   };
 
@@ -118,9 +127,9 @@ export function Commandes({ isEmbedded = false, embeddedChantierId = null }) {
     }
   };
 
-  // ✅ MODIFIÉ : Rouge si date prévisionnelle dépassée ET pas encore commandée
+  // Rouge si date prévisionnelle dépassée ET pas encore commandée
   const isCommandeEnRetard = (commande) => {
-    if (commande.date_commande_reelle) return false; // Si commandée, pas en retard
+    if (commande.date_commande_reelle) return false;
     if (!commande.date_commande_previsionnelle) return false;
     const datePrevisionnelle = parseISO(commande.date_commande_previsionnelle);
     return isBefore(datePrevisionnelle, startOfDay(new Date()));

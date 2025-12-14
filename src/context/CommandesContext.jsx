@@ -23,7 +23,7 @@ export function CommandesProvider({ children }) {
   // =========================================
   useEffect(() => {
     const fetchCommandes = async () => {
-      if (!profile?.nomsociete) { // ✅ Utiliser profile?.nomsociete directement
+      if (!profile?.nomsociete) {
         console.log('CommandesContext : En attente de nomsociete...');
         setLoading(false);
         return;
@@ -40,7 +40,7 @@ export function CommandesProvider({ children }) {
             chantiers!inner(nomchantier),
             fournisseurs("nomsocieteF")
           `)
-          .eq('nomsociete', profile.nomsociete) // ✅ Utiliser profile.nomsociete
+          .eq('nomsociete', profile.nomsociete)
           .order('date_livraison_souhaitee', { ascending: true, nullsFirst: false });
 
         if (error) {
@@ -59,7 +59,7 @@ export function CommandesProvider({ children }) {
     };
 
     fetchCommandes();
-  }, [profile?.nomsociete]); // ✅ Dépendre de profile?.nomsociete
+  }, [profile?.nomsociete]);
 
   // =========================================
   // RÉCUPÉRER LES COMMANDES D'UN CHANTIER
@@ -207,8 +207,9 @@ export function CommandesProvider({ children }) {
 
   const value = {
     commandes,
+    setCommandes, // ✅ NOUVEAU : Exposer setCommandes pour mise à jour optimiste
     loading,
-    nomsociete: profile?.nomsociete, // ✅ Exposer profile.nomsociete
+    nomsociete: profile?.nomsociete,
     addCommande,
     updateCommande,
     deleteCommande,

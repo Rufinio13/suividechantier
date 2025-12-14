@@ -11,7 +11,8 @@ import {
   endOfWeek,
   differenceInWeeks,
   addWeeks,
-  isValid as isValidFn
+  isValid as isValidFn,
+  eachWeekOfInterval
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ const MAX_WEEK_WIDTH = 120;
 const DEFAULT_WEEK_WIDTH = 56;
 const ROW_HEIGHT = 36;
 const TASK_ROW_HEIGHT = 32;
+const WEEK_GAP = 4; // ✅ NOUVEAU : Espace entre les semaines
 
 const isValidDate = (date) => date instanceof Date && !isNaN(date.getTime());
 
@@ -38,7 +40,6 @@ const calculerPeriodeChantier = (tachesDuChantier) => {
   const fins = [];
 
   tachesDuChantier.forEach(tache => {
-    // ✅ CORRIGÉ : datedebut, datefin en minuscules
     const debut = safeParseDate(tache.datedebut);
     const fin = safeParseDate(tache.datefin);
     if (isValidDate(debut)) debuts.push(startOfDay(debut));
@@ -71,7 +72,6 @@ const detectGlobalConflicts = (allTaches) => {
   const stAssignments = {};
 
   allTaches.forEach(tache => {
-    // ✅ CORRIGÉ : assignetype, assigneid, datedebut, datefin en minuscules
     if (tache.assignetype === 'soustraitant' && tache.assigneid && tache.datedebut && tache.datefin) {
       const startDate = startOfDay(parseISO(tache.datedebut));
       const endDate = endOfDay(parseISO(tache.datefin));
@@ -83,7 +83,7 @@ const detectGlobalConflicts = (allTaches) => {
         tacheId: tache.id,
         start: startDate,
         end: endDate,
-        chantierid: tache.chantierid, // ✅ minuscule
+        chantierid: tache.chantierid,
       });
     }
   });
@@ -123,11 +123,9 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
     const today = startOfDay(new Date());
 
     const items = chantiers.map(chantier => {
-      // ✅ CORRIGÉ : chantierid en minuscule
       const chantierTaches = cleanTaches
         .filter(t => t.chantierid === chantier.id)
         .sort((a,b) => {
-          // ✅ CORRIGÉ : datedebut en minuscule
           const dateA = parseISO(a.datedebut);
           const dateB = parseISO(b.datedebut);
           if (!isValidDate(dateA) || !isValidDate(dateB)) return 0;
@@ -154,7 +152,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
 
       return {
         id: chantier.id,
-        // ✅ CORRIGÉ : nomchantier au lieu de nom
         name: chantier.nomchantier,
         start: startOfDay(chantierOverallStart),
         end: endOfDay(chantierOverallEnd),
@@ -162,7 +159,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
         color: hasConflictInChantier ? 'bg-red-300' : 'bg-blue-300',
         tasks: chantierTaches
           .map(tache => {
-            // ✅ CORRIGÉ : datedebut, datefin en minuscules
             const tacheDateDebut = parseISO(tache.datedebut);
             const tacheDateFin = parseISO(tache.datefin);
             const isConflict = conflictingTaskIdsAcrossAllChantiers.has(tache.id);
@@ -175,7 +171,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
             } else if (tache.terminee) {
               taskColor = 'bg-green-500';
             } else if (isValidDate(tacheDateFin) && (isFuture(tacheDateFin) || format(tacheDateFin, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'))) {
-              // ✅ CORRIGÉ : assignetype en minuscule
               if (tache.assignetype === 'fournisseur') {
                 taskColor = 'bg-blue-500';
               } else if (tache.assignetype === 'soustraitant') {
@@ -190,7 +185,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
               end: isValidDate(tacheDateFin) ? endOfDay(tacheDateFin) : endOfDay(startOfDay(initialStartDate || new Date())),
               type: 'task',
               color: taskColor,
-              // ✅ CORRIGÉ : chantierid en minuscule
               chantierid: chantier.id,
               hasConflict: isConflict,
             };
@@ -287,10 +281,15 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
       if (idx === weekHeaders.length - 1) months.push({ ...group });
     });
 
-    return months.map(m => ({ ...m, width: m.weeksCount * weekWidth }));
+    return months.map(m => ({ ...m, width: m.weeksCount * (weekWidth + WEEK_GAP) }));
   };
 
   const monthHeaders = getMonthHeaders();
+
+  // ✅ NOUVEAU : Fonction pour calculer la position d'une semaine avec gaps
+  const getWeekPosition = (weekIndex) => {
+    return weekIndex * (weekWidth + WEEK_GAP);
+  };
 
   let currentTopOffset = 0;
   const renderedItems = [];
@@ -301,26 +300,34 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
     const chantierStartAligned = startOfWeek(chantierItem.start, { weekStartsOn: 1 });
     const chantierEndAligned = endOfWeek(chantierItem.end, { weekStartsOn: 1 });
 
-    const chantierStartOffsetWeeks = differenceInWeeks(chantierStartAligned, overallStartDate);
-    const chantierDurationWeeks = differenceInWeeks(chantierEndAligned, chantierStartAligned) + 1;
+    // ✅ MODIFIÉ : Ne pas créer de segments pour les chantiers, juste générer les segments de barres
+    const chantierWeeks = eachWeekOfInterval(
+      { start: chantierStartAligned, end: chantierEndAligned },
+      { weekStartsOn: 1 }
+    );
 
-    if (chantierStartOffsetWeeks < -chantierDurationWeeks || chantierDurationWeeks <= 0) return;
+    const chantierSegments = chantierWeeks.map(weekStart => {
+      const weekIndex = differenceInWeeks(weekStart, overallStartDate);
+      return {
+        weekIndex,
+        left: getWeekPosition(weekIndex),
+        width: weekWidth
+      };
+    });
 
+    // ✅ NOUVEAU : Ajouter l'item chantier UNE SEULE FOIS avec ses segments
     renderedItems.push({
       ...chantierItem,
+      segments: chantierSegments,
       displayProps: {
-        left: Math.max(0, chantierStartOffsetWeeks) * weekWidth,
-        width: Math.max(0, (chantierDurationWeeks - Math.max(0, -chantierStartOffsetWeeks)) * weekWidth - 2),
         top: currentTopOffset,
         height: ROW_HEIGHT - 4,
       }
     });
+
     currentTopOffset += ROW_HEIGHT;
 
     if (expandedChantiers[chantierItem.id]) {
-      // ✅ NOUVEAU : Organisation des tâches sur 2 lignes maximum
-      const ligne1EndDate = null;
-      const ligne2EndDate = null;
       let ligne1End = null;
       let ligne2End = null;
       
@@ -330,47 +337,49 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
         const taskStartAligned = startOfWeek(taskItem.start, { weekStartsOn: 1 });
         const taskEndAligned = endOfWeek(taskItem.end, { weekStartsOn: 1 });
 
-        const taskStartOffsetWeeks = differenceInWeeks(taskStartAligned, overallStartDate);
-        const taskDurationWeeks = differenceInWeeks(taskEndAligned, taskStartAligned) + 1;
+        const taskWeeks = eachWeekOfInterval(
+          { start: taskStartAligned, end: taskEndAligned },
+          { weekStartsOn: 1 }
+        );
 
-        if (taskStartOffsetWeeks < -taskDurationWeeks || taskDurationWeeks <= 0) return;
+        const taskSegments = taskWeeks.map(weekStart => {
+          const weekIndex = differenceInWeeks(weekStart, overallStartDate);
+          return {
+            weekIndex,
+            left: getWeekPosition(weekIndex),
+            width: weekWidth
+          };
+        });
 
-        // Détermine sur quelle ligne placer la tâche
-        let rowOffset = 0; // Par défaut ligne 1
+        let rowOffset = 0;
         
-        // Si la ligne 1 est libre ou si la tâche commence après la fin de la dernière tâche de la ligne 1
         if (!ligne1End || taskItem.start > ligne1End) {
-          rowOffset = 0; // Place sur ligne 1
+          rowOffset = 0;
           ligne1End = taskItem.end;
-        }
-        // Sinon, essaie la ligne 2
-        else if (!ligne2End || taskItem.start > ligne2End) {
-          rowOffset = TASK_ROW_HEIGHT; // Place sur ligne 2
+        } else if (!ligne2End || taskItem.start > ligne2End) {
+          rowOffset = TASK_ROW_HEIGHT;
           ligne2End = taskItem.end;
-        }
-        // Si les 2 lignes sont occupées, place sur ligne 2 en superposition
-        else {
+        } else {
           rowOffset = TASK_ROW_HEIGHT;
           ligne2End = taskItem.end > ligne2End ? taskItem.end : ligne2End;
         }
 
         renderedItems.push({
           ...taskItem,
+          segments: taskSegments,
           displayProps: {
-            left: Math.max(0, taskStartOffsetWeeks) * weekWidth,
-            width: Math.max(0, (taskDurationWeeks - Math.max(0, -taskStartOffsetWeeks)) * weekWidth - 2),
             top: currentTopOffset + rowOffset,
             height: TASK_ROW_HEIGHT - 4,
           }
         });
       });
       
-      // Avance de 2 lignes après les tâches
       currentTopOffset += TASK_ROW_HEIGHT * 2;
     }
   });
 
   const chartHeight = currentTopOffset + 50 + 20;
+  const totalWidth = getWeekPosition(totalWeeks);
 
   return (
     <div className="overflow-x-auto pb-4 bg-slate-50 p-1 rounded-lg shadow-inner relative">
@@ -383,93 +392,149 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
         </Button>
       </div>
 
-      <div style={{ width: totalWeeks * weekWidth + 250, minWidth: '100%' }}>
-        <div className="flex sticky top-0 bg-slate-100 z-20" style={{ marginLeft: 250 }}>
-          {monthHeaders.map((month, index) => (
-            <div key={`month-${index}`} className="h-7 flex items-center justify-center border-r border-slate-300" style={{ width: month.width }}>
-              <span className="text-[10px] font-medium text-slate-600">{month.name}</span>
-            </div>
-          ))}
-        </div>
+      {/* ✅ NOUVEAU : Layout en Flexbox - 2 colonnes */}
+      <div className="flex">
+        {/* ========== COLONNE 1 : NOMS DES CHANTIERS (fixe) ========== */}
+        <div className="flex-shrink-0 w-[250px] bg-slate-200">
+          {/* Header "CHANTIER" */}
+          <div className="h-7 border-r border-slate-300 border-b border-slate-300 flex items-center justify-center bg-slate-200 sticky top-0 z-20">
+            <span className="text-[10px] font-semibold text-slate-700">CHANTIER</span>
+          </div>
 
-        <div className="flex sticky top-7 bg-slate-100 z-20" style={{ marginLeft: 250 }}>
-          {weekHeaders.map((w, idx) => (
-            <div key={`week-${idx}`} className="h-5 flex flex-col items-center justify-center border-r border-slate-200/80" style={{ width: weekWidth }}>
-              <span className="text-[10px] text-slate-700 font-medium">{w.label}</span>
-            </div>
-          ))}
-        </div>
+          {/* Ligne vide pour aligner avec les semaines */}
+          <div className="h-5 border-r border-slate-300 border-b border-slate-300 bg-slate-200 sticky top-7 z-20"></div>
 
-        <div className="absolute top-0 left-250 h-full pointer-events-none z-0">
-          {Array.from({ length: totalWeeks + 1 }).map((_, i) => (
-            <div key={`gridline-v-${i}`} className="absolute h-full border-l border-slate-200/60" style={{ left: i * weekWidth, top: 50 + 20 }} />
-          ))}
-        </div>
-
-        <div className="relative" style={{ height: chartHeight - (50 + 20) }}>
-          {renderedItems.map((item, index) => {
-            if (!isValidDate(item.start) || !isValidDate(item.end) || item.displayProps.width <= 0) return null;
-            const itemTextColor = item.type === 'chantier' && (item.color === 'bg-blue-300' || item.color === 'bg-red-300') ? 'text-slate-800' : 'text-white';
-            return (
-              <React.Fragment key={item.id}>
-                <div
-                  className="absolute left-0 border-b border-slate-200/60"
-                  style={{
-                    top: item.displayProps.top + (item.type === 'chantier' ? ROW_HEIGHT : TASK_ROW_HEIGHT) - 2,
-                    width: totalWeeks * weekWidth + 250,
-                    height: 1,
-                    zIndex: 0
-                  }}
-                />
-
-                {/* ✅ MODIFIÉ : Libellé à gauche - Seulement pour les chantiers */}
-                {item.type === 'chantier' && (
+          {/* Liste des noms de chantiers - PAS DE SCROLL, PAS D'ABSOLUTE */}
+          <div className="border-r border-slate-300">
+            {renderedItems.map((item) => {
+              // ✅ Afficher ligne pour chantier uniquement
+              if (item.type !== 'chantier') return null;
+              
+              const isExpanded = expandedChantiers[item.id];
+              
+              return (
+                <React.Fragment key={`label-group-${item.id}`}>
+                  {/* Ligne du chantier */}
                   <div
-                    className="absolute flex items-center px-2 font-semibold text-slate-800"
-                    style={{
-                      left: 0,
-                      width: 250,
-                      top: item.displayProps.top,
-                      height: ROW_HEIGHT,
-                      zIndex: 10
-                    }}
+                    className="flex items-center px-2 font-semibold text-slate-800 bg-slate-200 border-b border-slate-200/60"
+                    style={{ height: ROW_HEIGHT }}
                   >
                     <Button variant="ghost" size="icon" onClick={() => toggleChantierExpand(item.id)} className="mr-1 h-7 w-7">
-                      {expandedChantiers[item.id] ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </Button>
                     <Link
                       to={`/chantiers/${item.id}`}
-                      className="truncate hover:underline"
+                      className="truncate hover:underline text-sm"
                       title={item.name}
                     >
                       {item.name}
                     </Link>
                   </div>
-                )}
 
-                {/* Barre dans le Gantt */}
-                <motion.div
-                  className={`absolute flex items-center rounded-sm shadow-sm px-1.5 ${itemTextColor} text-[10px] overflow-hidden ${item.hasConflict && item.type === 'task' ? 'ring-2 ring-offset-1 ring-red-500' : 'hover:ring-1 hover:ring-offset-1 hover:ring-indigo-300'}`}
-                  style={{
-                    left: item.displayProps.left + 250,
-                    width: item.displayProps.width,
-                    top: item.displayProps.top + 2,
-                    height: item.displayProps.height,
-                    zIndex: 5
-                  }}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.2, delay: index * 0.02 }}
-                  title={`${item.name}\nDu ${format(item.start, 'dd/MM/yy')} au ${format(item.end, 'dd/MM/yy')}${item.hasConflict && item.type === 'task' ? `\nConflit` : ''}`}
+                  {/* ✅ NOUVEAU : Si déplié, ajouter 2 lignes vides pour les tâches */}
+                  {isExpanded && (
+                    <>
+                      <div style={{ height: TASK_ROW_HEIGHT }} className="bg-slate-200 border-b border-slate-200/60"></div>
+                      <div style={{ height: TASK_ROW_HEIGHT }} className="bg-slate-200 border-b border-slate-200/60"></div>
+                    </>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ========== COLONNE 2 : GANTT (scrollable horizontalement) ========== */}
+        <div className="flex-1 overflow-x-auto">
+          <div style={{ minWidth: totalWidth }}>
+            {/* Header mois */}
+            <div className="flex sticky top-0 bg-slate-100 z-20 border-b border-slate-300">
+              {monthHeaders.map((month, index) => (
+                <div key={`month-${index}`} className="h-7 flex items-center justify-center border-r border-slate-300" style={{ width: month.width }}>
+                  <span className="text-[10px] font-medium text-slate-600">{month.name}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Header semaines */}
+            <div className="flex sticky top-7 bg-slate-100 z-20 border-b border-slate-300" style={{ gap: `${WEEK_GAP}px` }}>
+              {weekHeaders.map((w, idx) => (
+                <div 
+                  key={`week-${idx}`} 
+                  className="h-5 flex flex-col items-center justify-center bg-white border-r border-slate-200/80"
+                  style={{ width: weekWidth }}
                 >
-                  <div className={`absolute inset-0 ${item.color} ${item.type === 'task' ? 'opacity-80' : 'opacity-95'}`}></div>
-                  {/* ✅ MODIFIÉ : Affiche le nom DANS la barre pour les tâches ET les chantiers */}
-                  <span className="relative z-10 truncate">{item.name}</span>
-                  {item.hasConflict && item.type === 'task' && <AlertTriangle className="h-3 w-3 ml-auto text-yellow-300 flex-shrink-0" />}
-                </motion.div>
-              </React.Fragment>
-            );
-          })}
+                  <span className="text-[10px] text-slate-700 font-medium">{w.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Grille verticale */}
+            <div className="relative pointer-events-none">
+              {Array.from({ length: totalWeeks }).map((_, i) => (
+                <div 
+                  key={`gridline-v-${i}`}
+                  className="absolute border-l border-slate-200/40" 
+                  style={{ 
+                    left: getWeekPosition(i),
+                    top: 0,
+                    bottom: 0,
+                    height: chartHeight - (50 + 20)
+                  }} 
+                />
+              ))}
+            </div>
+
+            {/* Conteneur des lignes de chantiers/tâches */}
+            <div className="relative" style={{ height: chartHeight - (50 + 20) }}>
+              {renderedItems.map((item, index) => {
+                if (!isValidDate(item.start) || !isValidDate(item.end)) return null;
+                const itemTextColor = item.type === 'chantier' && (item.color === 'bg-blue-300' || item.color === 'bg-red-300') ? 'text-slate-800' : 'text-white';
+                
+                return (
+                  <React.Fragment key={item.id}>
+                    {/* Ligne de séparation horizontale */}
+                    <div
+                      className="absolute left-0 right-0 border-b border-slate-200/60"
+                      style={{
+                        top: item.displayProps.top + (item.type === 'chantier' ? ROW_HEIGHT : TASK_ROW_HEIGHT) - 2,
+                        height: 1,
+                        zIndex: 0
+                      }}
+                    />
+
+                    {/* Segments de barres */}
+                    {item.segments && item.segments.map((segment, segIndex) => (
+                      <motion.div
+                        key={`${item.id}-seg-${segIndex}`}
+                        className={`absolute flex items-center px-1.5 ${itemTextColor} text-[10px] overflow-hidden ${item.hasConflict && item.type === 'task' ? 'ring-2 ring-offset-1 ring-red-500' : 'hover:ring-1 hover:ring-offset-1 hover:ring-indigo-300'}`}
+                        style={{
+                          left: segment.left,
+                          width: segment.width,
+                          top: item.displayProps.top + 2,
+                          height: item.displayProps.height,
+                          zIndex: 5
+                        }}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.2, delay: index * 0.02 }}
+                        title={`${item.name}\nDu ${format(item.start, 'dd/MM/yy')} au ${format(item.end, 'dd/MM/yy')}${item.hasConflict && item.type === 'task' ? `\nConflit` : ''}`}
+                      >
+                        <div className={`absolute inset-0 ${item.color} ${item.type === 'task' ? 'opacity-80' : 'opacity-95'}`}></div>
+                        {/* Nom uniquement sur le premier segment */}
+                        {segIndex === 0 && (
+                          <>
+                            <span className="relative z-10 truncate text-[9px] font-medium">{item.name}</span>
+                            {item.hasConflict && item.type === 'task' && <AlertTriangle className="h-3 w-3 ml-auto text-yellow-300 flex-shrink-0" />}
+                          </>
+                        )}
+                      </motion.div>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </div>

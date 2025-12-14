@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { parseISO, differenceInDays, format, addDays, startOfDay, endOfDay, isPast, isFuture } from 'date-fns';
+import { parseISO, differenceInDays, format, addDays, startOfDay, endOfDay, isPast, isFuture, isWeekend, getDay } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { ZoomIn, ZoomOut } from 'lucide-react';
@@ -12,11 +12,66 @@ const MIN_DAY_WIDTH = 20;
 const MAX_DAY_WIDTH = 120;
 const DEFAULT_DAY_WIDTH = 40;
 
+// ✅ NOUVEAU : Jours fériés français 2025-2026
+const JOURS_FERIES = [
+  // 2025
+  '2025-01-01', // Jour de l'an
+  '2025-04-21', // Lundi de Pâques
+  '2025-05-01', // Fête du travail
+  '2025-05-08', // Victoire 1945
+  '2025-05-29', // Ascension
+  '2025-06-09', // Lundi de Pentecôte
+  '2025-07-14', // Fête nationale
+  '2025-08-15', // Assomption
+  '2025-11-01', // Toussaint
+  '2025-11-11', // Armistice 1918
+  '2025-12-25', // Noël
+  
+  // 2026
+  '2026-01-01', // Jour de l'an
+  '2026-04-06', // Lundi de Pâques
+  '2026-05-01', // Fête du travail
+  '2026-05-08', // Victoire 1945
+  '2026-05-14', // Ascension
+  '2026-05-25', // Lundi de Pentecôte
+  '2026-07-14', // Fête nationale
+  '2026-08-15', // Assomption
+  '2026-11-01', // Toussaint
+  '2026-11-11', // Armistice 1918
+  '2026-12-25', // Noël
+];
+
+// ✅ NOUVEAU : Vérifier si un jour est férié
+const isJourFerie = (date) => {
+  const dateStr = format(date, 'yyyy-MM-dd');
+  return JOURS_FERIES.includes(dateStr);
+};
+
+// ✅ NOUVEAU : Vérifier si un jour est ouvré (ni weekend, ni férié)
+const isJourOuvre = (date) => {
+  return !isWeekend(date) && !isJourFerie(date);
+};
+
+// ✅ NOUVEAU : Calculer le nombre de jours ouvrés entre deux dates
+const countJoursOuvres = (startDate, endDate) => {
+  let count = 0;
+  let current = startOfDay(startDate);
+  const end = startOfDay(endDate);
+  
+  while (current <= end) {
+    if (isJourOuvre(current)) {
+      count++;
+    }
+    current = addDays(current, 1);
+  }
+  
+  return count;
+};
+
 export function GanttChart({ taches, chantierId }) {
   const [dayWidth, setDayWidth] = useState(DEFAULT_DAY_WIDTH);
   const { updateTache, chantiers, conflictsByChantier } = useChantier();
 
-  // ✅ CORRIGÉ : chantierid, datedebut, datefin en minuscules
   const tachesDuChantier = useMemo(
     () => taches.filter(t => t.chantierid === chantierId && t.datedebut && t.datefin),
     [taches, chantierId]
@@ -27,18 +82,15 @@ export function GanttChart({ taches, chantierId }) {
     const today = startOfDay(new Date());
 
     return tachesDuChantier.map(tache => {
-      // ✅ CORRIGÉ : datedebut, datefin en minuscules
       const tacheDateDebut = parseISO(tache.datedebut);
       const tacheDateFin = parseISO(tache.datefin);
       let color = 'bg-gray-400';
 
       // Conflit
       let hasConflict = false;
-      // ✅ CORRIGÉ : assignetype, assigneid en minuscules
       if (tache.assignetype === 'soustraitant' && tache.assigneid) {
         const key = `${tache.assigneid}-${format(tacheDateDebut, 'yyyy-MM-dd')}`;
         const conflict = conflictsByChantier[key];
-        // ✅ CORRIGÉ : chantierid en minuscule
         if (conflict && conflict.count > 1 && conflict.chantierids.includes(tache.chantierid)) {
           hasConflict = true;
         }
@@ -48,7 +100,6 @@ export function GanttChart({ taches, chantierId }) {
       else if (tache.terminee) color = 'bg-green-500';
       else if (isPast(tacheDateFin)) color = 'bg-red-400';
       else if (isFuture(tacheDateFin)) {
-        // ✅ CORRIGÉ : assignetype en minuscule
         color = tache.assignetype === 'fournisseur' ? 'bg-blue-500' : 'bg-orange-400';
       }
 
@@ -85,15 +136,28 @@ export function GanttChart({ taches, chantierId }) {
     (event, info, item) => {
       const daysDragged = Math.round(info.offset.x / dayWidth);
       const newStartDate = addDays(item.start, daysDragged);
-      const currentDuration = differenceInDays(item.end, item.start) + 1;
-      const newEndDate = addDays(newStartDate, currentDuration - 1);
+      
+      // ✅ MODIFIÉ : Calculer la durée en jours ouvrés
+      const joursOuvres = countJoursOuvres(item.start, item.end);
+      
+      // Trouver la nouvelle date de fin en comptant les jours ouvrés
+      let newEndDate = newStartDate;
+      let joursOuvresComptes = 0;
+      
+      while (joursOuvresComptes < joursOuvres) {
+        if (isJourOuvre(newEndDate)) {
+          joursOuvresComptes++;
+        }
+        if (joursOuvresComptes < joursOuvres) {
+          newEndDate = addDays(newEndDate, 1);
+        }
+      }
 
-      // ✅ CORRIGÉ : datedebut, datefin en minuscules
       updateTache(item.id, {
         ...item.rawTache,
         datedebut: format(newStartDate, 'yyyy-MM-dd'),
         datefin: format(newEndDate, 'yyyy-MM-dd'),
-        duree: currentDuration.toString()
+        duree: joursOuvres.toString() // ✅ Durée en jours ouvrés
       });
     },
     [dayWidth, updateTache]
@@ -110,13 +174,10 @@ export function GanttChart({ taches, chantierId }) {
     const chantier = chantiers.find(c => c.id === chantierId);
     if (chantier) {
       pdf.setFontSize(14);
-      // ✅ CORRIGÉ : nomchantier au lieu de nom
       pdf.text(`Chantier : ${chantier.nomchantier || 'Sans nom'}`, 40, 40);
       pdf.setFontSize(10);
       if (chantier.adresse) pdf.text(`Adresse : ${chantier.adresse}`, 40, 60);
-      // ✅ CORRIGÉ : date_debut au lieu de dateDebut
       if (chantier.date_debut) pdf.text(`Début : ${format(parseISO(chantier.date_debut), 'dd/MM/yyyy')}`, 40, 80);
-      // ✅ CORRIGÉ : date_livraison_prevue au lieu de dateFin
       if (chantier.date_livraison_prevue) pdf.text(`Fin prévisionnelle : ${format(parseISO(chantier.date_livraison_prevue), 'dd/MM/yyyy')}`, 200, 80);
     }
 
@@ -173,51 +234,101 @@ export function GanttChart({ taches, chantierId }) {
           ))}
         </div>
 
-        {/* Header jours */}
+        {/* Header jours - ✅ MODIFIÉ : Fond grisé pour weekends et fériés */}
         <div className="flex sticky top-7 bg-slate-100 z-20 border-b border-slate-300">
           {monthHeaders.map((m, mi) =>
             Array.from({ length: m.days }).map((_, di) => {
               const date = addDays(m.startDate, di);
+              const isNonOuvre = !isJourOuvre(date);
+              
               return (
-                <div key={`${mi}-${di}`} className="h-5 flex flex-col items-center justify-center border-r border-slate-200/80" style={{ width: dayWidth }}>
-                  <span className="text-[9px] text-slate-500 capitalize">{format(date, 'EEE', { locale: fr }).charAt(0)}</span>
-                  <span className="text-[10px] text-slate-700 font-medium">{format(date, 'd', { locale: fr })}</span>
+                <div 
+                  key={`${mi}-${di}`} 
+                  className={`h-5 flex flex-col items-center justify-center border-r border-slate-200/80 ${isNonOuvre ? 'bg-slate-200' : ''}`}
+                  style={{ width: dayWidth }}
+                >
+                  <span className={`text-[9px] capitalize ${isNonOuvre ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {format(date, 'EEE', { locale: fr }).charAt(0)}
+                  </span>
+                  <span className={`text-[10px] font-medium ${isNonOuvre ? 'text-slate-400' : 'text-slate-700'}`}>
+                    {format(date, 'd', { locale: fr })}
+                  </span>
                 </div>
               );
             })
           )}
         </div>
 
-        {/* Grille verticale */}
+        {/* Grille verticale - ✅ MODIFIÉ : Fond grisé pour colonnes non ouvrées */}
         <div className="absolute top-0 left-0 h-full pointer-events-none z-0">
-          {Array.from({ length: totalDays + 1 }).map((_, i) => (
-            <div key={i} className="absolute h-full border-l border-slate-200/60" style={{ left: i * dayWidth, top: 70 }} />
-          ))}
+          {Array.from({ length: totalDays }).map((_, i) => {
+            const date = addDays(overallStartDate, i);
+            const isNonOuvre = !isJourOuvre(date);
+            
+            return (
+              <React.Fragment key={i}>
+                {isNonOuvre && (
+                  <div 
+                    className="absolute h-full bg-slate-200/40" 
+                    style={{ left: i * dayWidth, top: 70, width: dayWidth }} 
+                  />
+                )}
+                <div 
+                  className="absolute h-full border-l border-slate-200/60" 
+                  style={{ left: i * dayWidth, top: 70 }} 
+                />
+              </React.Fragment>
+            );
+          })}
         </div>
 
-        {/* Barres tâches */}
+        {/* Barres tâches - ✅ MODIFIÉ : Barres discontinues (sauter weekends/fériés) */}
         <div className="relative" style={{ height: chartHeight - 70 }}>
           {ganttItems.map((item, index) => {
-            const offset = differenceInDays(item.start, overallStartDate);
-            const duration = differenceInDays(item.end, item.start) + 1;
             const topPos = index * 36 + 4;
+            
+            // ✅ NOUVEAU : Générer les segments de barres uniquement sur jours ouvrés
+            const segments = [];
+            let current = startOfDay(item.start);
+            const end = startOfDay(item.end);
+            
+            while (current <= end) {
+              if (isJourOuvre(current)) {
+                const offset = differenceInDays(current, overallStartDate);
+                segments.push({
+                  date: current,
+                  offset: offset * dayWidth,
+                  width: dayWidth - 1
+                });
+              }
+              current = addDays(current, 1);
+            }
 
             return (
-              <motion.div
-                key={item.id}
-                drag="x"
-                dragConstraints={{ left: -offset * dayWidth, right: (totalDays - offset - duration) * dayWidth }}
-                dragElastic={0.1}
-                onDragEnd={(e, info) => handleDragEnd(e, info, item)}
-                className="absolute h-[28px] flex items-center px-2 text-white text-[10px] overflow-hidden cursor-grab active:cursor-grabbing"
-                style={{ left: offset * dayWidth, width: Math.max(duration * dayWidth - 1, 0), top: topPos, height: 28 }}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.2, delay: index * 0.03 }}
-              >
-                <div className={`absolute inset-0 ${item.color} opacity-100`}></div>
-                <span className="relative z-10 truncate font-medium" title={item.name}>{item.name}</span>
-              </motion.div>
+              <React.Fragment key={item.id}>
+                {segments.map((segment, segIndex) => (
+                  <motion.div
+                    key={`${item.id}-${segIndex}`}
+                    className="absolute h-[28px] flex items-center px-1 text-white text-[10px] overflow-hidden"
+                    style={{ 
+                      left: segment.offset, 
+                      width: segment.width, 
+                      top: topPos, 
+                      height: 28 
+                    }}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.2, delay: index * 0.03 }}
+                  >
+                    <div className={`absolute inset-0 ${item.color} opacity-100`}></div>
+                    {segIndex === 0 && (
+                      <span className="relative z-10 truncate font-medium text-[9px]" title={item.name}>
+                        {item.name}
+                      </span>
+                    )}
+                  </motion.div>
+                ))}
+              </React.Fragment>
             );
           })}
         </div>
