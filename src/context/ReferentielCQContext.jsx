@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -14,7 +14,6 @@ export const useReferentielCQ = () => {
 
 export function ReferentielCQProvider({ children }) {
   const { user, profile } = useAuth();
-  const nomsociete = profile?.nomsociete;
 
   const [modelesCQ, setModelesCQ] = useState([]);
   const [controles, setControles] = useState([]);
@@ -23,53 +22,70 @@ export function ReferentielCQProvider({ children }) {
   // =========================================
   // CHARGER LES MODÈLES CQ
   // =========================================
-  const fetchModelesCQ = useCallback(async () => {
-    if (!nomsociete) return;
+  useEffect(() => {
+    const fetchModelesCQ = async () => {
+      if (!profile?.nomsociete) { // ✅ CORRIGÉ
+        console.log('ReferentielCQContext : En attente de nomsociete...');
+        setLoading(false);
+        return;
+      }
 
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('referentiels_controle_qualite')
-        .select('*')
-        .eq('nomsociete', nomsociete)
-        .order('titre', { ascending: true });
+      try {
+        console.log('⏳ Chargement modèles CQ pour société:', profile.nomsociete);
+        setLoading(true);
+        
+        const { data, error } = await supabase
+          .from('referentiels_controle_qualite')
+          .select('*')
+          .eq('nomsociete', profile.nomsociete) // ✅ CORRIGÉ
+          .order('titre', { ascending: true });
 
-      if (error) throw error;
-      setModelesCQ(data || []);
-    } catch (error) {
-      console.error('Erreur lors du chargement des modèles CQ:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [nomsociete]);
+        if (error) throw error;
+        
+        console.log('✅ Modèles CQ chargés:', data?.length || 0);
+        setModelesCQ(data || []);
+      } catch (error) {
+        console.error('❌ Erreur lors du chargement des modèles CQ:', error);
+        setModelesCQ([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchModelesCQ();
+  }, [profile?.nomsociete]); // ✅ CORRIGÉ
 
   // =========================================
   // CHARGER LES CONTRÔLES QUALITÉ
   // =========================================
-  const fetchControles = useCallback(async () => {
-    if (!nomsociete) return;
-
-    try {
-      // ✅ CORRIGÉ : Pas de .eq('nomsociete') car RLS le gère
-      const { data, error } = await supabase
-        .from('controles_qualite')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      console.log('✅ Contrôles chargés:', data);
-      setControles(data || []);
-    } catch (error) {
-      console.error('Erreur lors du chargement des contrôles:', error);
-    }
-  }, [nomsociete]);
-
   useEffect(() => {
-    if (nomsociete) {
-      fetchModelesCQ();
-      fetchControles();
-    }
-  }, [nomsociete, fetchModelesCQ, fetchControles]);
+    const fetchControles = async () => {
+      if (!profile?.nomsociete) { // ✅ CORRIGÉ
+        console.log('ReferentielCQContext : En attente de nomsociete pour contrôles...');
+        return;
+      }
+
+      try {
+        console.log('⏳ Chargement contrôles pour société:', profile.nomsociete);
+        
+        const { data, error } = await supabase
+          .from('controles_qualite')
+          .select('*')
+          .eq('nomsociete', profile.nomsociete) // ✅ CORRIGÉ : Ajouter le filtre
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        
+        console.log('✅ Contrôles chargés:', data?.length || 0);
+        setControles(data || []);
+      } catch (error) {
+        console.error('❌ Erreur lors du chargement des contrôles:', error);
+        setControles([]);
+      }
+    };
+
+    fetchControles();
+  }, [profile?.nomsociete]); // ✅ CORRIGÉ
 
   // =========================================
   // AJOUTER UN MODÈLE CQ
@@ -78,7 +94,7 @@ export function ReferentielCQProvider({ children }) {
     try {
       const dataToInsert = {
         ...modeleData,
-        nomsociete,
+        nomsociete: profile?.nomsociete,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -113,7 +129,7 @@ export function ReferentielCQProvider({ children }) {
         .from('referentiels_controle_qualite')
         .update(dataToUpdate)
         .eq('id', id)
-        .eq('nomsociete', nomsociete)
+        .eq('nomsociete', profile?.nomsociete)
         .select()
         .single();
 
@@ -136,7 +152,7 @@ export function ReferentielCQProvider({ children }) {
         .from('referentiels_controle_qualite')
         .delete()
         .eq('id', id)
-        .eq('nomsociete', nomsociete);
+        .eq('nomsociete', profile?.nomsociete);
 
       if (error) throw error;
 
@@ -153,19 +169,22 @@ export function ReferentielCQProvider({ children }) {
   // =========================================
   const saveControleFromModele = async (chantierId, modeleCQId, resultats, pointsSpecifiques) => {
     try {
-      // ✅ CORRIGÉ : Pas de .eq('nomsociete') car RLS le gère
+      console.log('💾 saveControleFromModele:', { chantierId, modeleCQId });
+      
       const { data: existingControle, error: fetchError } = await supabase
         .from('controles_qualite')
         .select('*')
         .eq('chantier_id', chantierId)
         .eq('modele_cq_id', modeleCQId)
-        .maybeSingle(); // ✅ CORRIGÉ : Utiliser maybeSingle() au lieu de single()
+        .maybeSingle();
 
       if (fetchError && fetchError.code !== 'PGRST116') {
         throw fetchError;
       }
 
       if (existingControle) {
+        console.log('📝 Mise à jour contrôle existant:', existingControle.id);
+        
         // Mise à jour
         const { data, error } = await supabase
           .from('controles_qualite')
@@ -184,13 +203,15 @@ export function ReferentielCQProvider({ children }) {
         setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
         return { success: true, data };
       } else {
+        console.log('➕ Création nouveau contrôle');
+        
         // Création
         const { data, error } = await supabase
           .from('controles_qualite')
           .insert([{
             chantier_id: chantierId,
             modele_cq_id: modeleCQId,
-            nomsociete,
+            nomsociete: profile?.nomsociete,
             resultats,
             points_specifiques: pointsSpecifiques,
             statut: 'en_cours',
@@ -201,11 +222,12 @@ export function ReferentielCQProvider({ children }) {
 
         if (error) throw error;
 
+        console.log('✅ Contrôle créé:', data);
         setControles(prev => [...prev, data]);
         return { success: true, data };
       }
     } catch (error) {
-      console.error('Erreur saveControleFromModele:', error);
+      console.error('❌ Erreur saveControleFromModele:', error);
       throw error;
     }
   };
@@ -256,7 +278,7 @@ export function ReferentielCQProvider({ children }) {
           .insert([{
             chantier_id: chantierId,
             modele_cq_id: modeleId,
-            nomsociete,
+            nomsociete: profile?.nomsociete,
             points_specifiques: updatedPointsSpecifiques,
             statut: 'en_cours'
           }])
@@ -353,11 +375,48 @@ export function ReferentielCQProvider({ children }) {
     }
   };
 
+  // =========================================
+  // RAFRAÎCHIR MANUELLEMENT
+  // =========================================
+  const refreshModeles = async () => {
+    if (!profile?.nomsociete) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('referentiels_controle_qualite')
+        .select('*')
+        .eq('nomsociete', profile.nomsociete)
+        .order('titre', { ascending: true });
+
+      if (error) throw error;
+      setModelesCQ(data || []);
+    } catch (error) {
+      console.error('Erreur refreshModeles:', error);
+    }
+  };
+
+  const refreshControles = async () => {
+    if (!profile?.nomsociete) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('controles_qualite')
+        .select('*')
+        .eq('nomsociete', profile.nomsociete)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setControles(data || []);
+    } catch (error) {
+      console.error('Erreur refreshControles:', error);
+    }
+  };
+
   const value = {
     modelesCQ,
     controles,
     loading,
-    nomsociete,
+    nomsociete: profile?.nomsociete,
     addModeleCQ,
     updateModeleCQ,
     deleteModeleCQ,
@@ -366,8 +425,8 @@ export function ReferentielCQProvider({ children }) {
     addPointControleChantierSpecific,
     updatePointControleChantierSpecific,
     deletePointControleChantierSpecific,
-    refreshModeles: fetchModelesCQ,
-    refreshControles: fetchControles
+    refreshModeles,
+    refreshControles
   };
 
   return (

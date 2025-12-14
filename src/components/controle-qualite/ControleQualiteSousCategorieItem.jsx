@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, ChevronUp, ListChecks, PieChart as PieChartIcon, PlusCircle } from 'lucide-react';
-import { CategorieStatsPieChart } from '@/components/controle-qualite/CategorieStatsPieChart';
+import { Badge } from '@/components/ui/badge';
+import { ChevronRight, PlusCircle } from 'lucide-react';
 import { PointControleResultatItem } from '@/components/controle-qualite/ControleQualiteListItem';
 import { PointControleFormModal } from '@/components/controle-qualite/PointControleFormModal';
 
@@ -18,14 +18,33 @@ export function ControleQualiteSousCategorieItem({
     onUpdatePointControle,
     onDeletePointControle,
     onUpdateNomCategorie,
-    documents = [] // ✅ AJOUT: Passer les documents
+    documents = []
 }) {
-    const [isOpen, setIsOpen] = useState(true);
-    const [showStats, setShowStats] = useState(false);
+    const [isOpen, setIsOpen] = useState(false); // ✅ MODIFIÉ : Collapsed par défaut
     const [isPointFormModalOpen, setIsPointFormModalOpen] = useState(false);
     const [editingPoint, setEditingPoint] = useState(null);
     
     const pointsDeCetteSousCategorie = pointsControleStructure || sousCategorie.pointsControle || [];
+
+    // ✅ NOUVEAU : Calculer les statistiques
+    const stats = useMemo(() => {
+        const total = pointsDeCetteSousCategorie.length;
+        let conforme = 0;
+        let nonConforme = 0;
+        let sansObjet = 0;
+        let aFaire = 0;
+
+        pointsDeCetteSousCategorie.forEach(point => {
+            const resultat = resultatsSousCategorie?.[point.id]?.resultat;
+            
+            if (resultat === 'C') conforme++;
+            else if (resultat === 'NC') nonConforme++;
+            else if (resultat === 'SO') sansObjet++;
+            else aFaire++;
+        });
+
+        return { total, conforme, nonConforme, sansObjet, aFaire };
+    }, [pointsDeCetteSousCategorie, resultatsSousCategorie]);
 
     const handleOpenPointFormModal = (point = null) => {
         setEditingPoint(point);
@@ -33,69 +52,120 @@ export function ControleQualiteSousCategorieItem({
     };
 
     return (
-        <div className="py-2 pl-4 border-l-2 border-slate-300">
+        <div className="border border-slate-200 rounded-md bg-white">
             <div 
-                className="flex justify-between items-center cursor-pointer hover:bg-slate-100 p-2 rounded-md -ml-2 -mr-2"
+                className="flex items-center gap-2 p-3 cursor-pointer hover:bg-slate-50"
+                onClick={() => setIsOpen(!isOpen)}
             >
-                <div onClick={() => setIsOpen(!isOpen)} className="flex-grow flex items-center">
-                    {isOpen ? <ChevronUp size={16} className="text-slate-500 mr-2" /> : <ChevronDown size={16} className="text-slate-500 mr-2" />}
-                    <h5 className="font-medium text-sm text-slate-700 flex items-center">
-                        <ListChecks size={16} className="mr-2 text-slate-500" />
-                        {sousCategorie.nom}
-                    </h5>
-                </div>
-                <div className="flex items-center">
-                    <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); handleOpenPointFormModal(null); }} className="h-7 w-7 ml-2 text-slate-500 hover:text-slate-700">
-                        <PlusCircle size={16} />
-                    </Button>
-                    {pointsDeCetteSousCategorie.length > 0 && (
-                        <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setShowStats(!showStats); }} className="h-7 w-7 ml-2">
-                            <PieChartIcon size={16} className={`text-slate-500 ${showStats ? 'text-blue-600' : ''}`} />
-                        </Button>
+                {/* Chevron */}
+                <motion.div
+                    animate={{ rotate: isOpen ? 90 : 0 }}
+                    transition={{ duration: 0.2 }}
+                >
+                    <ChevronRight className="h-4 w-4 text-slate-500" />
+                </motion.div>
+
+                {/* Icône */}
+                <span className="text-base">📝</span>
+
+                {/* Titre */}
+                <h5 className="font-medium text-sm text-slate-700 flex-1">
+                    {sousCategorie.nom}
+                </h5>
+
+                {/* ✅ NOUVEAU : Badges statistiques */}
+                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    {/* Badge Total */}
+                    <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 text-xs px-2 py-0">
+                        {stats.total}
+                    </Badge>
+
+                    {/* Badge Conforme */}
+                    {stats.conforme > 0 && (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs px-2 py-0">
+                            {stats.conforme} C
+                        </Badge>
                     )}
+
+                    {/* Badge Non-Conforme */}
+                    {stats.nonConforme > 0 && (
+                        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs px-2 py-0">
+                            {stats.nonConforme} NC
+                        </Badge>
+                    )}
+
+                    {/* Badge Sans Objet */}
+                    {stats.sansObjet > 0 && (
+                        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs px-2 py-0">
+                            {stats.sansObjet} SO
+                        </Badge>
+                    )}
+
+                    {/* Badge À Faire */}
+                    {stats.aFaire > 0 && (
+                        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs px-2 py-0">
+                            {stats.aFaire}
+                        </Badge>
+                    )}
+
+                    {/* Séparateur */}
+                    {stats.total > 0 && (
+                        <div className="w-px h-5 bg-slate-200 mx-0.5" />
+                    )}
+
+                    {/* Bouton Ajouter */}
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={(e) => { 
+                            e.stopPropagation(); 
+                            handleOpenPointFormModal(null); 
+                        }} 
+                        className="h-7 w-7 text-slate-500 hover:text-sky-600 hover:bg-slate-50"
+                        title="Ajouter un contrôle"
+                    >
+                        <PlusCircle className="h-4 w-4" />
+                    </Button>
                 </div>
             </div>
-            <AnimatePresence>
-                {showStats && pointsDeCetteSousCategorie.length > 0 && (
-                     <motion.div 
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="my-2 p-3 bg-slate-50 rounded-md border"
-                    >
-                        <CategorieStatsPieChart resultatsPoints={resultatsSousCategorie} pointsControle={pointsDeCetteSousCategorie} />
-                    </motion.div>
-                )}
-            </AnimatePresence>
+
+            {/* Contenu collapsed */}
             <AnimatePresence>
                 {isOpen && (
                     <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         exit={{ opacity: 0, height: 0 }}
-                        className="mt-2 space-y-2"
+                        transition={{ duration: 0.2 }}
+                        className="border-t border-slate-200"
                     >
-                        {pointsDeCetteSousCategorie.map((pc) => (
-                            <PointControleResultatItem 
-                                key={pc.id}
-                                point={pc}
-                                resultatData={resultatsSousCategorie[pc.id]}
-                                chantierId={chantierId}
-                                modeleId={modeleId}
-                                domaineId={domaineId}
-                                sousCategorieId={sousCategorie.id}
-                                onResultatChange={onPointResultatChange}
-                                onUpdatePointControle={onUpdatePointControle}
-                                onDeletePointControle={onDeletePointControle}
-                                documents={documents} // ✅ AJOUT: Passer les documents
-                            />
-                        ))}
-                        {pointsDeCetteSousCategorie.length === 0 && (
-                            <p className="text-xs text-slate-400 italic py-1">Aucun point de contrôle dans cette sous-catégorie.</p>
-                        )}
+                        <div className="p-3 pt-2 space-y-2 bg-slate-50">
+                            {pointsDeCetteSousCategorie.map((pc) => (
+                                <PointControleResultatItem 
+                                    key={pc.id}
+                                    point={pc}
+                                    resultatData={resultatsSousCategorie[pc.id]}
+                                    chantierId={chantierId}
+                                    modeleId={modeleId}
+                                    domaineId={domaineId}
+                                    sousCategorieId={sousCategorie.id}
+                                    onResultatChange={onPointResultatChange}
+                                    onUpdatePointControle={onUpdatePointControle}
+                                    onDeletePointControle={onDeletePointControle}
+                                    documents={documents}
+                                />
+                            ))}
+                            {pointsDeCetteSousCategorie.length === 0 && (
+                                <p className="text-xs text-slate-400 italic py-1">
+                                    Aucun point de contrôle dans cette sous-catégorie.
+                                </p>
+                            )}
+                        </div>
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Modal ajout/édition point */}
             {isPointFormModalOpen && (
                 <PointControleFormModal
                     isOpen={isPointFormModalOpen}

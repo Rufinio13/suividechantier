@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CheckCircle, AlertCircle, HelpCircle, XCircle, Camera, Paperclip, Edit3, CalendarPlus, Edit2 as EditIcon, Trash2 } from 'lucide-react';
+import { CheckCircle, AlertCircle, HelpCircle, XCircle, CalendarPlus, Edit2 as EditIcon, Trash2 } from 'lucide-react';
 import { PointControleFormModal } from '@/components/controle-qualite/PointControleFormModal';
+import { ImageUploadCQ } from '@/components/controle-qualite/ImageUploadCQ';
 
 const getResultatStyle = (resultat) => {
   switch (resultat) {
@@ -37,16 +38,10 @@ export function PointControleResultatItem({
     onResultatChange,
     onUpdatePointControle,
     onDeletePointControle,
-    documents = [] // ✅ AJOUT: Valeur par défaut pour éviter undefined
+    documents = []
 }) {
   const [isExpanded, setIsExpanded] = useState(resultatData?.resultat === 'NC');
   const [isPointFormModalOpen, setIsPointFormModalOpen] = useState(false);
-  
-  // ✅ CORRIGÉ: Vérifier que documents existe et est un tableau
-  const plansDuChantier = useMemo(() => {
-    if (!Array.isArray(documents)) return [];
-    return documents.filter(doc => doc.chantierId === chantierId && doc.type === 'Plan');
-  }, [documents, chantierId]);
 
   const resultatOptions = [
     { value: 'C', label: 'C' },
@@ -57,15 +52,24 @@ export function PointControleResultatItem({
   const currentData = resultatData || { 
     resultat: '', 
     explicationNC: '', 
-    photoNC: '', 
-    planIdNC: '', 
-    annotationsNC: '',
+    photos: [], // ✅ NOUVEAU : Array de photos
+    plans: [], // ✅ NOUVEAU : Array de plans annotés
     dateReprisePrevisionnelle: '',
     repriseValidee: false,
   };
 
   const handleResultatButtonClick = (value) => {
-    onResultatChange(point.id, value, currentData.explicationNC, currentData.photoNC, currentData.planIdNC, currentData.annotationsNC, currentData.dateReprisePrevisionnelle, currentData.repriseValidee);
+    onResultatChange(
+      point.id, 
+      value, 
+      currentData.explicationNC, 
+      currentData.photos, 
+      currentData.plans, 
+      '', // planIdNC deprecated
+      '', // annotationsNC deprecated
+      currentData.dateReprisePrevisionnelle, 
+      currentData.repriseValidee
+    );
     setIsExpanded(value === 'NC');
   };
 
@@ -75,19 +79,13 @@ export function PointControleResultatItem({
       point.id, 
       updatedData.resultat, 
       updatedData.explicationNC,
-      updatedData.photoNC,
-      updatedData.planIdNC,
-      updatedData.annotationsNC,
+      updatedData.photos,
+      updatedData.plans,
+      '', // planIdNC deprecated
+      '', // annotationsNC deprecated
       updatedData.dateReprisePrevisionnelle,
       updatedData.repriseValidee
     );
-  };
-  
-  const handlePhotoChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      handleChange('photoNC', file.name); 
-    }
   };
 
   const handleOpenEditModal = (e) => {
@@ -154,8 +152,11 @@ export function PointControleResultatItem({
             exit={{ opacity: 0, height: 0, marginTop: 0 }}
             className="space-y-4 pt-3 border-t border-slate-200"
           >
+            {/* Explication NC */}
             <div>
-              <Label htmlFor={`explicationNC-${point.id}`} className="text-xs font-medium text-slate-700">Explication (obligatoire si Non Conforme)</Label>
+              <Label htmlFor={`explicationNC-${point.id}`} className="text-xs font-medium text-slate-700">
+                Explication (obligatoire si Non Conforme)
+              </Label>
               <Textarea 
                 id={`explicationNC-${point.id}`}
                 value={currentData.explicationNC || ''}
@@ -167,72 +168,23 @@ export function PointControleResultatItem({
               />
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor={`photoNC-${point.id}`} className="text-xs font-medium text-slate-700">Ajouter une photo</Label>
-                <div className="mt-1 flex items-center gap-2">
-                  <Input 
-                    id={`photoNC-${point.id}`}
-                    type="file"
-                    accept="image/*"
-                    onChange={handlePhotoChange}
-                    className="text-sm hidden" 
-                  />
-                  <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById(`photoNC-${point.id}`).click()}>
-                      <Camera size={14} className="mr-1.5" /> Choisir photo
-                  </Button>
-                  {currentData.photoNC && (
-                      <div className="text-xs text-slate-600 flex items-center">
-                          <Paperclip size={12} className="mr-1 text-slate-500" />
-                          <span className="truncate max-w-[100px]">{currentData.photoNC}</span>
-                      </div>
-                  )}
-                </div>
-              </div>
-              <div>
-                <Label htmlFor={`planNC-${point.id}`} className="text-xs font-medium text-slate-700">Plan concerné</Label>
-                <Select
-                  value={currentData.planIdNC || ''}
-                  onValueChange={(value) => handleChange('planIdNC', value)}
-                >
-                  <SelectTrigger id={`planNC-${point.id}`} className="mt-1 text-sm">
-                    <SelectValue placeholder="Sélectionner un plan" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Aucun plan</SelectItem>
-                    {plansDuChantier.map(plan => (
-                      <SelectItem key={plan.id} value={plan.id}>{plan.nom}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            {/* ✅ NOUVEAU : Upload Photos */}
+            <ImageUploadCQ
+              type="photo"
+              images={currentData.photos || []}
+              chantierId={chantierId}
+              onImagesChange={(newPhotos) => handleChange('photos', newPhotos)}
+            />
 
-            {currentData.planIdNC && (
-              <div>
-                <Label htmlFor={`annotationsNC-${point.id}`} className="text-xs font-medium text-slate-700">Annotations sur le plan</Label>
-                <div className="mt-1 p-2 border rounded-md bg-gray-100 min-h-[80px] relative">
-                  <p className="text-xs text-gray-500 italic">
-                    {`Annotations pour le plan: ${plansDuChantier.find(p => p.id === currentData.planIdNC)?.nom || 'Plan non trouvé'}`}
-                  </p>
-                  <Textarea 
-                    id={`annotationsNC-${point.id}`}
-                    value={currentData.annotationsNC || ''}
-                    onChange={(e) => handleChange('annotationsNC', e.target.value)}
-                    placeholder="Décrivez les annotations ici (ex: Zone A, voir détail B)..."
-                    rows={2}
-                    className="mt-1 text-sm bg-white"
-                  />
-                  <div className="absolute top-2 right-2 flex space-x-1">
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => alert('Simulation: Outil Crayon')}>
-                      <Edit3 size={14} />
-                    </Button>
-                  </div>
-                </div>
-                 <p className="text-xs text-muted-foreground mt-1">La fonctionnalité d'annotation graphique n'est pas implémentée. Décrivez vos annotations.</p>
-              </div>
-            )}
+            {/* ✅ NOUVEAU : Upload Plans annotés */}
+            <ImageUploadCQ
+              type="plan"
+              images={currentData.plans || []}
+              chantierId={chantierId}
+              onImagesChange={(newPlans) => handleChange('plans', newPlans)}
+            />
 
+            {/* Date reprise prévisionnelle */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor={`dateReprisePrevisionnelle-${point.id}`} className="text-xs font-medium text-slate-700 flex items-center">
@@ -248,6 +200,7 @@ export function PointControleResultatItem({
               </div>
             </div>
             
+            {/* Checkbox Reprise validée */}
             <div className="flex items-center space-x-2 mt-2">
               <input
                 type="checkbox"
@@ -264,6 +217,7 @@ export function PointControleResultatItem({
           </motion.div>
         )}
       </AnimatePresence>
+      
       {isPointFormModalOpen && (
         <PointControleFormModal
             isOpen={isPointFormModalOpen}
