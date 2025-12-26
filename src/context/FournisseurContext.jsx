@@ -70,20 +70,45 @@ export function FournisseurProvider({ children }) {
   // METTRE À JOUR UN FOURNISSEUR
   // -----------------------------
   const updateFournisseur = async (id, updates) => {
-    const { data, error } = await supabase
-      .from("fournisseurs")
-      .update(updates)
-      .eq("id", id)
-      .select()
-      .single();
+    console.log('📤 updateFournisseur - ID:', id);
+    console.log('📤 updateFournisseur - Updates BRUT:', updates);
+    
+    try {
+      // ✅ NETTOYER les updates : enlever id, created_at, updated_at, user_id, nomsociete
+      const cleanUpdates = { ...updates };
+      delete cleanUpdates.id;
+      delete cleanUpdates.created_at;
+      delete cleanUpdates.updated_at;
+      delete cleanUpdates.user_id;
+      delete cleanUpdates.nomsociete;
+      
+      console.log('📤 updateFournisseur - Updates NETTOYÉS:', cleanUpdates);
+      
+      const { data, error } = await supabase
+        .from("fournisseurs")
+        .update(cleanUpdates)
+        .eq("id", id)
+        .select()
+        .single();
 
-    if (error) throw error;
+      console.log('📥 Réponse Supabase:', { data, error });
 
-    setFournisseurs((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, ...data } : f))
-    );
+      if (error) {
+        console.error("❌ Erreur Supabase updateFournisseur:", error);
+        throw error;
+      }
 
-    return data;
+      console.log("✅ Fournisseur mis à jour:", data);
+
+      setFournisseurs((prev) =>
+        prev.map((f) => (f.id === id ? data : f))
+      );
+
+      return data;
+    } catch (error) {
+      console.error('❌ Exception updateFournisseur:', error);
+      throw error;
+    }
   };
 
   // -----------------------------

@@ -13,7 +13,7 @@ export function SousTraitantProvider({ children }) {
   // ---- Charger les sous-traitants ----
   useEffect(() => {
     const loadSousTraitants = async () => {
-      if (!profile?.nomsociete) { // ✅ Utiliser profile?.nomsociete directement
+      if (!profile?.nomsociete) {
         console.log("SousTraitantContext : En attente de nomsociete...");
         setSousTraitants([]);
         setLoading(false);
@@ -26,7 +26,7 @@ export function SousTraitantProvider({ children }) {
       const { data, error } = await supabase
         .from("soustraitants")
         .select("*")
-        .eq("nomsociete", profile.nomsociete) // ✅ Utiliser profile.nomsociete
+        .eq("nomsociete", profile.nomsociete)
         .order("created_at", { ascending: true });
 
       if (error) {
@@ -58,7 +58,7 @@ export function SousTraitantProvider({ children }) {
 
       return () => supabase.removeChannel(channel);
     }
-  }, [profile?.nomsociete]); // ✅ Dépendre de profile?.nomsociete
+  }, [profile?.nomsociete]);
 
   // ---- Ajouter un sous-traitant ----
   const addSousTraitant = async (st) => {
@@ -96,27 +96,48 @@ export function SousTraitantProvider({ children }) {
 
   // ---- Mise à jour d'un sous-traitant ----
   const updateSousTraitant = async (id, updates) => {
-    console.log("📤 Update ST :", id, updates);
+    console.log('📤 updateSousTraitant - ID:', id);
+    console.log('📤 updateSousTraitant - Updates BRUT:', updates);
+    console.log('📤 updateSousTraitant - nomsociete:', profile?.nomsociete);
+    
+    try {
+      // ✅ NETTOYER les updates : enlever id, created_at, updated_at, user_id, nomsociete, nomsocieteST
+      const cleanUpdates = { ...updates };
+      delete cleanUpdates.id;
+      delete cleanUpdates.created_at;
+      delete cleanUpdates.updated_at;
+      delete cleanUpdates.user_id;
+      delete cleanUpdates.nomsociete;
+      delete cleanUpdates.nomsocieteST;
+      
+      console.log('📤 updateSousTraitant - Updates NETTOYÉS:', cleanUpdates);
+      
+      const { data, error } = await supabase
+        .from("soustraitants")
+        .update(cleanUpdates)
+        .eq("id", id)
+        .eq("nomsociete", profile?.nomsociete)
+        .select()
+        .single();
 
-    const { data, error } = await supabase
-      .from("soustraitants")
-      .update({ ...updates })
-      .eq("id", id)
-      .eq("nomsociete", profile?.nomsociete)
-      .select()
-      .single();
+      console.log('📥 Réponse Supabase:', { data, error });
 
-    if (error) {
-      console.error("❌ updateSousTraitant :", error);
+      if (error) {
+        console.error("❌ Erreur Supabase updateSousTraitant:", error);
+        throw error;
+      }
+
+      console.log("✅ Sous-traitant mis à jour:", data);
+      
+      setSousTraitants((prev) =>
+        (prev || []).map((s) => (s.id === id ? data : s))
+      );
+
+      return data;
+    } catch (error) {
+      console.error('❌ Exception updateSousTraitant:', error);
       throw error;
     }
-
-    console.log("✅ Update ST retour :", data);
-    setSousTraitants((prev) =>
-      (prev || []).map((s) => (s.id === id ? { ...s, ...data } : s))
-    );
-
-    return data;
   };
 
   // ---- Suppression d'un ST ----

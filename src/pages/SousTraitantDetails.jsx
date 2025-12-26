@@ -1,15 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useSousTraitant } from '@/context/SousTraitantContext.jsx';
 import { useLots } from '@/context/LotsContext.jsx';
-import { supabase } from '@/lib/supabaseClient';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { ArrowLeft, Edit, Trash2, Briefcase, Plus, ListChecks } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Checkbox } from "@/components/ui/checkbox";
@@ -23,17 +22,17 @@ export function SousTraitantDetails() {
   const { sousTraitants = [], loading, updateSousTraitant, deleteSousTraitant } = useSousTraitant();
   const { lots: globalLots = [] } = useLots();
 
-  // ⚡ Trouver le sous-traitant par ID
   const sousTraitant = useMemo(
     () => (sousTraitants ?? []).find(st => st.id === id),
     [sousTraitants, id]
   );
 
-  // MODALES
   const [isAssignLotsOpen, setIsAssignLotsOpen] = useState(false);
   const [isEditInfoOpen, setIsEditInfoOpen] = useState(false);
+  
+  // ✅ Protection anti-double-submit
+  const isSavingRef = useRef(false);
 
-  // FORMULAIRES
   const [formData, setFormData] = useState({
     nomST: '',
     PrenomST: '',
@@ -56,80 +55,96 @@ export function SousTraitantDetails() {
     }
   }, [sousTraitant]);
 
-  // Gérer les changements du formulaire
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Toggle lots assignés
   const handleLotToggle = (lotName) => {
     setSelectedLotNames(prev =>
       prev.includes(lotName) ? prev.filter(name => name !== lotName) : [...prev, lotName]
     );
   };
 
-  // Enregistrer les lots assignés
+  // ✅ Protection anti-double-submit pour les lots
   const saveAssignLots = async () => {
     if (!sousTraitant) return;
-
-    const { data, error } = await supabase
-      .from("soustraitants")
-      .update({ assigned_lots: selectedLotNames })
-      .eq("id", sousTraitant.id)
-      .select()
-      .single();
-
-    if (error) {
-      toast({ title: "Erreur", description: "Impossible d’assigner les lots", variant: "destructive" });
+    
+    // ✅ Vérifier si déjà en cours
+    if (isSavingRef.current) {
+      console.log('⚠️ Sauvegarde déjà en cours, ignoré');
       return;
     }
 
-    updateSousTraitant?.(sousTraitant.id, { assigned_lots: selectedLotNames });
-    setIsAssignLotsOpen(false);
-    toast({ title: "Lots enregistrés ✅" });
+    console.log('💾 Sauvegarde lots assignés:', selectedLotNames);
+    isSavingRef.current = true;
+
+    try {
+      await updateSousTraitant(sousTraitant.id, { 
+        assigned_lots: selectedLotNames 
+      });
+      setIsAssignLotsOpen(false);
+      toast({ title: "Lots enregistrés ✅" });
+    } catch (error) {
+      console.error('❌ Erreur saveAssignLots:', error);
+      toast({ title: "Erreur", description: "Impossible d'assigner les lots", variant: "destructive" });
+    } finally {
+      // ✅ Débloquer après un délai
+      setTimeout(() => {
+        isSavingRef.current = false;
+      }, 1000);
+    }
   };
 
-  // Enregistrer infos générales
+  // ✅ Protection anti-double-submit pour les infos
   const saveEditInfo = async (e) => {
     e.preventDefault();
     if (!sousTraitant) return;
-
-    const { data, error } = await supabase
-      .from("soustraitants")
-      .update(formData)
-      .eq("id", sousTraitant.id)
-      .select()
-      .single();
-
-    if (error) {
-      toast({ title: "Erreur", description: "Impossible de mettre à jour", variant: "destructive" });
+    
+    // ✅ Vérifier si déjà en cours
+    if (isSavingRef.current) {
+      console.log('⚠️ Sauvegarde déjà en cours, ignoré');
       return;
     }
 
-    updateSousTraitant?.(sousTraitant.id, data);
-    toast({ title: "Mis à jour ✅" });
-    setIsEditInfoOpen(false);
+    console.log('💾 Sauvegarde infos générales:', formData);
+    isSavingRef.current = true;
+
+    try {
+      await updateSousTraitant(sousTraitant.id, {
+        nomST: formData.nomST,
+        PrenomST: formData.PrenomST,
+        adresseST: formData.adresseST,
+        email: formData.email,
+        telephone: formData.telephone,
+      });
+      toast({ title: "Mis à jour ✅" });
+      setIsEditInfoOpen(false);
+    } catch (error) {
+      console.error('❌ Erreur saveEditInfo:', error);
+      toast({ title: "Erreur", description: "Impossible de mettre à jour", variant: "destructive" });
+    } finally {
+      // ✅ Débloquer après un délai
+      setTimeout(() => {
+        isSavingRef.current = false;
+      }, 1000);
+    }
   };
 
-  // Supprimer le sous-traitant
   const handleDelete = async () => {
     if (!sousTraitant) return;
     if (!window.confirm(`Supprimer ${sousTraitant.nomsocieteST}?`)) return;
 
-    const { error } = await supabase
-      .from("soustraitants")
-      .delete()
-      .eq("id", sousTraitant.id);
+    console.log('🗑️ Suppression sous-traitant:', sousTraitant.id);
 
-    if (error) {
+    try {
+      await deleteSousTraitant(sousTraitant.id);
+      toast({ title: "Supprimé ✅" });
+      navigate("/sous-traitants");
+    } catch (error) {
+      console.error('❌ Erreur handleDelete:', error);
       toast({ title: "Erreur", description: "Impossible de supprimer", variant: "destructive" });
-      return;
     }
-
-    deleteSousTraitant?.(sousTraitant.id);
-    toast({ title: "Supprimé ✅" });
-    navigate("/sous-traitants");
   };
 
   const initials = `${sousTraitant?.PrenomST?.[0] ?? ''}${sousTraitant?.nomST?.[0] ?? 'ST'}`.toUpperCase();
@@ -187,21 +202,36 @@ export function SousTraitantDetails() {
       {/* MODAL EDIT INFOS */}
       <Dialog open={isEditInfoOpen} onOpenChange={setIsEditInfoOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Modifier Infos</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Modifier Infos</DialogTitle>
+            <DialogDescription>Modifiez les informations du sous-traitant</DialogDescription>
+          </DialogHeader>
           <form onSubmit={saveEditInfo} className="space-y-3 py-3">
-            <Label>Nom</Label>
-            <Input name="nomST" value={formData.nomST} onChange={handleFormChange} />
-            <Label>Prénom</Label>
-            <Input name="PrenomST" value={formData.PrenomST} onChange={handleFormChange} />
-            <Label>Adresse</Label>
-            <Textarea name="adresseST" value={formData.adresseST} onChange={handleFormChange} rows={2} />
-            <Label>Email</Label>
-            <Input name="email" value={formData.email} onChange={handleFormChange} />
-            <Label>Téléphone</Label>
-            <Input name="telephone" value={formData.telephone} onChange={handleFormChange} />
+            <div className="space-y-2">
+              <Label htmlFor="nomST">Nom</Label>
+              <Input id="nomST" name="nomST" value={formData.nomST} onChange={handleFormChange} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="PrenomST">Prénom</Label>
+              <Input id="PrenomST" name="PrenomST" value={formData.PrenomST} onChange={handleFormChange} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="adresseST">Adresse</Label>
+              <Textarea id="adresseST" name="adresseST" value={formData.adresseST} onChange={handleFormChange} rows={2} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" name="email" type="email" value={formData.email} onChange={handleFormChange} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="telephone">Téléphone</Label>
+              <Input id="telephone" name="telephone" value={formData.telephone} onChange={handleFormChange} />
+            </div>
             <DialogFooter className="pt-2">
-              <Button variant="outline" onClick={() => setIsEditInfoOpen(false)}>Annuler</Button>
-              <Button type="submit">Enregistrer</Button>
+              <Button type="button" variant="outline" onClick={() => setIsEditInfoOpen(false)}>Annuler</Button>
+              <Button type="submit" disabled={isSavingRef.current}>
+                {isSavingRef.current ? 'Enregistrement...' : 'Enregistrer'}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -210,7 +240,10 @@ export function SousTraitantDetails() {
       {/* MODAL ASSIGN LOTS */}
       <Dialog open={isAssignLotsOpen} onOpenChange={setIsAssignLotsOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Assigner des lots</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Assigner des lots</DialogTitle>
+            <DialogDescription>Sélectionnez les lots/compétences du sous-traitant</DialogDescription>
+          </DialogHeader>
           <div className="max-h-[55vh] overflow-auto space-y-2 py-3">
             {globalLots.map(lot => (
               <div key={lot.id} className="flex items-center gap-2 hover:bg-muted/40 p-2 rounded-md">
@@ -224,8 +257,10 @@ export function SousTraitantDetails() {
             ))}
           </div>
           <DialogFooter className="pt-1">
-            <Button onClick={() => setIsAssignLotsOpen(false)} variant="outline">Annuler</Button>
-            <Button onClick={saveAssignLots}>Enregistrer</Button>
+            <Button type="button" onClick={() => setIsAssignLotsOpen(false)} variant="outline">Annuler</Button>
+            <Button onClick={saveAssignLots} disabled={isSavingRef.current}>
+              {isSavingRef.current ? 'Enregistrement...' : 'Enregistrer'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

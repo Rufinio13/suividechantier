@@ -8,9 +8,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Plus, Search, Box, Edit, Trash2 } from "lucide-react";
 import { FournisseurForm } from "@/components/FournisseurForm.jsx";
 import { FournisseurCard } from "@/components/FournisseurCard.jsx";
+import { useToast } from "@/components/ui/use-toast";
 
 export function FournisseursList() {
   const { fournisseurs = [], loading, deleteFournisseur } = useFournisseur();
+  const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -24,6 +26,27 @@ export function FournisseursList() {
   const handleCloseDialog = () => {
     setEditingFournisseur(null);
     setIsDialogOpen(false);
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer ce fournisseur ?")) {
+      return;
+    }
+
+    try {
+      await deleteFournisseur(id);
+      toast({
+        title: "Fournisseur supprimé ✅",
+        description: "Le fournisseur a été supprimé avec succès.",
+      });
+    } catch (error) {
+      console.error("Erreur suppression fournisseur:", error);
+      toast({
+        title: "Erreur ❌",
+        description: "Impossible de supprimer le fournisseur.",
+        variant: "destructive",
+      });
+    }
   };
 
   const filteredFournisseurs = useMemo(() => {
@@ -79,7 +102,7 @@ export function FournisseursList() {
               key={f.id}
               fournisseur={f}
               onEdit={() => handleOpenDialog(f)}
-              onDelete={() => deleteFournisseur(f.id)}
+              onDelete={() => handleDelete(f.id)}
             />
           ))}
         </motion.div>
@@ -114,6 +137,7 @@ export function FournisseursList() {
             <FournisseurForm
               initialData={editingFournisseur}
               onSuccess={handleCloseDialog}
+              onClose={handleCloseDialog}
             />
           </div>
         </DialogContent>

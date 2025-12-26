@@ -25,7 +25,7 @@ export function FournisseurForm({ initialData = null, onClose, onSuccess }) {
     assignedlots: [],
   });
 
-  // Préremplir si édition
+  // ✅ Préremplir UNIQUEMENT les champs modifiables
   useEffect(() => {
     if (initialData) {
       setFormData({
@@ -69,6 +69,7 @@ export function FournisseurForm({ initialData = null, onClose, onSuccess }) {
   };
 
   const handleSubmit = async (e) => {
+    console.log('🔵 handleSubmit appelé !');
     e.preventDefault();
 
     if (!profile?.nomsociete) {
@@ -84,11 +85,17 @@ export function FournisseurForm({ initialData = null, onClose, onSuccess }) {
       let result;
 
       if (initialData?.id) {
-        // MODE UPDATE
-        result = await updateFournisseur(initialData.id, {
-          ...formData,
-          nomsociete: profile.nomsociete, // cohérence login Supabase
-        });
+        // ✅ MODE UPDATE - Envoyer UNIQUEMENT les champs modifiables
+        const updates = {
+          nomsocieteF: formData.nomsocieteF,
+          nomcontact: formData.nomcontact,
+          email: formData.email,
+          telephone: formData.telephone,
+          adresse: formData.adresse,
+          assignedlots: formData.assignedlots,
+        };
+        
+        result = await updateFournisseur(initialData.id, updates);
 
         toast({
           title: "Fournisseur mis à jour ✅",
@@ -133,13 +140,13 @@ export function FournisseurForm({ initialData = null, onClose, onSuccess }) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 py-4">
+    <form id="fournisseur-form" onSubmit={handleSubmit} className="space-y-4 py-4">
       
       <div className="space-y-2">
         <Label>Nom de la société <span className="text-red-500">*</span></Label>
         <Input
           name="nomsocieteF"
-          value={formData.nomsocieteF}
+          value={formData.nomsocieteF || ""}
           onChange={handleChange}
           required
           placeholder="Ex: ACME Construction"
@@ -150,7 +157,7 @@ export function FournisseurForm({ initialData = null, onClose, onSuccess }) {
         <Label>Nom du contact</Label>
         <Input
           name="nomcontact"
-          value={formData.nomcontact}
+          value={formData.nomcontact || ""}
           onChange={handleChange}
           placeholder="Ex: Jean Dupont"
         />
@@ -162,7 +169,7 @@ export function FournisseurForm({ initialData = null, onClose, onSuccess }) {
           <Input
             name="email"
             type="email"
-            value={formData.email}
+            value={formData.email || ""}
             onChange={handleChange}
             placeholder="exemple@email.com"
           />
@@ -171,7 +178,7 @@ export function FournisseurForm({ initialData = null, onClose, onSuccess }) {
           <Label>Téléphone</Label>
           <Input
             name="telephone"
-            value={formData.telephone}
+            value={formData.telephone || ""}
             onChange={handleChange}
             placeholder="06 00 00 00 00"
           />
@@ -182,7 +189,7 @@ export function FournisseurForm({ initialData = null, onClose, onSuccess }) {
         <Label>Adresse</Label>
         <Textarea
           name="adresse"
-          value={formData.adresse}
+          value={formData.adresse || ""}
           onChange={handleChange}
           rows={2}
           placeholder="Adresse complète..."
@@ -233,7 +240,7 @@ export function FournisseurForm({ initialData = null, onClose, onSuccess }) {
         <Button type="button" variant="outline" onClick={onClose}>
           Annuler
         </Button>
-        <Button type="submit">
+        <Button type="submit" form="fournisseur-form">
           <Plus className="mr-2 h-4 w-4" />
           {initialData ? "Enregistrer" : "Créer"}
         </Button>

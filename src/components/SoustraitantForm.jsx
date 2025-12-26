@@ -26,7 +26,18 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
   });
 
   useEffect(() => {
-    if (initialData) setFormData(initialData);
+    if (initialData) {
+      // ✅ Copier UNIQUEMENT les champs modifiables
+      setFormData({
+        nomsocieteST: initialData.nomsocieteST || "",
+        nomST: initialData.nomST || "",
+        PrenomST: initialData.PrenomST || "",
+        email: initialData.email || "",
+        telephone: initialData.telephone || "",
+        adresseST: initialData.adresseST || "",
+        assigned_lots: initialData.assigned_lots || [],
+      });
+    }
   }, [initialData]);
 
   const handleChange = (e) => {
@@ -48,7 +59,17 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
     try {
       let result;
       if (initialData?.id) {
-        result = await updateSousTraitant(initialData.id, formData);
+        // ✅ Envoyer UNIQUEMENT les champs modifiables
+        const updates = {
+          nomsocieteST: formData.nomsocieteST,
+          nomST: formData.nomST,
+          PrenomST: formData.PrenomST,
+          email: formData.email,
+          telephone: formData.telephone,
+          adresseST: formData.adresseST,
+          assigned_lots: formData.assigned_lots,
+        };
+        result = await updateSousTraitant(initialData.id, updates);
         toast({ title: "Sous-traitant mis à jour ✅", description: result.nomsocieteST });
       } else {
         result = await addSousTraitant(formData);
@@ -81,34 +102,34 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="nomsocieteST">Nom de la société <span className="text-red-500">*</span></Label>
-            <Input id="nomsocieteST" name="nomsocieteST" value={formData.nomsocieteST} onChange={handleChange} required />
+            <Input id="nomsocieteST" name="nomsocieteST" value={formData.nomsocieteST || ""} onChange={handleChange} required />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="PrenomST">Prénom</Label>
-              <Input id="PrenomST" name="PrenomST" value={formData.PrenomST} onChange={handleChange} />
+              <Input id="PrenomST" name="PrenomST" value={formData.PrenomST || ""} onChange={handleChange} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="nomST">Nom</Label>
-              <Input id="nomST" name="nomST" value={formData.nomST} onChange={handleChange} />
+              <Input id="nomST" name="nomST" value={formData.nomST || ""} onChange={handleChange} />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} />
+              <Input id="email" name="email" type="email" value={formData.email || ""} onChange={handleChange} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="telephone">Téléphone</Label>
-              <Input id="telephone" name="telephone" value={formData.telephone} onChange={handleChange} />
+              <Input id="telephone" name="telephone" value={formData.telephone || ""} onChange={handleChange} />
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="adresseST">Adresse</Label>
-            <Textarea id="adresseST" name="adresseST" value={formData.adresseST} onChange={handleChange} rows={2} />
+            <Textarea id="adresseST" name="adresseST" value={formData.adresseST || ""} onChange={handleChange} rows={2} />
           </div>
 
           {/* Sélection des lots via checkbox */}

@@ -25,7 +25,7 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   const [isAddTacheDialogOpen, setIsAddTacheDialogOpen] = useState(false);
   const [isEditTacheDialogOpen, setIsEditTacheDialogOpen] = useState(false);
   const [selectedTache, setSelectedTache] = useState(null);
-  const [hideCompleted, setHideCompleted] = useState(true); // ✅ CHANGÉ: true par défaut
+  const [hideCompleted, setHideCompleted] = useState(true);
 
   const chantier = useMemo(() => chantiers.find(c => c.id === chantierId), [chantiers, chantierId]);
 
@@ -75,6 +75,28 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   const openEditTacheDialog = tache => {
     setSelectedTache(tache);
     setIsEditTacheDialogOpen(true);
+  };
+
+  // ✅ Gestion de la suppression avec confirmation et gestion d'erreur
+  const handleDeleteTache = async (tacheId) => {
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette tâche ?")) {
+      return;
+    }
+
+    try {
+      await deleteTache(tacheId);
+      toast({
+        title: "Tâche supprimée ✅",
+        description: "La tâche a été supprimée avec succès.",
+      });
+    } catch (error) {
+      console.error("Erreur suppression tâche:", error);
+      toast({
+        title: "Erreur ❌",
+        description: "Impossible de supprimer la tâche.",
+        variant: "destructive",
+      });
+    }
   };
 
   if (loading && !isEmbedded) return <div className="flex justify-center items-center h-64">Chargement...</div>;
@@ -188,7 +210,7 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
                       tache={tache}
                       lots={globalLots}
                       onEdit={() => openEditTacheDialog(tache)}
-                      onDelete={() => deleteTache(tache.id)}
+                      onDelete={() => handleDeleteTache(tache.id)}
                       conflicts={conflictsForChantier}
                     />
                   ))}

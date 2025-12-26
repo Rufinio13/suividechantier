@@ -200,6 +200,8 @@ const deleteTache = async (id) => {
   
   setTaches(prev => prev.filter(t => t.id !== id));
   console.log("✅ Tâche supprimée du state local");
+return data;  
+
 };
 
   // ---------------------
