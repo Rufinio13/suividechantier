@@ -17,6 +17,7 @@ export function PointControleFormModal({
 }) {
   const [libelle, setLibelle] = useState('');
   const [description, setDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false); // ✅ NOUVEAU : Protection double soumission
 
   useEffect(() => {
     if (point) {
@@ -26,24 +27,48 @@ export function PointControleFormModal({
       setLibelle('');
       setDescription('');
     }
+    setIsSubmitting(false); // ✅ Reset à l'ouverture
   }, [point, isOpen]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // ✅ Protection contre double soumission
+    if (isSubmitting) {
+      console.log('⚠️ Formulaire déjà en cours de soumission, ignoré');
+      return;
+    }
+    
     if (!libelle.trim()) {
-      // Gérer l'erreur, par exemple avec un toast
       alert("Le libellé est obligatoire.");
       return;
     }
+    
+    setIsSubmitting(true);
+    console.log('📤 Soumission du formulaire point de contrôle:', libelle);
+    
     onSave({
       libelle: libelle.trim(),
       description: description.trim(),
     });
-    onClose();
+    
+    // Fermer le modal après un court délai pour éviter les doubles clics
+    setTimeout(() => {
+      onClose();
+      setIsSubmitting(false);
+    }, 100);
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog 
+      open={isOpen} 
+      onOpenChange={(open) => {
+        // Empêcher la fermeture pendant la soumission
+        if (!open && !isSubmitting) {
+          onClose();
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>{point ? 'Modifier le Point de Contrôle' : 'Ajouter un Point de Contrôle'}</DialogTitle>
@@ -58,6 +83,7 @@ export function PointControleFormModal({
               placeholder="Ex: Conformité des armatures"
               required
               className="mt-1"
+              disabled={isSubmitting}
             />
           </div>
           
@@ -70,17 +96,19 @@ export function PointControleFormModal({
               placeholder="Critères d'acceptation, normes à respecter..."
               rows={3}
               className="mt-1"
+              disabled={isSubmitting}
             />
           </div>
           
           <DialogFooter className="pt-4 border-t">
             <DialogClose asChild>
-              <Button type="button" variant="outline">
+              <Button type="button" variant="outline" disabled={isSubmitting}>
                 <X className="mr-2 h-4 w-4" /> Annuler
               </Button>
             </DialogClose>
-            <Button type="submit">
-              <Save className="mr-2 h-4 w-4" /> {point ? 'Sauvegarder' : 'Ajouter'}
+            <Button type="submit" disabled={isSubmitting}>
+              <Save className="mr-2 h-4 w-4" /> 
+              {isSubmitting ? 'Ajout en cours...' : (point ? 'Sauvegarder' : 'Ajouter')}
             </Button>
           </DialogFooter>
         </form>

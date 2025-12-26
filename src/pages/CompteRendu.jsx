@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Plus, Calendar, Edit, Trash2, Search, Camera, X, FileText, Download, Eye } from 'lucide-react';
+import { ImageUploadCR } from '@/components/compte-rendu/ImageUploadCR.jsx';
+import { ArrowLeft, Plus, Calendar, Edit, Trash2, Search, Camera, FileText, Download, Eye } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import jsPDF from 'jspdf';
@@ -99,10 +100,8 @@ export function CompteRendu({ isEmbedded = false, embeddedChantierId = null }) {
       };
 
       if (editingCompteRendu.id) {
-        // Modification
         await updateCompteRendu(editingCompteRendu.id, dataToSave);
       } else {
-        // Création
         await addCompteRendu(chantierId, dataToSave);
       }
       handleCloseModal();
@@ -121,34 +120,6 @@ export function CompteRendu({ isEmbedded = false, embeddedChantierId = null }) {
         alert('Erreur lors de la suppression du compte rendu');
       }
     }
-  };
-
-  // =========================================
-  // GESTION PHOTOS
-  // =========================================
-  const handleAddPhoto = () => {
-    if (!editingCompteRendu) return;
-    setEditingCompteRendu(prev => ({
-      ...prev,
-      photos: [...prev.photos, { description: '', url: '' }]
-    }));
-  };
-
-  const handleRemovePhoto = (index) => {
-    if (!editingCompteRendu) return;
-    setEditingCompteRendu(prev => ({
-      ...prev,
-      photos: prev.photos.filter((_, i) => i !== index)
-    }));
-  };
-
-  const handlePhotoChange = (index, field, value) => {
-    if (!editingCompteRendu) return;
-    setEditingCompteRendu(prev => {
-      const newPhotos = [...prev.photos];
-      newPhotos[index] = { ...newPhotos[index], [field]: value };
-      return { ...prev, photos: newPhotos };
-    });
   };
 
   // =========================================
@@ -468,45 +439,17 @@ export function CompteRendu({ isEmbedded = false, embeddedChantierId = null }) {
                   />
                 </div>
 
+                {/* ✅ NOUVEAU : Utilisation de ImageUploadCR */}
                 <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <Label>Photos</Label>
-                    <Button type="button" variant="outline" size="sm" onClick={handleAddPhoto}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Ajouter une photo
-                    </Button>
-                  </div>
-
-                  {editingCompteRendu.photos.length > 0 ? (
-                    <div className="space-y-3">
-                      {editingCompteRendu.photos.map((photo, index) => (
-                        <div key={index} className="flex flex-col space-y-2 p-3 border rounded-md">
-                          <div className="flex justify-between items-center">
-                            <Label htmlFor={`photo-desc-${index}`}>Description</Label>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleRemovePhoto(index)}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                          <Input
-                            id={`photo-desc-${index}`}
-                            value={photo.description}
-                            onChange={(e) => handlePhotoChange(index, 'description', e.target.value)}
-                            placeholder="Description de la photo"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-6 border rounded-md border-dashed">
-                      <Camera className="h-8 w-8 text-muted-foreground mb-2" />
-                      <p className="text-sm text-muted-foreground">Aucune photo ajoutée</p>
-                    </div>
-                  )}
+                  <Label className="mb-2">Photos</Label>
+                  <ImageUploadCR
+                    chantierId={chantierId}
+                    photos={editingCompteRendu.photos || []}
+                    onPhotosChange={(newPhotos) => setEditingCompteRendu(prev => ({
+                      ...prev,
+                      photos: newPhotos
+                    }))}
+                  />
                 </div>
 
                 <div className="flex justify-end space-x-2 pt-4">
@@ -578,13 +521,22 @@ export function CompteRendu({ isEmbedded = false, embeddedChantierId = null }) {
                 </div>
               )}
 
+              {/* ✅ NOUVEAU : Affichage des photos avec images */}
               {viewingCompteRendu.photos && viewingCompteRendu.photos.length > 0 && (
                 <div>
                   <h3 className="text-sm font-medium mb-2">Photos</h3>
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {viewingCompteRendu.photos.map((photo, index) => (
-                      <div key={index} className="p-2 border rounded-md">
-                        <p className="text-sm text-slate-700">{photo.description}</p>
+                      <div key={index} className="space-y-1">
+                        <img 
+                          src={photo.url} 
+                          alt={photo.description || `Photo ${index + 1}`}
+                          className="w-full aspect-square object-cover rounded-md border cursor-pointer hover:opacity-90 transition"
+                          onClick={() => window.open(photo.url, '_blank')}
+                        />
+                        {photo.description && (
+                          <p className="text-xs text-slate-600">{photo.description}</p>
+                        )}
                       </div>
                     ))}
                   </div>

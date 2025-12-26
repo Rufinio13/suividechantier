@@ -25,11 +25,10 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   const [isAddTacheDialogOpen, setIsAddTacheDialogOpen] = useState(false);
   const [isEditTacheDialogOpen, setIsEditTacheDialogOpen] = useState(false);
   const [selectedTache, setSelectedTache] = useState(null);
-  const [hideCompleted, setHideCompleted] = useState(false);
+  const [hideCompleted, setHideCompleted] = useState(true); // ✅ CHANGÉ: true par défaut
 
   const chantier = useMemo(() => chantiers.find(c => c.id === chantierId), [chantiers, chantierId]);
 
-  // ✅ CORRIGÉ : Utilise chantierid en minuscules
   const chantiersTaches = useMemo(() => {
     return taches
       .filter(t => t.chantierid === chantierId)
@@ -38,7 +37,6 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
 
   const displayedTaches = useMemo(() => (hideCompleted ? chantiersTaches.filter(t => !t.terminee) : chantiersTaches), [chantiersTaches, hideCompleted]);
 
-  // ✅ CORRIGÉ : Utilise assignetype, assigneid, datedebut, datefin en minuscules
   const conflictsForChantier = useMemo(() => {
     const conflicts = {};
     taches.forEach(t => {
@@ -105,7 +103,6 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
               <ArrowLeft className="mr-2 h-4 w-4" /> Retour au chantier
             </Link>
           </Button>
-          {/* ✅ CORRIGÉ : Utilise nomchantier au lieu de nom */}
           <h1 className="text-3xl font-bold">Planning du chantier: {chantier?.nomchantier}</h1>
           <p className="text-muted-foreground">Organisez et suivez l'avancement des tâches.</p>
         </div>

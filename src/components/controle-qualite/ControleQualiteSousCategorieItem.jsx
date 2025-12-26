@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { ChevronRight, PlusCircle } from 'lucide-react';
-import { PointControleResultatItem } from '@/components/controle-qualite/ControleQualiteListItem';
+import { ChevronDown, ChevronRight, Plus, Trash2, Pencil } from 'lucide-react';
+import { PointControleResultatItem } from '@/components/controle-qualite/ControleQualiteListItem.jsx';
 import { PointControleFormModal } from '@/components/controle-qualite/PointControleFormModal';
 
 export function ControleQualiteSousCategorieItem({ 
@@ -18,171 +18,233 @@ export function ControleQualiteSousCategorieItem({
     onUpdatePointControle,
     onDeletePointControle,
     onUpdateNomCategorie,
+    onSupprimerSousCategorie,
     documents = []
 }) {
-    const [isOpen, setIsOpen] = useState(false); // ✅ MODIFIÉ : Collapsed par défaut
-    const [isPointFormModalOpen, setIsPointFormModalOpen] = useState(false);
-    const [editingPoint, setEditingPoint] = useState(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isAddPointModalOpen, setIsAddPointModalOpen] = useState(false);
+  const [isEditingNom, setIsEditingNom] = useState(false);
+  const [editedNom, setEditedNom] = useState(sousCategorie.nom);
+  
+  // ✅ NOUVEAU : Ref pour éviter les doubles appels
+  const isAddingRef = useRef(false);
+
+  const pointsControle = pointsControleStructure || sousCategorie.pointsControle || [];
+
+  const stats = useMemo(() => {
+    let totalPoints = pointsControle.length;
+    let conformes = 0;
+    let nonConformes = 0;
+    let sansObjet = 0;
+
+    pointsControle.forEach(pc => {
+      const resultat = resultatsSousCategorie[pc.id]?.resultat;
+      if (resultat === 'C' || resultat === 'Conforme') conformes++;
+      if (resultat === 'NC' || resultat === 'Non conforme') nonConformes++;
+      if (resultat === 'SO' || resultat === 'Sans Objet') sansObjet++;
+    });
+
+    return { totalPoints, conformes, nonConformes, sansObjet };
+  }, [pointsControle, resultatsSousCategorie]);
+
+  const toggleExpand = () => {
+    setIsExpanded(prev => !prev);
+  };
+
+  const handleAddPointClick = () => {
+    setIsAddPointModalOpen(true);
+  };
+
+  // ✅ CORRIGÉ : Protection contre les doubles appels
+  const handleSaveNewPoint = useCallback((pointData) => {
+    // Si déjà en cours d'ajout, ignorer
+    if (isAddingRef.current) {
+      console.log('⚠️ Ajout déjà en cours, ignoré');
+      return;
+    }
     
-    const pointsDeCetteSousCategorie = pointsControleStructure || sousCategorie.pointsControle || [];
+    isAddingRef.current = true;
+    console.log('🎯 handleSaveNewPoint - Début ajout');
+    
+    onAddPointControle(modeleId, domaineId, sousCategorie.id, pointData);
+    
+    // Réinitialiser après un délai
+    setTimeout(() => {
+      isAddingRef.current = false;
+      setIsAddPointModalOpen(false);
+      console.log('✅ handleSaveNewPoint - Ajout terminé');
+    }, 500);
+  }, [modeleId, domaineId, sousCategorie.id, onAddPointControle]);
 
-    // ✅ NOUVEAU : Calculer les statistiques
-    const stats = useMemo(() => {
-        const total = pointsDeCetteSousCategorie.length;
-        let conforme = 0;
-        let nonConforme = 0;
-        let sansObjet = 0;
-        let aFaire = 0;
+  const handleSaveNomSousCategorie = () => {
+    if (editedNom.trim() && editedNom !== sousCategorie.nom) {
+      onUpdateNomCategorie?.(modeleId, domaineId, sousCategorie.id, editedNom.trim());
+    }
+    setIsEditingNom(false);
+  };
 
-        pointsDeCetteSousCategorie.forEach(point => {
-            const resultat = resultatsSousCategorie?.[point.id]?.resultat;
-            
-            if (resultat === 'C') conforme++;
-            else if (resultat === 'NC') nonConforme++;
-            else if (resultat === 'SO') sansObjet++;
-            else aFaire++;
-        });
+  const handleCancelEditNom = () => {
+    setEditedNom(sousCategorie.nom);
+    setIsEditingNom(false);
+  };
 
-        return { total, conforme, nonConforme, sansObjet, aFaire };
-    }, [pointsDeCetteSousCategorie, resultatsSousCategorie]);
-
-    const handleOpenPointFormModal = (point = null) => {
-        setEditingPoint(point);
-        setIsPointFormModalOpen(true);
-    };
-
-    return (
-        <div className="border border-slate-200 rounded-md bg-white">
-            <div 
-                className="flex items-center gap-2 p-3 cursor-pointer hover:bg-slate-50"
-                onClick={() => setIsOpen(!isOpen)}
+  return (
+    <Card className="bg-slate-50/50 shadow-sm">
+      <CardHeader 
+        className="cursor-pointer hover:bg-slate-100/50 transition-colors py-2 px-4"
+        onClick={toggleExpand}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 flex-1">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={(e) => { e.stopPropagation(); toggleExpand(); }}
+              className="h-7 w-7"
             >
-                {/* Chevron */}
-                <motion.div
-                    animate={{ rotate: isOpen ? 90 : 0 }}
-                    transition={{ duration: 0.2 }}
-                >
-                    <ChevronRight className="h-4 w-4 text-slate-500" />
-                </motion.div>
-
-                {/* Icône */}
-                <span className="text-base">📝</span>
-
-                {/* Titre */}
-                <h5 className="font-medium text-sm text-slate-700 flex-1">
-                    {sousCategorie.nom}
-                </h5>
-
-                {/* ✅ NOUVEAU : Badges statistiques */}
-                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                    {/* Badge Total */}
-                    <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 text-xs px-2 py-0">
-                        {stats.total}
-                    </Badge>
-
-                    {/* Badge Conforme */}
-                    {stats.conforme > 0 && (
-                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs px-2 py-0">
-                            {stats.conforme} C
-                        </Badge>
-                    )}
-
-                    {/* Badge Non-Conforme */}
-                    {stats.nonConforme > 0 && (
-                        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs px-2 py-0">
-                            {stats.nonConforme} NC
-                        </Badge>
-                    )}
-
-                    {/* Badge Sans Objet */}
-                    {stats.sansObjet > 0 && (
-                        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 text-xs px-2 py-0">
-                            {stats.sansObjet} SO
-                        </Badge>
-                    )}
-
-                    {/* Badge À Faire */}
-                    {stats.aFaire > 0 && (
-                        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 text-xs px-2 py-0">
-                            {stats.aFaire}
-                        </Badge>
-                    )}
-
-                    {/* Séparateur */}
-                    {stats.total > 0 && (
-                        <div className="w-px h-5 bg-slate-200 mx-0.5" />
-                    )}
-
-                    {/* Bouton Ajouter */}
-                    <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={(e) => { 
-                            e.stopPropagation(); 
-                            handleOpenPointFormModal(null); 
-                        }} 
-                        className="h-7 w-7 text-slate-500 hover:text-sky-600 hover:bg-slate-50"
-                        title="Ajouter un contrôle"
-                    >
-                        <PlusCircle className="h-4 w-4" />
-                    </Button>
-                </div>
-            </div>
-
-            {/* Contenu collapsed */}
-            <AnimatePresence>
-                {isOpen && (
-                    <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="border-t border-slate-200"
-                    >
-                        <div className="p-3 pt-2 space-y-2 bg-slate-50">
-                            {pointsDeCetteSousCategorie.map((pc) => (
-                                <PointControleResultatItem 
-                                    key={pc.id}
-                                    point={pc}
-                                    resultatData={resultatsSousCategorie[pc.id]}
-                                    chantierId={chantierId}
-                                    modeleId={modeleId}
-                                    domaineId={domaineId}
-                                    sousCategorieId={sousCategorie.id}
-                                    onResultatChange={onPointResultatChange}
-                                    onUpdatePointControle={onUpdatePointControle}
-                                    onDeletePointControle={onDeletePointControle}
-                                    documents={documents}
-                                />
-                            ))}
-                            {pointsDeCetteSousCategorie.length === 0 && (
-                                <p className="text-xs text-slate-400 italic py-1">
-                                    Aucun point de contrôle dans cette sous-catégorie.
-                                </p>
-                            )}
-                        </div>
-                    </motion.div>
+              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </Button>
+            
+            {isEditingNom ? (
+              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  value={editedNom}
+                  onChange={(e) => setEditedNom(e.target.value)}
+                  onBlur={handleSaveNomSousCategorie}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveNomSousCategorie();
+                    if (e.key === 'Escape') handleCancelEditNom();
+                  }}
+                  className="px-2 py-1 border rounded text-sm font-medium"
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <h4 className="text-sm font-medium text-slate-700">
+                  {sousCategorie.nom}
+                </h4>
+                {onUpdateNomCategorie && !sousCategorie.isChantierSpecificContainer && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsEditingNom(true);
+                    }}
+                    className="h-5 w-5 text-slate-400 hover:text-slate-600"
+                    title="Modifier le nom de la sous-catégorie"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
                 )}
-            </AnimatePresence>
+              </div>
+            )}
+            
+            <div className="flex items-center gap-2 ml-2">
+              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-xs font-medium rounded">
+                {stats.totalPoints} point{stats.totalPoints > 1 ? 's' : ''}
+              </span>
+              {stats.conformes > 0 && (
+                <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded">
+                  {stats.conformes} C
+                </span>
+              )}
+              {stats.nonConformes > 0 && (
+                <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded">
+                  {stats.nonConformes} NC
+                </span>
+              )}
+              {stats.sansObjet > 0 && (
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs font-medium rounded">
+                  {stats.sansObjet} SO
+                </span>
+              )}
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            {!sousCategorie.isChantierSpecificContainer && (
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={(e) => { e.stopPropagation(); handleAddPointClick(); }} 
+                className="h-7 w-7 text-green-500 hover:text-green-700"
+                title="Ajouter un point de contrôle"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            )}
 
-            {/* Modal ajout/édition point */}
-            {isPointFormModalOpen && (
-                <PointControleFormModal
-                    isOpen={isPointFormModalOpen}
-                    onClose={() => setIsPointFormModalOpen(false)}
-                    point={editingPoint}
+            {!sousCategorie.isChantierSpecificContainer && (
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  onSupprimerSousCategorie(); 
+                }} 
+                className="h-7 w-7 text-red-400 hover:text-red-600"
+                title="Supprimer cette sous-catégorie pour ce chantier"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            <CardContent className="pt-2 pb-3 px-4 space-y-2">
+              {pointsControle.length > 0 ? (
+                pointsControle.map(pc => (
+                  <PointControleResultatItem 
+                    key={pc.id}
+                    point={pc}
+                    resultatData={resultatsSousCategorie[pc.id]}
+                    chantierId={chantierId}
                     modeleId={modeleId}
                     domaineId={domaineId}
                     sousCategorieId={sousCategorie.id}
-                    onSave={(data) => {
-                        if (editingPoint) {
-                            onUpdatePointControle(modeleId, domaineId, sousCategorie.id, editingPoint.id, data);
-                        } else {
-                            onAddPointControle(modeleId, domaineId, sousCategorie.id, data);
-                        }
-                    }}
-                />
-            )}
-        </div>
-    );
+                    onResultatChange={onPointResultatChange}
+                    onUpdatePointControle={onUpdatePointControle}
+                    onDeletePointControle={onDeletePointControle}
+                    documents={documents}
+                  />
+                ))
+              ) : (
+                <p className="text-xs text-slate-500 italic py-2">
+                  Aucun point de contrôle disponible.
+                </p>
+              )}
+            </CardContent>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ✅ MODIFIÉ : Gérer la fermeture du modal */}
+      {isAddPointModalOpen && (
+        <PointControleFormModal
+          isOpen={isAddPointModalOpen}
+          onClose={() => {
+            if (!isAddingRef.current) {
+              setIsAddPointModalOpen(false);
+            }
+          }}
+          modeleId={modeleId}
+          domaineId={domaineId}
+          sousCategorieId={sousCategorie.id}
+          onSave={handleSaveNewPoint}
+        />
+      )}
+    </Card>
+  );
 }

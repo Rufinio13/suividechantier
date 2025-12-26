@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -18,24 +18,23 @@ export function ReferentielCQProvider({ children }) {
   const [modelesCQ, setModelesCQ] = useState([]);
   const [controles, setControles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modelesLoaded, setModelesLoaded] = useState(false); // ✅ NOUVEAU
-  const [controlesLoaded, setControlesLoaded] = useState(false); // ✅ NOUVEAU
+  const [modelesLoaded, setModelesLoaded] = useState(false);
+  const [controlesLoaded, setControlesLoaded] = useState(false);
+  
+  // ✅ NOUVEAU : Ref pour bloquer les doubles appels lors de l'ajout de points
+  const isAddingPointRef = useRef(false);
 
-  // ✅ NOUVEAU : Mettre loading à false quand les deux sont chargés
   useEffect(() => {
     if (modelesLoaded && controlesLoaded) {
       setLoading(false);
     }
   }, [modelesLoaded, controlesLoaded]);
 
-  // =========================================
-  // CHARGER LES MODÈLES CQ
-  // =========================================
   useEffect(() => {
     const fetchModelesCQ = async () => {
       if (!profile?.nomsociete) {
         console.log('ReferentielCQContext : En attente de nomsociete...');
-        setModelesLoaded(true); // ✅ MODIFIÉ
+        setModelesLoaded(true);
         return;
       }
 
@@ -56,21 +55,18 @@ export function ReferentielCQProvider({ children }) {
         console.error('❌ Erreur lors du chargement des modèles CQ:', error);
         setModelesCQ([]);
       } finally {
-        setModelesLoaded(true); // ✅ MODIFIÉ
+        setModelesLoaded(true);
       }
     };
 
     fetchModelesCQ();
   }, [profile?.nomsociete]);
 
-  // =========================================
-  // CHARGER LES CONTRÔLES QUALITÉ
-  // =========================================
   useEffect(() => {
     const fetchControles = async () => {
       if (!profile?.nomsociete) {
         console.log('ReferentielCQContext : En attente de nomsociete pour contrôles...');
-        setControlesLoaded(true); // ✅ MODIFIÉ
+        setControlesLoaded(true);
         return;
       }
 
@@ -91,16 +87,13 @@ export function ReferentielCQProvider({ children }) {
         console.error('❌ Erreur lors du chargement des contrôles:', error);
         setControles([]);
       } finally {
-        setControlesLoaded(true); // ✅ MODIFIÉ
+        setControlesLoaded(true);
       }
     };
 
     fetchControles();
   }, [profile?.nomsociete]);
 
-  // =========================================
-  // AJOUTER UN MODÈLE CQ
-  // =========================================
   const addModeleCQ = async (modeleData) => {
     try {
       const dataToInsert = {
@@ -126,9 +119,6 @@ export function ReferentielCQProvider({ children }) {
     }
   };
 
-  // =========================================
-  // METTRE À JOUR UN MODÈLE CQ
-  // =========================================
   const updateModeleCQ = async (id, updates) => {
     try {
       const dataToUpdate = {
@@ -154,9 +144,6 @@ export function ReferentielCQProvider({ children }) {
     }
   };
 
-  // =========================================
-  // SUPPRIMER UN MODÈLE CQ
-  // =========================================
   const deleteModeleCQ = async (id) => {
     try {
       const { error } = await supabase
@@ -175,9 +162,6 @@ export function ReferentielCQProvider({ children }) {
     }
   };
 
-  // =========================================
-  // SAUVEGARDER UN CONTRÔLE DEPUIS UN MODÈLE
-  // =========================================
   const saveControleFromModele = async (chantierId, modeleCQId, resultats, pointsSpecifiques) => {
     try {
       console.log('💾 saveControleFromModele:', { chantierId, modeleCQId });
@@ -196,7 +180,6 @@ export function ReferentielCQProvider({ children }) {
       if (existingControle) {
         console.log('📝 Mise à jour contrôle existant:', existingControle.id);
         
-        // Mise à jour
         const { data, error } = await supabase
           .from('controles_qualite')
           .update({
@@ -216,7 +199,6 @@ export function ReferentielCQProvider({ children }) {
       } else {
         console.log('➕ Création nouveau contrôle');
         
-        // Création
         const { data, error } = await supabase
           .from('controles_qualite')
           .insert([{
@@ -243,17 +225,21 @@ export function ReferentielCQProvider({ children }) {
     }
   };
 
-  // =========================================
-  // RÉCUPÉRER LES CONTRÔLES D'UN CHANTIER
-  // =========================================
   const getControlesByChantier = (chantierId) => {
     return controles.filter(c => c.chantier_id === chantierId);
   };
 
-  // =========================================
-  // AJOUTER UN POINT SPÉCIFIQUE
-  // =========================================
+  // ✅ CORRIGÉ : Protection contre les doubles appels
   const addPointControleChantierSpecific = async (chantierId, modeleId, domaineId, sousCategorieId, pointData) => {
+    // ✅ PROTECTION : Si déjà en cours, rejeter
+    if (isAddingPointRef.current) {
+      console.log('⚠️ addPointControleChantierSpecific déjà en cours, ignoré');
+      return { success: false, message: 'Déjà en cours' };
+    }
+
+    isAddingPointRef.current = true;
+    console.log('🔵 addPointControleChantierSpecific - Début', pointData.id);
+
     try {
       const existingControle = controles.find(
         c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
@@ -268,6 +254,14 @@ export function ReferentielCQProvider({ children }) {
       if (!updatedPointsSpecifiques[domaineId][scKey]) {
         updatedPointsSpecifiques[domaineId][scKey] = {};
       }
+      
+      // ✅ VÉRIFIER SI LE POINT EXISTE DÉJÀ
+      if (updatedPointsSpecifiques[domaineId][scKey][pointData.id]) {
+        console.error('❌ Point déjà existant dans BDD avec ID:', pointData.id);
+        isAddingPointRef.current = false;
+        return { success: false, message: 'Point déjà existant' };
+      }
+      
       updatedPointsSpecifiques[domaineId][scKey][pointData.id] = pointData;
 
       if (existingControle) {
@@ -282,6 +276,8 @@ export function ReferentielCQProvider({ children }) {
           .single();
 
         if (error) throw error;
+        
+        console.log('✅ Point sauvegardé en BDD:', pointData.id);
         setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
       } else {
         const { data, error } = await supabase
@@ -297,19 +293,24 @@ export function ReferentielCQProvider({ children }) {
           .single();
 
         if (error) throw error;
+        
+        console.log('✅ Contrôle créé avec point:', pointData.id);
         setControles(prev => [...prev, data]);
       }
 
       return { success: true };
     } catch (error) {
-      console.error('Erreur addPointControleChantierSpecific:', error);
+      console.error('❌ Erreur addPointControleChantierSpecific:', error);
       throw error;
+    } finally {
+      // Réinitialiser après un délai
+      setTimeout(() => {
+        isAddingPointRef.current = false;
+        console.log('✅ addPointControleChantierSpecific - Protection désactivée');
+      }, 1000);
     }
   };
 
-  // =========================================
-  // METTRE À JOUR UN POINT SPÉCIFIQUE
-  // =========================================
   const updatePointControleChantierSpecific = async (chantierId, modeleId, domaineId, sousCategorieId, pointId, updates) => {
     try {
       const existingControle = controles.find(
@@ -348,9 +349,6 @@ export function ReferentielCQProvider({ children }) {
     }
   };
 
-  // =========================================
-  // SUPPRIMER UN POINT SPÉCIFIQUE
-  // =========================================
   const deletePointControleChantierSpecific = async (chantierId, modeleId, domaineId, sousCategorieId, pointId) => {
     try {
       const existingControle = controles.find(
@@ -366,10 +364,26 @@ export function ReferentielCQProvider({ children }) {
         delete updatedPointsSpecifiques[domaineId][scKey][pointId];
       }
 
+      const controlesSupprimes = existingControle.controles_supprimes || {};
+      
+      if (!controlesSupprimes.points) {
+        controlesSupprimes.points = {};
+      }
+      if (!controlesSupprimes.points[domaineId]) {
+        controlesSupprimes.points[domaineId] = {};
+      }
+      if (!controlesSupprimes.points[domaineId][sousCategorieId]) {
+        controlesSupprimes.points[domaineId][sousCategorieId] = [];
+      }
+      if (!controlesSupprimes.points[domaineId][sousCategorieId].includes(pointId)) {
+        controlesSupprimes.points[domaineId][sousCategorieId].push(pointId);
+      }
+
       const { data, error } = await supabase
         .from('controles_qualite')
         .update({
           points_specifiques: updatedPointsSpecifiques,
+          controles_supprimes: controlesSupprimes,
           updated_at: new Date().toISOString()
         })
         .eq('id', existingControle.id)
@@ -386,9 +400,191 @@ export function ReferentielCQProvider({ children }) {
     }
   };
 
-  // =========================================
-  // RAFRAÎCHIR MANUELLEMENT
-  // =========================================
+  const supprimerCategorie = async (chantierId, modeleId, categorieId) => {
+    try {
+      const existingControle = controles.find(
+        c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
+      );
+
+      if (!existingControle) throw new Error('Contrôle non trouvé');
+
+      const controlesSupprimes = existingControle.controles_supprimes || {};
+      
+      if (!controlesSupprimes.categories) {
+        controlesSupprimes.categories = [];
+      }
+      
+      if (!controlesSupprimes.categories.includes(categorieId)) {
+        controlesSupprimes.categories.push(categorieId);
+      }
+
+      const { data, error } = await supabase
+        .from('controles_qualite')
+        .update({
+          controles_supprimes: controlesSupprimes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingControle.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
+
+      return { success: true };
+    } catch (error) {
+      console.error('Erreur supprimerCategorie:', error);
+      throw error;
+    }
+  };
+
+  const supprimerSousCategorie = async (chantierId, modeleId, categorieId, sousCategorieId) => {
+    try {
+      const existingControle = controles.find(
+        c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
+      );
+
+      if (!existingControle) throw new Error('Contrôle non trouvé');
+
+      const controlesSupprimes = existingControle.controles_supprimes || {};
+      
+      if (!controlesSupprimes.sous_categories) {
+        controlesSupprimes.sous_categories = {};
+      }
+      if (!controlesSupprimes.sous_categories[categorieId]) {
+        controlesSupprimes.sous_categories[categorieId] = [];
+      }
+
+      if (!controlesSupprimes.sous_categories[categorieId].includes(sousCategorieId)) {
+        controlesSupprimes.sous_categories[categorieId].push(sousCategorieId);
+      }
+
+      const { data, error } = await supabase
+        .from('controles_qualite')
+        .update({
+          controles_supprimes: controlesSupprimes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingControle.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
+
+      return { success: true };
+    } catch (error) {
+      console.error('Erreur supprimerSousCategorie:', error);
+      throw error;
+    }
+  };
+
+  const ajouterCategorieChantier = async (chantierId, modeleId, categorieData) => {
+    try {
+      const existingControle = controles.find(
+        c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
+      );
+
+      if (!existingControle) throw new Error('Contrôle non trouvé');
+
+      const categoriesSpecifiques = existingControle.categories_specifiques || [];
+      const nouvelleCategorie = {
+        id: `cat_specific_${Date.now()}`,
+        nom: categorieData.nom,
+        sousCategories: [],
+        isChantierSpecific: true
+      };
+
+      categoriesSpecifiques.push(nouvelleCategorie);
+
+      const { data, error } = await supabase
+        .from('controles_qualite')
+        .update({
+          categories_specifiques: categoriesSpecifiques,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingControle.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
+
+      return { success: true, data: nouvelleCategorie };
+    } catch (error) {
+      console.error('Erreur ajouterCategorieChantier:', error);
+      throw error;
+    }
+  };
+
+  const ajouterSousCategorieChantier = async (chantierId, modeleId, categorieId, sousCategorieData) => {
+    try {
+      const existingControle = controles.find(
+        c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
+      );
+
+      if (!existingControle) throw new Error('Contrôle non trouvé');
+
+      const categoriesSpecifiques = existingControle.categories_specifiques || [];
+      const nouvelleSousCategorie = {
+        id: `scat_specific_${Date.now()}`,
+        nom: sousCategorieData.nom,
+        pointsControle: [],
+        isChantierSpecific: true
+      };
+
+      const categorieIndex = categoriesSpecifiques.findIndex(cat => cat.id === categorieId);
+      
+      if (categorieIndex !== -1) {
+        if (!categoriesSpecifiques[categorieIndex].sousCategories) {
+          categoriesSpecifiques[categorieIndex].sousCategories = [];
+        }
+        categoriesSpecifiques[categorieIndex].sousCategories.push(nouvelleSousCategorie);
+
+        const { data, error } = await supabase
+          .from('controles_qualite')
+          .update({
+            categories_specifiques: categoriesSpecifiques,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingControle.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
+
+        return { success: true, data: nouvelleSousCategorie };
+      } else {
+        const sousCategoriesSpecifiques = existingControle.sous_categories_specifiques || {};
+        if (!sousCategoriesSpecifiques[categorieId]) {
+          sousCategoriesSpecifiques[categorieId] = [];
+        }
+        sousCategoriesSpecifiques[categorieId].push(nouvelleSousCategorie);
+
+        const { data, error } = await supabase
+          .from('controles_qualite')
+          .update({
+            sous_categories_specifiques: sousCategoriesSpecifiques,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingControle.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
+
+        return { success: true, data: nouvelleSousCategorie };
+      }
+    } catch (error) {
+      console.error('Erreur ajouterSousCategorieChantier:', error);
+      throw error;
+    }
+  };
+
   const refreshModeles = async () => {
     if (!profile?.nomsociete) return;
 
@@ -436,6 +632,10 @@ export function ReferentielCQProvider({ children }) {
     addPointControleChantierSpecific,
     updatePointControleChantierSpecific,
     deletePointControleChantierSpecific,
+    supprimerCategorie,
+    supprimerSousCategorie,
+    ajouterCategorieChantier,
+    ajouterSousCategorieChantier,
     refreshModeles,
     refreshControles
   };

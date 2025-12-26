@@ -52,8 +52,8 @@ export function PointControleResultatItem({
   const currentData = resultatData || { 
     resultat: '', 
     explicationNC: '', 
-    photos: [], // ✅ NOUVEAU : Array de photos
-    plans: [], // ✅ NOUVEAU : Array de plans annotés
+    photos: [],
+    plans: [],
     dateReprisePrevisionnelle: '',
     repriseValidee: false,
   };
@@ -65,8 +65,8 @@ export function PointControleResultatItem({
       currentData.explicationNC, 
       currentData.photos, 
       currentData.plans, 
-      '', // planIdNC deprecated
-      '', // annotationsNC deprecated
+      '', 
+      '', 
       currentData.dateReprisePrevisionnelle, 
       currentData.repriseValidee
     );
@@ -81,8 +81,8 @@ export function PointControleResultatItem({
       updatedData.explicationNC,
       updatedData.photos,
       updatedData.plans,
-      '', // planIdNC deprecated
-      '', // annotationsNC deprecated
+      '',
+      '',
       updatedData.dateReprisePrevisionnelle,
       updatedData.repriseValidee
     );
@@ -95,7 +95,7 @@ export function PointControleResultatItem({
 
   const handleDeletePoint = (e) => {
     e.stopPropagation();
-    if (window.confirm(`Êtes-vous sûr de vouloir supprimer le point de contrôle "${point.libelle}" ?`)) {
+    if (window.confirm(`Êtes-vous sûr de vouloir supprimer le point de contrôle "${point.libelle}" pour ce chantier ?`)) {
         onDeletePointControle(modeleId, domaineId, sousCategorieId, point.id);
     }
   };
@@ -115,11 +115,16 @@ export function PointControleResultatItem({
             <Button variant="ghost" size="icon" onClick={handleOpenEditModal} className="h-6 w-6 ml-2 text-slate-500 hover:text-slate-700">
                 <EditIcon size={14} />
             </Button>
-            {point.isChantierSpecific && (
-                <Button variant="ghost" size="icon" onClick={handleDeletePoint} className="h-6 w-6 text-red-400 hover:text-red-600">
-                    <Trash2 size={14} />
-                </Button>
-            )}
+            {/* ✅ Bouton Supprimer visible pour TOUS les points */}
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={handleDeletePoint} 
+              className="h-6 w-6 ml-1 text-red-400 hover:text-red-600"
+              title="Supprimer pour ce chantier"
+            >
+              <Trash2 size={14} />
+            </Button>
           </div>
           {point.description && <p className="text-xs text-slate-500 mt-0.5">{point.description}</p>}
         </div>
@@ -168,7 +173,7 @@ export function PointControleResultatItem({
               />
             </div>
             
-            {/* ✅ NOUVEAU : Upload Photos */}
+            {/* Upload Photos */}
             <ImageUploadCQ
               type="photo"
               images={currentData.photos || []}
@@ -176,7 +181,7 @@ export function PointControleResultatItem({
               onImagesChange={(newPhotos) => handleChange('photos', newPhotos)}
             />
 
-            {/* ✅ NOUVEAU : Upload Plans annotés */}
+            {/* Upload Plans annotés */}
             <ImageUploadCQ
               type="plan"
               images={currentData.plans || []}

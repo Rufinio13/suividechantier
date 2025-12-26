@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Sparkles, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Sparkles, ShieldCheck, Plus } from 'lucide-react';
 import { ControleQualiteDomaineItem } from '@/components/controle-qualite/ControleQualiteDomaineItem.jsx';
+import { CategorieFormModal } from '@/components/controle-qualite/CategorieFormModal';
+import { ControleQualiteSousCategorieFormModal } from '@/components/controle-qualite/ControleQualiteSousCategorieFormModal';
 import { useToast } from "@/components/ui/use-toast";
 import { v4 as uuidv4 } from 'uuid';
 
@@ -27,6 +29,10 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
     addPointControleChantierSpecific,
     updatePointControleChantierSpecific,
     deletePointControleChantierSpecific,
+    supprimerCategorie,
+    supprimerSousCategorie,
+    ajouterCategorieChantier,
+    ajouterSousCategorieChantier,
     loading
   } = useReferentielCQ();
 
@@ -36,29 +42,30 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
   const [pointsSpecifiquesChantier, setPointsSpecifiquesChantier] = useState({});
   const [isReferentielModalOpen, setIsReferentielModalOpen] = useState(false);
   const [selectedReferentielId, setSelectedReferentielId] = useState('');
+  
+  const [isCategorieModalOpen, setIsCategorieModalOpen] = useState(false);
+  const [selectedModeleIdForCategorie, setSelectedModeleIdForCategorie] = useState(null);
+
+  const [isSousCategorieModalOpen, setIsSousCategorieModalOpen] = useState(false);
+  const [selectedCategorieForSousCategorie, setSelectedCategorieForSousCategorie] = useState(null);
 
   const chantier = useMemo(() => chantiers.find(c => c.id === chantierId), [chantiers, chantierId]);
 
-  // Récupérer les modèles appliqués à ce chantier
   const modelesAppliques = useMemo(() => {
     const controlesChantier = controles.filter(c => c.chantier_id === chantierId);
     const modeleIdsAppliques = new Set(controlesChantier.map(c => c.modele_cq_id));
     return modelesCQ.filter(m => modeleIdsAppliques.has(m.id));
   }, [controles, chantierId, modelesCQ]);
 
-  // Récupérer les modèles disponibles (non encore appliqués)
   const modelesDisponibles = useMemo(() => {
     const modeleIdsAppliques = new Set(modelesAppliques.map(m => m.id));
     return modelesCQ.filter(m => !modeleIdsAppliques.has(m.id));
   }, [modelesCQ, modelesAppliques]);
 
-  // =========================================
-  // INITIALISATION - Charger les résultats existants (UNE SEULE FOIS)
-  // =========================================
   const [isInitialized, setIsInitialized] = useState(false);
   
   useEffect(() => {
-    if (isInitialized) return; // ✅ Ne charger qu'une seule fois
+    if (isInitialized) return;
     
     const initialResults = {};
     const initialPointsSpecifiques = {};
@@ -76,10 +83,8 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
     setIsInitialized(true);
   }, [controles, chantierId, modelesAppliques, isInitialized]);
 
-  // =========================================
-  // SAUVEGARDE AUTOMATIQUE
-  // =========================================
   const autoSaveTimeoutRef = React.useRef(null);
+  const isAddingPointRef = React.useRef(false);
   
   const autoSave = useCallback(async (modeleId, newResultats, newPointsSpecifiques) => {
     try {
@@ -96,9 +101,6 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
     }
   }, [chantierId, saveControleFromModele, toast]);
 
-  // =========================================
-  // APPLIQUER UN RÉFÉRENTIEL
-  // =========================================
   const handleAppliquerReferentiel = async () => {
     if (!selectedReferentielId) {
       alert('Veuillez sélectionner un référentiel');
@@ -131,9 +133,6 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
     }
   };
 
-  // =========================================
-  // MISE À JOUR D'UN RÉSULTAT + SAUVEGARDE AUTO
-  // =========================================
   const handlePointResultatChange = (modeleId, categorieId, sousCategorieId, pointControleId, resultat, explicationNC, photos, plans, annotationsNC, dateReprisePrevisionnelle, repriseValidee) => {
     setResultatsTousModeles(prev => {
       const updated = {
@@ -147,8 +146,8 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
               [pointControleId]: {
                 resultat,
                 explicationNC,
-                photos, // ✅ CORRIGÉ : photos au lieu de photoNC
-                plans, // ✅ CORRIGÉ : plans au lieu de planIdNC
+                photos,
+                plans,
                 annotationsNC,
                 dateReprisePrevisionnelle,
                 repriseValidee
@@ -158,12 +157,10 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
         }
       };
       
-      // ✅ Annuler le timeout précédent
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
       }
       
-      // ✅ Sauvegarder après 1 seconde d'inactivité
       autoSaveTimeoutRef.current = setTimeout(() => {
         const resultatsPourCeModele = updated[modeleId] || {};
         const pointsSpecifiquesPourCeModele = pointsSpecifiquesChantier[modeleId] || {};
@@ -174,28 +171,59 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
     });
   };
 
-  // =========================================
-  // POINTS SPÉCIFIQUES + SAUVEGARDE AUTO
-  // =========================================
   const handleAddPointControle = useCallback(async (modeleId, categorieId, sousCategorieId, pointData) => {
+    if (isAddingPointRef.current) {
+      console.log('⚠️ handleAddPointControle déjà en cours, appel ignoré');
+      return;
+    }
+    
+    isAddingPointRef.current = true;
+    console.log('🔵 handleAddPointControle - Début', { modeleId, categorieId, sousCategorieId });
+    
     const newId = uuidv4();
     const newPoint = { id: newId, ...pointData, isChantierSpecific: true };
+
+    console.log('🆔 ID généré:', newId);
 
     setPointsSpecifiquesChantier(prev => {
       const next = { ...(prev[modeleId] || {}) };
       if (!next[categorieId]) next[categorieId] = {};
       const scKey = sousCategorieId || '_global';
       if (!next[categorieId][scKey]) next[categorieId][scKey] = {};
+      
+      if (next[categorieId][scKey][newId]) {
+        console.error('❌ Point déjà existant dans l\'état local avec ID:', newId);
+        isAddingPointRef.current = false;
+        return prev;
+      }
+      
       next[categorieId][scKey][newId] = newPoint;
+      console.log('✅ Point ajouté dans l\'état local');
       return { ...prev, [modeleId]: next };
     });
 
     try {
+      console.log('💾 Sauvegarde en BDD...');
       await addPointControleChantierSpecific(chantierId, modeleId, categorieId, sousCategorieId, newPoint);
+      console.log('✅ Point sauvegardé en BDD');
       toast({ title: "Point ajouté", description: `Point "${newPoint.libelle}" ajouté et sauvegardé.` });
     } catch (err) {
-      console.error("Erreur addPointControleChantierSpecific:", err);
+      console.error("❌ Erreur addPointControleChantierSpecific:", err);
       toast({ title: "Erreur", description: "Impossible d'ajouter le point spécifique.", variant: "destructive" });
+      
+      setPointsSpecifiquesChantier(prev => {
+        const next = { ...(prev[modeleId] || {}) };
+        const scKey = sousCategorieId || '_global';
+        if (next[categorieId]?.[scKey]?.[newId]) {
+          delete next[categorieId][scKey][newId];
+        }
+        return { ...prev, [modeleId]: next };
+      });
+    } finally {
+      setTimeout(() => {
+        isAddingPointRef.current = false;
+        console.log('✅ handleAddPointControle - Protection désactivée');
+      }, 1000);
     }
   }, [chantierId, addPointControleChantierSpecific, toast]);
 
@@ -230,21 +258,108 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
 
     try {
       await deletePointControleChantierSpecific(chantierId, modeleId, categorieId, sousCategorieId, pointId);
-      toast({ title: "Point supprimé", description: "Point spécifique supprimé." });
+      toast({ title: "Point supprimé", description: "Point supprimé pour ce chantier." });
     } catch (err) {
       console.error("Erreur deletePointControleChantierSpecific:", err);
       toast({ title: "Erreur", description: "Impossible de supprimer le point.", variant: "destructive" });
     }
   }, [chantierId, deletePointControleChantierSpecific, toast]);
 
-  // =========================================
-  // COMBINER MODÈLE + POINTS SPÉCIFIQUES
-  // =========================================
+  const handleSupprimerCategorie = useCallback(async (modeleId, categorieId) => {
+    if (!window.confirm('Supprimer cette catégorie entière pour ce chantier ?')) return;
+    
+    try {
+      await supprimerCategorie(chantierId, modeleId, categorieId);
+      toast({ 
+        title: "Catégorie supprimée", 
+        description: "La catégorie est maintenant supprimée pour ce chantier." 
+      });
+    } catch (err) {
+      console.error("Erreur supprimerCategorie:", err);
+      toast({ 
+        title: "Erreur", 
+        description: "Impossible de supprimer la catégorie.", 
+        variant: "destructive" 
+      });
+    }
+  }, [chantierId, supprimerCategorie, toast]);
+
+  const handleSupprimerSousCategorie = useCallback(async (modeleId, categorieId, sousCategorieId) => {
+    if (!window.confirm('Supprimer cette sous-catégorie pour ce chantier ?')) return;
+    
+    try {
+      await supprimerSousCategorie(chantierId, modeleId, categorieId, sousCategorieId);
+      toast({ 
+        title: "Sous-catégorie supprimée", 
+        description: "La sous-catégorie est maintenant supprimée pour ce chantier." 
+      });
+    } catch (err) {
+      console.error("Erreur supprimerSousCategorie:", err);
+      toast({ 
+        title: "Erreur", 
+        description: "Impossible de supprimer la sous-catégorie.", 
+        variant: "destructive" 
+      });
+    }
+  }, [chantierId, supprimerSousCategorie, toast]);
+
+  const handleAddCategorie = useCallback(async (modeleId, categorieData) => {
+    try {
+      await ajouterCategorieChantier(chantierId, modeleId, categorieData);
+      toast({ 
+        title: "Catégorie ajoutée", 
+        description: `La catégorie "${categorieData.nom}" a été ajoutée.` 
+      });
+    } catch (err) {
+      console.error("Erreur ajouterCategorieChantier:", err);
+      toast({ 
+        title: "Erreur", 
+        description: "Impossible d'ajouter la catégorie.", 
+        variant: "destructive" 
+      });
+    }
+  }, [chantierId, ajouterCategorieChantier, toast]);
+
+  const handleAddSousCategorie = useCallback(async (modeleId, categorieId, sousCategorieData) => {
+    try {
+      await ajouterSousCategorieChantier(chantierId, modeleId, categorieId, sousCategorieData);
+      toast({ 
+        title: "Sous-catégorie ajoutée", 
+        description: `La sous-catégorie "${sousCategorieData.nom}" a été ajoutée.` 
+      });
+    } catch (err) {
+      console.error("Erreur ajouterSousCategorieChantier:", err);
+      toast({ 
+        title: "Erreur", 
+        description: "Impossible d'ajouter la sous-catégorie.", 
+        variant: "destructive" 
+      });
+    }
+  }, [chantierId, ajouterSousCategorieChantier, toast]);
+
+  // ✅ CORRIGÉ : Utiliser Map pour éviter les doublons
   const getCombinedPointsControle = (modele) => {
     const combinedCategories = JSON.parse(JSON.stringify(modele.categories || []));
+    
+    const controleExistant = controles.find(c => c.chantier_id === chantierId && c.modele_cq_id === modele.id);
+    
+    const categoriesSpecifiques = controleExistant?.categories_specifiques || [];
+    combinedCategories.push(...categoriesSpecifiques);
+    
     const pointsSpecifiqueModele = pointsSpecifiquesChantier[modele.id] || {};
+    const controlesSupprimes = controleExistant?.controles_supprimes || {};
+    const sousCategoriesSpecifiques = controleExistant?.sous_categories_specifiques || {};
+    
+    const categoriesSupprimees = controlesSupprimes.categories || [];
+    const filteredCategories = combinedCategories.filter(cat => !categoriesSupprimees.includes(cat.id));
 
-    combinedCategories.forEach(cat => {
+    filteredCategories.forEach(cat => {
+      const sousCatSpec = sousCategoriesSpecifiques[cat.id] || [];
+      cat.sousCategories = [...(cat.sousCategories || []), ...sousCatSpec];
+      
+      const sousCategoriesSupprimees = controlesSupprimes.sous_categories?.[cat.id] || [];
+      cat.sousCategories = cat.sousCategories.filter(sc => !sousCategoriesSupprimees.includes(sc.id));
+      
       const categorieGlobalPoints = pointsSpecifiqueModele[cat.id]?.['_global'] || {};
       if (Object.keys(categorieGlobalPoints).length > 0) {
         if (!cat.sousCategories.some(sc => sc.id === '_global_categorie_points')) {
@@ -256,13 +371,34 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
           });
         }
       }
+      
+      // ✅ CORRECTION : Utiliser Map pour dédupliquer les points
       cat.sousCategories.forEach(sc => {
         const spec = pointsSpecifiqueModele[cat.id]?.[sc.id] || {};
-        sc.pointsControle = [...(sc.pointsControle || []), ...Object.values(spec)];
+        
+        // Créer une Map avec l'ID comme clé pour éviter les doublons
+        const pointsMap = new Map();
+        
+        // Ajouter d'abord les points existants de la sous-catégorie
+        (sc.pointsControle || []).forEach(p => {
+          pointsMap.set(p.id, p);
+        });
+        
+        // Ajouter/écraser avec les points spécifiques (état local)
+        Object.values(spec).forEach(p => {
+          pointsMap.set(p.id, p);
+        });
+        
+        // Convertir la Map en array
+        sc.pointsControle = Array.from(pointsMap.values());
+        
+        // Filtrer les points supprimés
+        const pointsSupprimes = controlesSupprimes.points?.[cat.id]?.[sc.id] || [];
+        sc.pointsControle = sc.pointsControle.filter(p => !pointsSupprimes.includes(p.id));
       });
     });
 
-    return combinedCategories;
+    return filteredCategories;
   };
 
   if (loading && !isEmbedded) {
@@ -304,13 +440,12 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
           <CardHeader>
             <CardTitle className="text-xl">Référentiel de Contrôle Qualité</CardTitle>
             <CardDescription>
-              Les modifications sont sauvegardées automatiquement. Vous pouvez ajouter des points spécifiques à ce chantier.
+              Les modifications sont sauvegardées automatiquement. Vous pouvez ajouter ou supprimer des éléments pour ce chantier.
             </CardDescription>
           </CardHeader>
         )}
         <CardContent className={`space-y-6 ${isEmbedded ? 'p-0 pt-4 sm:p-0' : ''}`}>
           
-          {/* Bouton Appliquer Référentiel */}
           {modelesDisponibles.length > 0 && (
             <div className="flex justify-end">
               <Button 
@@ -324,7 +459,6 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
             </div>
           )}
 
-          {/* Liste des modèles appliqués */}
           <AnimatePresence>
             {modelesAppliques.length > 0 ? modelesAppliques.map(modele => {
               const categoriesAvecPointsSpecifiques = getCombinedPointsControle(modele);
@@ -337,7 +471,21 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
                   exit={{ opacity: 0, y: 10 }}
                   className="space-y-3 p-4 border rounded-lg bg-white shadow"
                 >
-                  <h3 className="text-lg font-semibold text-slate-800 mb-3">{modele.titre}</h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-slate-800">{modele.titre}</h3>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setSelectedModeleIdForCategorie(modele.id);
+                        setIsCategorieModalOpen(true);
+                      }}
+                      className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Ajouter une catégorie
+                    </Button>
+                  </div>
 
                   {categoriesAvecPointsSpecifiques.map(cat => (
                     <ControleQualiteDomaineItem
@@ -356,12 +504,22 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
                       onAddPointControle={handleAddPointControle}
                       onUpdatePointControle={handleUpdatePointControle}
                       onDeletePointControle={handleDeletePointControle}
+                      onSupprimerCategorie={() => handleSupprimerCategorie(modele.id, cat.id)}
+                      onSupprimerSousCategorie={(sousCategorieId) => handleSupprimerSousCategorie(modele.id, cat.id, sousCategorieId)}
+                      onAddSousCategorie={(categorieId, categorieNom) => {
+                        setSelectedCategorieForSousCategorie({
+                          modeleId: modele.id,
+                          categorieId,
+                          nom: categorieNom
+                        });
+                        setIsSousCategorieModalOpen(true);
+                      }}
                       documents={documents}
                     />
                   ))}
 
                   {categoriesAvecPointsSpecifiques.length === 0 && (
-                    <p className="text-sm text-slate-500 italic">Ce modèle ne contient aucune catégorie.</p>
+                    <p className="text-sm text-slate-500 italic">Toutes les catégories ont été supprimées.</p>
                   )}
                 </motion.div>
               );
@@ -388,7 +546,6 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
         </CardContent>
       </Card>
 
-      {/* Modal Appliquer Référentiel */}
       <Dialog open={isReferentielModalOpen} onOpenChange={setIsReferentielModalOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -440,6 +597,37 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CategorieFormModal
+        isOpen={isCategorieModalOpen}
+        onClose={() => {
+          setIsCategorieModalOpen(false);
+          setSelectedModeleIdForCategorie(null);
+        }}
+        onSave={(data) => {
+          handleAddCategorie(selectedModeleIdForCategorie, data);
+          setIsCategorieModalOpen(false);
+          setSelectedModeleIdForCategorie(null);
+        }}
+      />
+
+      <ControleQualiteSousCategorieFormModal
+        isOpen={isSousCategorieModalOpen}
+        onClose={() => {
+          setIsSousCategorieModalOpen(false);
+          setSelectedCategorieForSousCategorie(null);
+        }}
+        categorieNom={selectedCategorieForSousCategorie?.nom}
+        onSave={(data) => {
+          handleAddSousCategorie(
+            selectedCategorieForSousCategorie.modeleId,
+            selectedCategorieForSousCategorie.categorieId,
+            data
+          );
+          setIsSousCategorieModalOpen(false);
+          setSelectedCategorieForSousCategorie(null);
+        }}
+      />
     </div>
   );
 }

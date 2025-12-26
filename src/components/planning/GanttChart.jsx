@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { parseISO, differenceInDays, format, addDays, startOfDay, endOfDay, isPast, isFuture, isWeekend, getDay } from 'date-fns';
+import { parseISO, differenceInDays, format, addDays, startOfDay, endOfDay, isPast, isFuture, isWeekend, getDay, isSameDay } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { ZoomIn, ZoomOut } from 'lucide-react';
@@ -12,47 +12,22 @@ const MIN_DAY_WIDTH = 20;
 const MAX_DAY_WIDTH = 120;
 const DEFAULT_DAY_WIDTH = 40;
 
-// ✅ NOUVEAU : Jours fériés français 2025-2026
 const JOURS_FERIES = [
-  // 2025
-  '2025-01-01', // Jour de l'an
-  '2025-04-21', // Lundi de Pâques
-  '2025-05-01', // Fête du travail
-  '2025-05-08', // Victoire 1945
-  '2025-05-29', // Ascension
-  '2025-06-09', // Lundi de Pentecôte
-  '2025-07-14', // Fête nationale
-  '2025-08-15', // Assomption
-  '2025-11-01', // Toussaint
-  '2025-11-11', // Armistice 1918
-  '2025-12-25', // Noël
-  
-  // 2026
-  '2026-01-01', // Jour de l'an
-  '2026-04-06', // Lundi de Pâques
-  '2026-05-01', // Fête du travail
-  '2026-05-08', // Victoire 1945
-  '2026-05-14', // Ascension
-  '2026-05-25', // Lundi de Pentecôte
-  '2026-07-14', // Fête nationale
-  '2026-08-15', // Assomption
-  '2026-11-01', // Toussaint
-  '2026-11-11', // Armistice 1918
-  '2026-12-25', // Noël
+  '2025-01-01', '2025-04-21', '2025-05-01', '2025-05-08', '2025-05-29', '2025-06-09',
+  '2025-07-14', '2025-08-15', '2025-11-01', '2025-11-11', '2025-12-25',
+  '2026-01-01', '2026-04-06', '2026-05-01', '2026-05-08', '2026-05-14', '2026-05-25',
+  '2026-07-14', '2026-08-15', '2026-11-01', '2026-11-11', '2026-12-25',
 ];
 
-// ✅ NOUVEAU : Vérifier si un jour est férié
 const isJourFerie = (date) => {
   const dateStr = format(date, 'yyyy-MM-dd');
   return JOURS_FERIES.includes(dateStr);
 };
 
-// ✅ NOUVEAU : Vérifier si un jour est ouvré (ni weekend, ni férié)
 const isJourOuvre = (date) => {
   return !isWeekend(date) && !isJourFerie(date);
 };
 
-// ✅ NOUVEAU : Calculer le nombre de jours ouvrés entre deux dates
 const countJoursOuvres = (startDate, endDate) => {
   let count = 0;
   let current = startOfDay(startDate);
@@ -66,6 +41,10 @@ const countJoursOuvres = (startDate, endDate) => {
   }
   
   return count;
+};
+
+const isToday = (date) => {
+  return isSameDay(date, new Date());
 };
 
 export function GanttChart({ taches, chantierId }) {
@@ -86,7 +65,6 @@ export function GanttChart({ taches, chantierId }) {
       const tacheDateFin = parseISO(tache.datefin);
       let color = 'bg-gray-400';
 
-      // Conflit
       let hasConflict = false;
       if (tache.assignetype === 'soustraitant' && tache.assigneid) {
         const key = `${tache.assigneid}-${format(tacheDateDebut, 'yyyy-MM-dd')}`;
@@ -137,10 +115,8 @@ export function GanttChart({ taches, chantierId }) {
       const daysDragged = Math.round(info.offset.x / dayWidth);
       const newStartDate = addDays(item.start, daysDragged);
       
-      // ✅ MODIFIÉ : Calculer la durée en jours ouvrés
       const joursOuvres = countJoursOuvres(item.start, item.end);
       
-      // Trouver la nouvelle date de fin en comptant les jours ouvrés
       let newEndDate = newStartDate;
       let joursOuvresComptes = 0;
       
@@ -157,7 +133,7 @@ export function GanttChart({ taches, chantierId }) {
         ...item.rawTache,
         datedebut: format(newStartDate, 'yyyy-MM-dd'),
         datefin: format(newEndDate, 'yyyy-MM-dd'),
-        duree: joursOuvres.toString() // ✅ Durée en jours ouvrés
+        duree: joursOuvres.toString()
       });
     },
     [dayWidth, updateTache]
@@ -192,7 +168,6 @@ export function GanttChart({ taches, chantierId }) {
   const handleZoomIn = () => setDayWidth(prev => Math.min(MAX_DAY_WIDTH, prev + 5));
   const handleZoomOut = () => setDayWidth(prev => Math.max(MIN_DAY_WIDTH, prev - 5));
 
-  // Génération des entêtes mois
   const monthHeaders = useMemo(() => {
     const headers = [];
     let current = overallStartDate;
@@ -234,23 +209,42 @@ export function GanttChart({ taches, chantierId }) {
           ))}
         </div>
 
-        {/* Header jours - ✅ MODIFIÉ : Fond grisé pour weekends et fériés */}
+        {/* Header jours */}
         <div className="flex sticky top-7 bg-slate-100 z-20 border-b border-slate-300">
           {monthHeaders.map((m, mi) =>
             Array.from({ length: m.days }).map((_, di) => {
               const date = addDays(m.startDate, di);
               const isNonOuvre = !isJourOuvre(date);
+              const isTodayDate = isToday(date);
               
               return (
                 <div 
                   key={`${mi}-${di}`} 
-                  className={`h-5 flex flex-col items-center justify-center border-r border-slate-200/80 ${isNonOuvre ? 'bg-slate-200' : ''}`}
+                  className={`h-5 flex flex-col items-center justify-center border-r border-slate-200/80 ${
+                    isTodayDate 
+                      ? 'bg-cyan-300'
+                      : isNonOuvre 
+                      ? 'bg-slate-200' 
+                      : ''
+                  }`}
                   style={{ width: dayWidth }}
                 >
-                  <span className={`text-[9px] capitalize ${isNonOuvre ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <span className={`text-[9px] capitalize ${
+                    isTodayDate 
+                      ? 'text-cyan-900 font-bold' 
+                      : isNonOuvre 
+                      ? 'text-slate-400' 
+                      : 'text-slate-500'
+                  }`}>
                     {format(date, 'EEE', { locale: fr }).charAt(0)}
                   </span>
-                  <span className={`text-[10px] font-medium ${isNonOuvre ? 'text-slate-400' : 'text-slate-700'}`}>
+                  <span className={`text-[10px] font-medium ${
+                    isTodayDate 
+                      ? 'text-cyan-900 font-bold' 
+                      : isNonOuvre 
+                      ? 'text-slate-400' 
+                      : 'text-slate-700'
+                  }`}>
                     {format(date, 'd', { locale: fr })}
                   </span>
                 </div>
@@ -259,35 +253,42 @@ export function GanttChart({ taches, chantierId }) {
           )}
         </div>
 
-        {/* Grille verticale - ✅ MODIFIÉ : Fond grisé pour colonnes non ouvrées */}
-        <div className="absolute top-0 left-0 h-full pointer-events-none z-0">
-          {Array.from({ length: totalDays }).map((_, i) => {
-            const date = addDays(overallStartDate, i);
-            const isNonOuvre = !isJourOuvre(date);
-            
-            return (
-              <React.Fragment key={i}>
-                {isNonOuvre && (
-                  <div 
-                    className="absolute h-full bg-slate-200/40" 
-                    style={{ left: i * dayWidth, top: 70, width: dayWidth }} 
-                  />
-                )}
-                <div 
-                  className="absolute h-full border-l border-slate-200/60" 
-                  style={{ left: i * dayWidth, top: 70 }} 
-                />
-              </React.Fragment>
-            );
-          })}
-        </div>
-
-        {/* Barres tâches - ✅ MODIFIÉ : Barres discontinues (sauter weekends/fériés) */}
+        {/* ✅ CORRIGÉ : Conteneur relatif pour les barres avec grille de fond intégrée */}
         <div className="relative" style={{ height: chartHeight - 70 }}>
+          {/* Grille verticale de fond (cyan/gris) - MÊME NIVEAU que les barres */}
+          {monthHeaders.map((m, mi) =>
+            Array.from({ length: m.days }).map((_, di) => {
+              const date = addDays(m.startDate, di);
+              const isNonOuvre = !isJourOuvre(date);
+              const isTodayDate = isToday(date);
+              const dayIndex = differenceInDays(date, overallStartDate);
+              
+              return (
+                <div
+                  key={`bg-${mi}-${di}`}
+                  className={`absolute pointer-events-none ${
+                    isTodayDate 
+                      ? 'bg-cyan-200' 
+                      : isNonOuvre 
+                      ? 'bg-slate-200/40' 
+                      : ''
+                  } border-r border-slate-200/60`}
+                  style={{ 
+                    left: dayIndex * dayWidth, 
+                    top: 0, 
+                    width: dayWidth, 
+                    height: '100%',
+                    zIndex: 0
+                  }}
+                />
+              );
+            })
+          )}
+
+          {/* Barres tâches - AU-DESSUS de la grille */}
           {ganttItems.map((item, index) => {
             const topPos = index * 36 + 4;
             
-            // ✅ NOUVEAU : Générer les segments de barres uniquement sur jours ouvrés
             const segments = [];
             let current = startOfDay(item.start);
             const end = startOfDay(item.end);
@@ -309,12 +310,13 @@ export function GanttChart({ taches, chantierId }) {
                 {segments.map((segment, segIndex) => (
                   <motion.div
                     key={`${item.id}-${segIndex}`}
-                    className="absolute h-[28px] flex items-center px-1 text-white text-[10px] overflow-hidden"
+                    className="absolute h-[28px] flex items-center px-1 text-white text-[10px] overflow-hidden rounded-sm"
                     style={{ 
                       left: segment.offset, 
                       width: segment.width, 
                       top: topPos, 
-                      height: 28 
+                      height: 28,
+                      zIndex: 10
                     }}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}

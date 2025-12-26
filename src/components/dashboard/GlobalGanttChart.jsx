@@ -12,20 +12,26 @@ import {
   differenceInWeeks,
   addWeeks,
   isValid as isValidFn,
-  eachWeekOfInterval
+  eachWeekOfInterval,
+  isSameWeek,
+  subWeeks
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, ChevronDown, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-// === Constantes pour une vue par SEMAINE ===
 const MIN_WEEK_WIDTH = 24;
 const MAX_WEEK_WIDTH = 120;
 const DEFAULT_WEEK_WIDTH = 56;
 const ROW_HEIGHT = 36;
 const TASK_ROW_HEIGHT = 32;
-const WEEK_GAP = 4; // ✅ NOUVEAU : Espace entre les semaines
+const WEEK_GAP = 4;
+
+// ✅ Largeurs responsive pour la colonne des noms
+const CHANTIER_COL_WIDTH_DESKTOP = 250;
+const CHANTIER_COL_WIDTH_TABLET = 180;
+const CHANTIER_COL_WIDTH_MOBILE = 120;
 
 const isValidDate = (date) => date instanceof Date && !isNaN(date.getTime());
 
@@ -50,17 +56,13 @@ const calculerPeriodeChantier = (tachesDuChantier) => {
   const datesFinValid = fins.filter(d => d instanceof Date && !isNaN(d));
 
   if (datesDebutValid.length === 0 || datesFinValid.length === 0) {
-    console.warn('❌ Aucune date valide pour dateMin/dateMax après filtrage');
     return null;
   }
 
   const debutGlobal = new Date(Math.min(...datesDebutValid.map(d => d.getTime())));
   const finGlobal = new Date(Math.max(...datesFinValid.map(d => d.getTime())));
 
-  return {
-    debutGlobal,
-    finGlobal,
-  };
+  return { debutGlobal, finGlobal };
 };
 
 const isOverlap = (startA, endA, startB, endB) => {
@@ -104,12 +106,43 @@ const detectGlobalConflicts = (allTaches) => {
   return taskConflicts;
 };
 
+const isCurrentWeek = (weekStart) => {
+  const today = new Date();
+  return isSameWeek(weekStart, today, { weekStartsOn: 1 });
+};
+
 export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
   const [expandedChantiers, setExpandedChantiers] = useState({});
   const [weekWidth, setWeekWidth] = useState(DEFAULT_WEEK_WIDTH);
+  
+  // ✅ State pour la largeur responsive de la colonne des noms
+  const [chantierColWidth, setChantierColWidth] = useState(CHANTIER_COL_WIDTH_DESKTOP);
 
   const cleanTaches = useMemo(() => taches || [], [taches]);
   const conflictingTaskIdsAcrossAllChantiers = useMemo(() => detectGlobalConflicts(cleanTaches), [cleanTaches]);
+
+  // ✅ useEffect pour détecter la taille de l'écran et ajuster la largeur
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth < 640) {
+        // Mobile (sm)
+        setChantierColWidth(CHANTIER_COL_WIDTH_MOBILE);
+      } else if (window.innerWidth < 1024) {
+        // Tablet (md/lg)
+        setChantierColWidth(CHANTIER_COL_WIDTH_TABLET);
+      } else {
+        // Desktop
+        setChantierColWidth(CHANTIER_COL_WIDTH_DESKTOP);
+      }
+    };
+
+    // Appeler au montage
+    handleResize();
+
+    // Écouter les changements de taille
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const ganttData = useMemo(() => {
     if (chantiers.length === 0) {
@@ -204,7 +237,17 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
     let overallStartDate = items.reduce((minDt, item) => (item.start < minDt ? item.start : minDt), items[0].start);
     let overallEndDate = items.reduce((maxDt, item) => (item.end > maxDt ? item.end : maxDt), items[0].end);
 
-    if (initialStartDate) overallStartDate = startOfDay(initialStartDate);
+    const currentWeekStart = startOfWeek(today, { weekStartsOn: 1 });
+    const twoWeeksBeforeCurrentWeek = subWeeks(currentWeekStart, 2);
+    
+    if (overallStartDate > twoWeeksBeforeCurrentWeek) {
+      overallStartDate = twoWeeksBeforeCurrentWeek;
+    }
+
+    if (initialStartDate) {
+      const proposedStart = startOfDay(initialStartDate);
+      overallStartDate = proposedStart < twoWeeksBeforeCurrentWeek ? proposedStart : twoWeeksBeforeCurrentWeek;
+    }
 
     const overallStartAligned = startOfWeek(overallStartDate, { weekStartsOn: 1 });
     const overallEndAligned = endOfWeek(overallEndDate, { weekStartsOn: 1 });
@@ -246,7 +289,8 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
       headers.push({
         startDate: current,
         endDate: endOfWeek(current, { weekStartsOn: 1 }),
-        label: format(current, "'S'ww", { locale: fr })
+        label: format(current, "'S'ww", { locale: fr }),
+        isCurrentWeek: isCurrentWeek(current)
       });
       current = addWeeks(current, 1);
       if (!isValidDate(current) || headers.length > 520) break;
@@ -286,7 +330,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
 
   const monthHeaders = getMonthHeaders();
 
-  // ✅ NOUVEAU : Fonction pour calculer la position d'une semaine avec gaps
   const getWeekPosition = (weekIndex) => {
     return weekIndex * (weekWidth + WEEK_GAP);
   };
@@ -300,7 +343,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
     const chantierStartAligned = startOfWeek(chantierItem.start, { weekStartsOn: 1 });
     const chantierEndAligned = endOfWeek(chantierItem.end, { weekStartsOn: 1 });
 
-    // ✅ MODIFIÉ : Ne pas créer de segments pour les chantiers, juste générer les segments de barres
     const chantierWeeks = eachWeekOfInterval(
       { start: chantierStartAligned, end: chantierEndAligned },
       { weekStartsOn: 1 }
@@ -315,7 +357,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
       };
     });
 
-    // ✅ NOUVEAU : Ajouter l'item chantier UNE SEULE FOIS avec ses segments
     renderedItems.push({
       ...chantierItem,
       segments: chantierSegments,
@@ -392,46 +433,46 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
         </Button>
       </div>
 
-      {/* ✅ NOUVEAU : Layout en Flexbox - 2 colonnes */}
       <div className="flex">
-        {/* ========== COLONNE 1 : NOMS DES CHANTIERS (fixe) ========== */}
-        <div className="flex-shrink-0 w-[250px] bg-slate-200">
-          {/* Header "CHANTIER" */}
+        {/* ========== COLONNE 1 : NOMS DES CHANTIERS (RESPONSIVE) ========== */}
+        <div className="flex-shrink-0 bg-slate-200" style={{ width: chantierColWidth }}>
           <div className="h-7 border-r border-slate-300 border-b border-slate-300 flex items-center justify-center bg-slate-200 sticky top-0 z-20">
             <span className="text-[10px] font-semibold text-slate-700">CHANTIER</span>
           </div>
 
-          {/* Ligne vide pour aligner avec les semaines */}
           <div className="h-5 border-r border-slate-300 border-b border-slate-300 bg-slate-200 sticky top-7 z-20"></div>
 
-          {/* Liste des noms de chantiers - PAS DE SCROLL, PAS D'ABSOLUTE */}
           <div className="border-r border-slate-300">
             {renderedItems.map((item) => {
-              // ✅ Afficher ligne pour chantier uniquement
               if (item.type !== 'chantier') return null;
               
               const isExpanded = expandedChantiers[item.id];
               
               return (
                 <React.Fragment key={`label-group-${item.id}`}>
-                  {/* Ligne du chantier */}
                   <div
-                    className="flex items-center px-2 font-semibold text-slate-800 bg-slate-200 border-b border-slate-200/60"
+                    className="flex items-center px-1 font-semibold text-slate-800 bg-slate-200 border-b border-slate-200/60"
                     style={{ height: ROW_HEIGHT }}
                   >
-                    <Button variant="ghost" size="icon" onClick={() => toggleChantierExpand(item.id)} className="mr-1 h-7 w-7">
-                      {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    <Button variant="ghost" size="icon" onClick={() => toggleChantierExpand(item.id)} className="mr-0.5 h-6 w-6 flex-shrink-0">
+                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     </Button>
                     <Link
                       to={`/chantiers/${item.id}`}
-                      className="truncate hover:underline text-sm"
+                      className="truncate hover:underline text-[10px] sm:text-xs"
                       title={item.name}
                     >
-                      {item.name}
+                      {/* ✅ Sur mobile, afficher version courte */}
+                      <span className="sm:hidden">
+                        {item.name.length > 12 ? item.name.substring(0, 10) + '...' : item.name}
+                      </span>
+                      {/* ✅ Sur desktop, afficher nom complet */}
+                      <span className="hidden sm:inline">
+                        {item.name}
+                      </span>
                     </Link>
                   </div>
 
-                  {/* ✅ NOUVEAU : Si déplié, ajouter 2 lignes vides pour les tâches */}
                   {isExpanded && (
                     <>
                       <div style={{ height: TASK_ROW_HEIGHT }} className="bg-slate-200 border-b border-slate-200/60"></div>
@@ -444,7 +485,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
           </div>
         </div>
 
-        {/* ========== COLONNE 2 : GANTT (scrollable horizontalement) ========== */}
+        {/* ========== COLONNE 2 : GANTT ========== */}
         <div className="flex-1 overflow-x-auto">
           <div style={{ minWidth: totalWidth }}>
             {/* Header mois */}
@@ -461,27 +502,45 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
               {weekHeaders.map((w, idx) => (
                 <div 
                   key={`week-${idx}`} 
-                  className="h-5 flex flex-col items-center justify-center bg-white border-r border-slate-200/80"
+                  className={`h-5 flex flex-col items-center justify-center border-r border-slate-200/80 ${
+                    w.isCurrentWeek ? 'bg-cyan-300' : 'bg-white'
+                  }`}
                   style={{ width: weekWidth }}
                 >
-                  <span className="text-[10px] text-slate-700 font-medium">{w.label}</span>
+                  <span className={`text-[10px] font-medium ${
+                    w.isCurrentWeek ? 'text-cyan-900 font-bold' : 'text-slate-700'
+                  }`}>
+                    {w.label}
+                  </span>
                 </div>
               ))}
             </div>
 
             {/* Grille verticale */}
             <div className="relative pointer-events-none">
-              {Array.from({ length: totalWeeks }).map((_, i) => (
-                <div 
-                  key={`gridline-v-${i}`}
-                  className="absolute border-l border-slate-200/40" 
-                  style={{ 
-                    left: getWeekPosition(i),
-                    top: 0,
-                    bottom: 0,
-                    height: chartHeight - (50 + 20)
-                  }} 
-                />
+              {weekHeaders.map((week, i) => (
+                <React.Fragment key={`gridline-v-${i}`}>
+                  {week.isCurrentWeek && (
+                    <div 
+                      className="absolute bg-cyan-200" 
+                      style={{ 
+                        left: getWeekPosition(i),
+                        top: 0,
+                        width: weekWidth,
+                        height: chartHeight - (50 + 20)
+                      }} 
+                    />
+                  )}
+                  <div 
+                    className="absolute border-l border-slate-200/40" 
+                    style={{ 
+                      left: getWeekPosition(i),
+                      top: 0,
+                      bottom: 0,
+                      height: chartHeight - (50 + 20)
+                    }} 
+                  />
+                </React.Fragment>
               ))}
             </div>
 
@@ -493,7 +552,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
                 
                 return (
                   <React.Fragment key={item.id}>
-                    {/* Ligne de séparation horizontale */}
                     <div
                       className="absolute left-0 right-0 border-b border-slate-200/60"
                       style={{
@@ -503,11 +561,10 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
                       }}
                     />
 
-                    {/* Segments de barres */}
                     {item.segments && item.segments.map((segment, segIndex) => (
                       <motion.div
                         key={`${item.id}-seg-${segIndex}`}
-                        className={`absolute flex items-center px-1.5 ${itemTextColor} text-[10px] overflow-hidden ${item.hasConflict && item.type === 'task' ? 'ring-2 ring-offset-1 ring-red-500' : 'hover:ring-1 hover:ring-offset-1 hover:ring-indigo-300'}`}
+                        className={`absolute flex items-center px-1.5 ${itemTextColor} text-[10px] overflow-hidden rounded-sm ${item.hasConflict && item.type === 'task' ? 'ring-2 ring-offset-1 ring-red-500' : 'hover:ring-1 hover:ring-offset-1 hover:ring-indigo-300'}`}
                         style={{
                           left: segment.left,
                           width: segment.width,
@@ -520,8 +577,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
                         transition={{ duration: 0.2, delay: index * 0.02 }}
                         title={`${item.name}\nDu ${format(item.start, 'dd/MM/yy')} au ${format(item.end, 'dd/MM/yy')}${item.hasConflict && item.type === 'task' ? `\nConflit` : ''}`}
                       >
-                        <div className={`absolute inset-0 ${item.color} ${item.type === 'task' ? 'opacity-80' : 'opacity-95'}`}></div>
-                        {/* Nom uniquement sur le premier segment */}
+                        <div className={`absolute inset-0 ${item.color} ${item.type === 'task' ? 'opacity-80' : 'opacity-95'} rounded-sm`}></div>
                         {segIndex === 0 && (
                           <>
                             <span className="relative z-10 truncate text-[9px] font-medium">{item.name}</span>

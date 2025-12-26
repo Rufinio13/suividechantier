@@ -211,12 +211,38 @@ const deleteTache = async (id) => {
     setChantiers(prev => [data, ...prev]);
     return data;
   };
-  const updateChantier = async (id, updates) => {
-    const { data, error } = await supabase.from("chantiers").update(updates).eq("id", id).select().single();
-    if (error) throw error;
+  // Dans ChantierContext.jsx
+// Remplace la fonction updateChantier (ligne ~245) par celle-ci :
+
+const updateChantier = async (id, updates) => {
+  console.log('📤 updateChantier - ID:', id);
+  console.log('📤 updateChantier - Updates:', updates);
+  
+  try {
+    const { data, error } = await supabase
+      .from("chantiers")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single();
+    
+    console.log('📥 Réponse Supabase:', { data, error });
+    
+    if (error) {
+      console.error('❌ Erreur Supabase updateChantier:', error);
+      throw error;
+    }
+    
+    console.log('✅ Chantier mis à jour:', data);
+    
     setChantiers(prev => prev.map(c => c.id === id ? data : c));
+    
     return data;
-  };
+  } catch (error) {
+    console.error('❌ Exception updateChantier:', error);
+    throw error;
+  }
+};
   const deleteChantier = async (id) => {
     const { error } = await supabase.from("chantiers").delete().eq("id", id);
     if (error) throw error;

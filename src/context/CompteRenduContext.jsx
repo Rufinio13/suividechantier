@@ -129,6 +129,7 @@ export function CompteRenduProvider({ children }) {
 
   const value = {
     comptesRendus,
+    setComptesRendus, // ✅ NOUVEAU : Exposer pour update optimiste
     loading,
     nomsociete,
     getComptesRendusByChantier,
