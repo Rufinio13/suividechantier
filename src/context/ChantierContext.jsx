@@ -21,7 +21,6 @@ export function ChantierProvider({ children }) {
   // ---------------------
   const loadChantiers = async () => {
     if (!profile?.nomsociete) return;
-    setLoading(true);
     const { data, error } = await supabase
       .from("chantiers")
       .select("*")
@@ -29,7 +28,6 @@ export function ChantierProvider({ children }) {
       .order("created_at", { ascending: false });
     if (error) console.error("❌ Erreur loadChantiers :", error);
     setChantiers(data || []);
-    setLoading(false);
   };
 
   const loadSousTraitants = async () => {
@@ -65,27 +63,17 @@ export function ChantierProvider({ children }) {
   };
 
   const loadTaches = async () => {
-  console.log("📥 loadTaches START");
-  try {
     const { data, error } = await supabase
       .from("taches")
       .select("*")
       .order("created_at", { ascending: false });
-    
-    console.log("📥 loadTaches - Résultat:", { data: data?.length, error });
-    
     if (error) {
       console.error("❌ Erreur loadTaches :", error);
       setTaches([]);
       return;
     }
     setTaches(data || []);
-    console.log("✅ loadTaches SUCCESS - Tâches:", data?.length);
-  } catch (err) {
-    console.error("💥 loadTaches CRASH:", err);
-    setTaches([]);
-  }
-};
+  };
 
   const loadLots = async () => {
     const { data, error } = await supabase
@@ -106,19 +94,36 @@ export function ChantierProvider({ children }) {
     
     async function loadAll() {
       try {
-        await Promise.all([
-          loadChantiers(),
-          loadSousTraitants(),
-          loadFournisseurs(),
-          loadSAV(),
-          loadTaches(),
-          loadLots(),
-        ]);
-        console.log("✅ ChantierContext : Toutes les données chargées");
+        console.log("1️⃣ loadChantiers...");
+        await loadChantiers();
+        console.log("✅ loadChantiers OK");
+        
+        console.log("2️⃣ loadSousTraitants...");
+        await loadSousTraitants();
+        console.log("✅ loadSousTraitants OK");
+        
+        console.log("3️⃣ loadFournisseurs...");
+        await loadFournisseurs();
+        console.log("✅ loadFournisseurs OK");
+        
+        console.log("4️⃣ loadSAV...");
+        await loadSAV();
+        console.log("✅ loadSAV OK");
+        
+        console.log("5️⃣ loadTaches...");
+        await loadTaches();
+        console.log("✅ loadTaches OK");
+        
+        console.log("6️⃣ loadLots...");
+        await loadLots();
+        console.log("✅ loadLots OK");
+        
+        console.log("✅✅✅ ChantierContext : TOUT EST CHARGÉ !");
       } catch (error) {
         console.error("❌ ChantierContext : Erreur chargement", error);
       } finally {
         setLoading(false);
+        console.log("🏁 setLoading(false) appelé");
       }
     }
     
