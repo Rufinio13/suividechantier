@@ -17,7 +17,99 @@ export function ChantierProvider({ children }) {
   const [lots, setLots] = useState([]);
 
   // ---------------------
-  // CHARGEMENT DES DONNÉES
+  // CHARGEMENT DES DONNÉES - useEffect avec requêtes directes
+  // ---------------------
+  useEffect(() => {
+    if (!profile?.nomsociete) {
+      console.log("⏳ ChantierContext : En attente de profile.nomsociete...");
+      setLoading(false);
+      return;
+    }
+
+    console.log("🚀 ChantierContext : Chargement des données pour", profile.nomsociete);
+    
+    async function loadAll() {
+      try {
+        // 1️⃣ Chantiers
+        console.log("1️⃣ loadChantiers...");
+        const { data: chantiersData, error: errorChantiers } = await supabase
+          .from("chantiers")
+          .select("*")
+          .eq("nomsociete", profile.nomsociete)
+          .order("created_at", { ascending: false });
+        if (errorChantiers) console.error("❌ Erreur loadChantiers :", errorChantiers);
+        setChantiers(chantiersData || []);
+        console.log("✅ loadChantiers OK -", chantiersData?.length, "chantiers");
+        
+        // 2️⃣ Sous-traitants
+        console.log("2️⃣ loadSousTraitants...");
+        const { data: stData, error: errorST } = await supabase
+          .from("soustraitants")
+          .select("*")
+          .eq("nomsociete", profile.nomsociete)
+          .order("id", { ascending: false });
+        if (errorST) console.error("❌ Erreur loadSousTraitants :", errorST);
+        setSousTraitants(stData || []);
+        console.log("✅ loadSousTraitants OK -", stData?.length);
+        
+        // 3️⃣ Fournisseurs
+        console.log("3️⃣ loadFournisseurs...");
+        const { data: fData, error: errorF } = await supabase
+          .from("fournisseurs")
+          .select("*")
+          .eq("nomsociete", profile.nomsociete)
+          .order("created_at", { ascending: false });
+        if (errorF) console.error("❌ Erreur loadFournisseurs :", errorF);
+        setFournisseurs(fData || []);
+        console.log("✅ loadFournisseurs OK -", fData?.length);
+        
+        // 4️⃣ SAV
+        console.log("4️⃣ loadSAV...");
+        const { data: savData, error: errorSAV } = await supabase
+          .from("sav")
+          .select("*, chantiers(nomchantier, nomsociete)")
+          .order("created_at", { ascending: false });
+        if (errorSAV) console.error("❌ Erreur loadSAV :", errorSAV);
+        setSav((savData || []).filter(s => s.chantiers?.nomsociete === profile.nomsociete));
+        console.log("✅ loadSAV OK");
+        
+        // 5️⃣ Tâches
+        console.log("5️⃣ loadTaches...");
+        const { data: tData, error: errorT } = await supabase
+          .from("taches")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (errorT) {
+          console.error("❌ Erreur loadTaches :", errorT);
+          setTaches([]);
+        } else {
+          setTaches(tData || []);
+          console.log("✅ loadTaches OK -", tData?.length);
+        }
+        
+        // 6️⃣ Lots
+        console.log("6️⃣ loadLots...");
+        const { data: lotsData, error: errorLots } = await supabase
+          .from("lots")
+          .select("*");
+        if (errorLots) console.error("❌ Erreur loadLots :", errorLots);
+        setLots(lotsData || []);
+        console.log("✅ loadLots OK -", lotsData?.length);
+        
+        console.log("✅✅✅ ChantierContext : TOUT EST CHARGÉ !");
+      } catch (error) {
+        console.error("❌ ChantierContext : Erreur chargement", error);
+      } finally {
+        setLoading(false);
+        console.log("🏁 setLoading(false) appelé");
+      }
+    }
+    
+    loadAll();
+  }, [profile?.nomsociete]);
+
+  // ---------------------
+  // FONCTIONS DE RECHARGEMENT MANUEL (pour refresh après CRUD)
   // ---------------------
   const loadChantiers = async () => {
     if (!profile?.nomsociete) return;
@@ -82,53 +174,6 @@ export function ChantierProvider({ children }) {
     if (error) console.error("❌ Erreur loadLots :", error);
     setLots(data || []);
   };
-
-  useEffect(() => {
-    if (!profile?.nomsociete) {
-      console.log("⏳ ChantierContext : En attente de profile.nomsociete...");
-      setLoading(false);
-      return;
-    }
-
-    console.log("🚀 ChantierContext : Chargement des données pour", profile.nomsociete);
-    
-    async function loadAll() {
-      try {
-        console.log("1️⃣ loadChantiers...");
-        await loadChantiers();
-        console.log("✅ loadChantiers OK");
-        
-        console.log("2️⃣ loadSousTraitants...");
-        await loadSousTraitants();
-        console.log("✅ loadSousTraitants OK");
-        
-        console.log("3️⃣ loadFournisseurs...");
-        await loadFournisseurs();
-        console.log("✅ loadFournisseurs OK");
-        
-        console.log("4️⃣ loadSAV...");
-        await loadSAV();
-        console.log("✅ loadSAV OK");
-        
-        console.log("5️⃣ loadTaches...");
-        await loadTaches();
-        console.log("✅ loadTaches OK");
-        
-        console.log("6️⃣ loadLots...");
-        await loadLots();
-        console.log("✅ loadLots OK");
-        
-        console.log("✅✅✅ ChantierContext : TOUT EST CHARGÉ !");
-      } catch (error) {
-        console.error("❌ ChantierContext : Erreur chargement", error);
-      } finally {
-        setLoading(false);
-        console.log("🏁 setLoading(false) appelé");
-      }
-    }
-    
-    loadAll();
-  }, [profile?.nomsociete]);
 
   // ---------------------
   // ✅ CONFLITS ARTISANS - CORRIGÉ POUR DÉTECTER SUR TOUTE LA PÉRIODE
