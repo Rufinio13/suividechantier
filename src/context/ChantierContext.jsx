@@ -65,17 +65,27 @@ export function ChantierProvider({ children }) {
   };
 
   const loadTaches = async () => {
+  console.log("📥 loadTaches START");
+  try {
     const { data, error } = await supabase
       .from("taches")
       .select("*")
       .order("created_at", { ascending: false });
+    
+    console.log("📥 loadTaches - Résultat:", { data: data?.length, error });
+    
     if (error) {
       console.error("❌ Erreur loadTaches :", error);
       setTaches([]);
       return;
     }
     setTaches(data || []);
-  };
+    console.log("✅ loadTaches SUCCESS - Tâches:", data?.length);
+  } catch (err) {
+    console.error("💥 loadTaches CRASH:", err);
+    setTaches([]);
+  }
+};
 
   const loadLots = async () => {
     const { data, error } = await supabase
