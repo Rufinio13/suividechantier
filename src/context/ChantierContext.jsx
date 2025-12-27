@@ -86,17 +86,32 @@ export function ChantierProvider({ children }) {
   };
 
   useEffect(() => {
-    async function loadAll() {
-      await Promise.all([
-        loadChantiers(),
-        loadSousTraitants(),
-        loadFournisseurs(),
-        loadSAV(),
-        loadTaches(),
-        loadLots(),
-      ]);
+    if (!profile?.nomsociete) {
+      console.log("⏳ ChantierContext : En attente de profile.nomsociete...");
       setLoading(false);
+      return;
     }
+
+    console.log("🚀 ChantierContext : Chargement des données pour", profile.nomsociete);
+    
+    async function loadAll() {
+      try {
+        await Promise.all([
+          loadChantiers(),
+          loadSousTraitants(),
+          loadFournisseurs(),
+          loadSAV(),
+          loadTaches(),
+          loadLots(),
+        ]);
+        console.log("✅ ChantierContext : Toutes les données chargées");
+      } catch (error) {
+        console.error("❌ ChantierContext : Erreur chargement", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    
     loadAll();
   }, [profile?.nomsociete]);
 
