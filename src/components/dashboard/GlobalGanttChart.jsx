@@ -28,7 +28,6 @@ const ROW_HEIGHT = 36;
 const TASK_ROW_HEIGHT = 32;
 const WEEK_GAP = 4;
 
-// ✅ Largeurs responsive pour la colonne des noms
 const CHANTIER_COL_WIDTH_DESKTOP = 250;
 const CHANTIER_COL_WIDTH_TABLET = 180;
 const CHANTIER_COL_WIDTH_MOBILE = 120;
@@ -114,32 +113,23 @@ const isCurrentWeek = (weekStart) => {
 export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
   const [expandedChantiers, setExpandedChantiers] = useState({});
   const [weekWidth, setWeekWidth] = useState(DEFAULT_WEEK_WIDTH);
-  
-  // ✅ State pour la largeur responsive de la colonne des noms
   const [chantierColWidth, setChantierColWidth] = useState(CHANTIER_COL_WIDTH_DESKTOP);
 
   const cleanTaches = useMemo(() => taches || [], [taches]);
   const conflictingTaskIdsAcrossAllChantiers = useMemo(() => detectGlobalConflicts(cleanTaches), [cleanTaches]);
 
-  // ✅ useEffect pour détecter la taille de l'écran et ajuster la largeur
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth < 640) {
-        // Mobile (sm)
         setChantierColWidth(CHANTIER_COL_WIDTH_MOBILE);
       } else if (window.innerWidth < 1024) {
-        // Tablet (md/lg)
         setChantierColWidth(CHANTIER_COL_WIDTH_TABLET);
       } else {
-        // Desktop
         setChantierColWidth(CHANTIER_COL_WIDTH_DESKTOP);
       }
     };
 
-    // Appeler au montage
     handleResize();
-
-    // Écouter les changements de taille
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -167,7 +157,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
 
       let chantierOverallStart = null;
       let chantierOverallEnd = null;
-      let hasConflictInChantier = false;
 
       const periode = calculerPeriodeChantier(chantierTaches);
 
@@ -176,12 +165,27 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
         chantierOverallEnd = periode.finGlobal;
       }
 
-      hasConflictInChantier = chantierTaches.some(t => conflictingTaskIdsAcrossAllChantiers.has(t.id));
-
       if (!isValidDate(chantierOverallStart) || !isValidDate(chantierOverallEnd)) {
         chantierOverallStart = startOfDay(new Date());
         chantierOverallEnd = endOfDay(new Date());
       }
+
+      // ✅ CALCULER QUELLES SEMAINES ONT DES CONFLITS
+      const conflictWeeks = new Set();
+      chantierTaches.forEach(tache => {
+        if (conflictingTaskIdsAcrossAllChantiers.has(tache.id) && tache.datedebut && tache.datefin) {
+          const tacheStart = parseISO(tache.datedebut);
+          const tacheEnd = parseISO(tache.datefin);
+          
+          if (isValidDate(tacheStart) && isValidDate(tacheEnd)) {
+            const weeks = eachWeekOfInterval(
+              { start: startOfWeek(tacheStart, { weekStartsOn: 1 }), end: endOfWeek(tacheEnd, { weekStartsOn: 1 }) },
+              { weekStartsOn: 1 }
+            );
+            weeks.forEach(week => conflictWeeks.add(format(week, 'yyyy-MM-dd')));
+          }
+        }
+      });
 
       return {
         id: chantier.id,
@@ -189,26 +193,28 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
         start: startOfDay(chantierOverallStart),
         end: endOfDay(chantierOverallEnd),
         type: 'chantier',
-        color: hasConflictInChantier ? 'bg-red-300' : 'bg-blue-300',
+        conflictWeeks, // ✅ Stocker les semaines avec conflits
         tasks: chantierTaches
           .map(tache => {
             const tacheDateDebut = parseISO(tache.datedebut);
             const tacheDateFin = parseISO(tache.datefin);
             const isConflict = conflictingTaskIdsAcrossAllChantiers.has(tache.id);
+            
+            // ✅ CODE COULEUR CORRIGÉ
             let taskColor = 'bg-gray-400';
 
             if (isConflict) {
+              // 🔴 ROUGE : Conflit artisan
               taskColor = 'bg-red-600';
-            } else if (isValidDate(tacheDateFin) && isPast(tacheDateFin) && !tache.terminee) {
-              taskColor = 'bg-red-400';
             } else if (tache.terminee) {
+              // 🔵 BLEU : Tâche terminée
+              taskColor = 'bg-blue-500';
+            } else if (isValidDate(tacheDateFin) && isPast(tacheDateFin)) {
+              // 🟠 ORANGE : En retard (non terminée + date fin passée)
+              taskColor = 'bg-orange-500';
+            } else {
+              // 🟢 VERT : À faire (non terminée + date fin >= aujourd'hui)
               taskColor = 'bg-green-500';
-            } else if (isValidDate(tacheDateFin) && (isFuture(tacheDateFin) || format(tacheDateFin, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd'))) {
-              if (tache.assignetype === 'fournisseur') {
-                taskColor = 'bg-blue-500';
-              } else if (tache.assignetype === 'soustraitant') {
-                taskColor = 'bg-orange-400';
-              }
             }
 
             return {
@@ -348,12 +354,17 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
       { weekStartsOn: 1 }
     );
 
+    // ✅ SEGMENTS AVEC COULEUR INDIVIDUELLE PAR SEMAINE
     const chantierSegments = chantierWeeks.map(weekStart => {
       const weekIndex = differenceInWeeks(weekStart, overallStartDate);
+      const weekKey = format(weekStart, 'yyyy-MM-dd');
+      const hasConflictThisWeek = chantierItem.conflictWeeks.has(weekKey);
+      
       return {
         weekIndex,
         left: getWeekPosition(weekIndex),
-        width: weekWidth
+        width: weekWidth,
+        color: hasConflictThisWeek ? 'bg-red-300' : 'bg-blue-300' // ✅ Rouge si conflit, bleu sinon
       };
     });
 
@@ -388,7 +399,8 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
           return {
             weekIndex,
             left: getWeekPosition(weekIndex),
-            width: weekWidth
+            width: weekWidth,
+            color: taskItem.color // Utilise la couleur de la tâche
           };
         });
 
@@ -434,7 +446,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
       </div>
 
       <div className="flex">
-        {/* ========== COLONNE 1 : NOMS DES CHANTIERS (RESPONSIVE) ========== */}
         <div className="flex-shrink-0 bg-slate-200" style={{ width: chantierColWidth }}>
           <div className="h-7 border-r border-slate-300 border-b border-slate-300 flex items-center justify-center bg-slate-200 sticky top-0 z-20">
             <span className="text-[10px] font-semibold text-slate-700">CHANTIER</span>
@@ -462,11 +473,9 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
                       className="truncate hover:underline text-[10px] sm:text-xs"
                       title={item.name}
                     >
-                      {/* ✅ Sur mobile, afficher version courte */}
                       <span className="sm:hidden">
                         {item.name.length > 12 ? item.name.substring(0, 10) + '...' : item.name}
                       </span>
-                      {/* ✅ Sur desktop, afficher nom complet */}
                       <span className="hidden sm:inline">
                         {item.name}
                       </span>
@@ -485,10 +494,8 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
           </div>
         </div>
 
-        {/* ========== COLONNE 2 : GANTT ========== */}
         <div className="flex-1 overflow-x-auto">
           <div style={{ minWidth: totalWidth }}>
-            {/* Header mois */}
             <div className="flex sticky top-0 bg-slate-100 z-20 border-b border-slate-300">
               {monthHeaders.map((month, index) => (
                 <div key={`month-${index}`} className="h-7 flex items-center justify-center border-r border-slate-300" style={{ width: month.width }}>
@@ -497,7 +504,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
               ))}
             </div>
 
-            {/* Header semaines */}
             <div className="flex sticky top-7 bg-slate-100 z-20 border-b border-slate-300" style={{ gap: `${WEEK_GAP}px` }}>
               {weekHeaders.map((w, idx) => (
                 <div 
@@ -516,7 +522,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
               ))}
             </div>
 
-            {/* Grille verticale */}
             <div className="relative pointer-events-none">
               {weekHeaders.map((week, i) => (
                 <React.Fragment key={`gridline-v-${i}`}>
@@ -544,11 +549,10 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
               ))}
             </div>
 
-            {/* Conteneur des lignes de chantiers/tâches */}
             <div className="relative" style={{ height: chartHeight - (50 + 20) }}>
               {renderedItems.map((item, index) => {
                 if (!isValidDate(item.start) || !isValidDate(item.end)) return null;
-                const itemTextColor = item.type === 'chantier' && (item.color === 'bg-blue-300' || item.color === 'bg-red-300') ? 'text-slate-800' : 'text-white';
+                const itemTextColor = item.type === 'chantier' ? 'text-slate-800' : 'text-white';
                 
                 return (
                   <React.Fragment key={item.id}>
@@ -577,7 +581,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
                         transition={{ duration: 0.2, delay: index * 0.02 }}
                         title={`${item.name}\nDu ${format(item.start, 'dd/MM/yy')} au ${format(item.end, 'dd/MM/yy')}${item.hasConflict && item.type === 'task' ? `\nConflit` : ''}`}
                       >
-                        <div className={`absolute inset-0 ${item.color} ${item.type === 'task' ? 'opacity-80' : 'opacity-95'} rounded-sm`}></div>
+                        <div className={`absolute inset-0 ${segment.color} ${item.type === 'task' ? 'opacity-80' : 'opacity-95'} rounded-sm`}></div>
                         {segIndex === 0 && (
                           <>
                             <span className="relative z-10 truncate text-[9px] font-medium">{item.name}</span>

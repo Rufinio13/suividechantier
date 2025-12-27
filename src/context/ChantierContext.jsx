@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
-import { parseISO, format } from "date-fns";
+import { parseISO, format, eachDayOfInterval, startOfDay } from "date-fns";
 
 export const ChantierContext = createContext();
 
@@ -101,17 +101,51 @@ export function ChantierProvider({ children }) {
   }, [profile?.nomsociete]);
 
   // ---------------------
-  // CONFLITS ARTISANS
+  // ✅ CONFLITS ARTISANS - CORRIGÉ POUR DÉTECTER SUR TOUTE LA PÉRIODE
   // ---------------------
   const conflictsByChantier = useMemo(() => {
     const conflicts = {};
+    
+    // Pour chaque tâche avec artisan assigné
     taches.forEach(t => {
-      if (!t.assigneid || t.assignetype !== "soustraitant" || !t.datedebut) return;
-      const key = `${t.assigneid}-${format(parseISO(t.datedebut), "yyyy-MM-dd")}`;
-      if (!conflicts[key]) conflicts[key] = { count: 0, chantierids: [] };
-      conflicts[key].count += 1;
-      if (!conflicts[key].chantierids.includes(t.chantierid)) conflicts[key].chantierids.push(t.chantierid);
+      if (!t.assigneid || t.assignetype !== "soustraitant" || !t.datedebut || !t.datefin) return;
+      
+      try {
+        const start = startOfDay(parseISO(t.datedebut));
+        const end = startOfDay(parseISO(t.datefin));
+        
+        // Pour CHAQUE jour de la tâche
+        const days = eachDayOfInterval({ start, end });
+        
+        days.forEach(day => {
+          const key = `${t.assigneid}-${format(day, "yyyy-MM-dd")}`;
+          
+          if (!conflicts[key]) {
+            conflicts[key] = { count: 0, chantierids: [], tacheIds: [] };
+          }
+          
+          conflicts[key].count += 1;
+          
+          if (!conflicts[key].chantierids.includes(t.chantierid)) {
+            conflicts[key].chantierids.push(t.chantierid);
+          }
+          
+          if (!conflicts[key].tacheIds.includes(t.id)) {
+            conflicts[key].tacheIds.push(t.id);
+          }
+        });
+      } catch (err) {
+        console.error("Erreur parsing date tâche:", t.id, err);
+      }
     });
+    
+    // Supprimer les entrées sans conflit (1 seule tâche ou 1 seul chantier)
+    Object.keys(conflicts).forEach(k => {
+      if (conflicts[k].count <= 1 || conflicts[k].chantierids.length <= 1) {
+        delete conflicts[k];
+      }
+    });
+    
     return conflicts;
   }, [taches]);
 
@@ -152,7 +186,7 @@ export function ChantierProvider({ children }) {
         chantierid: tache.chantierid,
         lotid: tache.lotid,
         assigneid: tache.assigneid ?? null,
-        assignetype: tache.assignetype ?? null, // 'soustraitant' ou 'fournisseur'
+        assignetype: tache.assignetype ?? null,
         datedebut: tache.datedebut ?? null,
         datefin: tache.datefin ?? null,
         terminee: tache.terminee ?? false,

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useChantier } from '@/context/ChantierContext.jsx';
@@ -8,6 +8,7 @@ import { ArrowLeft, Plus, AlertTriangle } from 'lucide-react';
 import { TacheFormModal } from '@/components/planning/TacheFormModal.jsx';
 import { TacheItem } from '@/components/planning/TacheItem.jsx';
 import { GanttChart } from '@/components/planning/GanttChart.jsx';
+import { CalendrierView } from '@/components/planning/CalendrierView.jsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -20,7 +21,7 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   console.log("🏗️ Planning - isEmbedded:", isEmbedded, "| embeddedChantierId:", embeddedChantierId, "| params.id:", params.id, "| chantierId final:", chantierId);
 
   const { toast } = useToast();
-  const { chantiers, lots: globalLots, taches, addTache, updateTache, deleteTache, loading } = useChantier();
+  const { chantiers, lots: globalLots, taches, addTache, updateTache, deleteTache, loading, conflictsByChantier } = useChantier();
 
   const [isAddTacheDialogOpen, setIsAddTacheDialogOpen] = useState(false);
   const [isEditTacheDialogOpen, setIsEditTacheDialogOpen] = useState(false);
@@ -36,27 +37,6 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   }, [taches, chantierId]);
 
   const displayedTaches = useMemo(() => (hideCompleted ? chantiersTaches.filter(t => !t.terminee) : chantiersTaches), [chantiersTaches, hideCompleted]);
-
-  const conflictsForChantier = useMemo(() => {
-    const conflicts = {};
-    taches.forEach(t => {
-      if (t.assignetype === 'soustraitant' && t.assigneid && t.datedebut && t.datefin) {
-        const start = new Date(t.datedebut);
-        const end = new Date(t.datefin);
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          const key = `${t.assigneid}-${d.toISOString().split('T')[0]}`;
-          conflicts[key] = conflicts[key] || { count: 0, chantierIds: new Set() };
-          conflicts[key].count++;
-          conflicts[key].chantierIds.add(t.chantierid);
-        }
-      }
-    });
-    Object.keys(conflicts).forEach(k => {
-      if (conflicts[k].count <= 1 || !conflicts[k].chantierIds.has(chantierId) || conflicts[k].chantierIds.size <= 1) delete conflicts[k];
-      else conflicts[k].chantierIds = Array.from(conflicts[k].chantierIds);
-    });
-    return conflicts;
-  }, [taches, chantierId]);
 
   const openAddTacheDialog = () => {
     if (!globalLots.length) {
@@ -77,7 +57,6 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
     setIsEditTacheDialogOpen(true);
   };
 
-  // ✅ Gestion de la suppression avec confirmation et gestion d'erreur
   const handleDeleteTache = async (tacheId) => {
     if (!window.confirm("Êtes-vous sûr de vouloir supprimer cette tâche ?")) {
       return;
@@ -181,9 +160,10 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
       )}
 
       <Tabs defaultValue="listes" className="w-full">
-        <TabsList className={`grid w-full grid-cols-2 ${isEmbedded ? 'md:w-full' : 'md:w-[400px]'}`}>
-          <TabsTrigger value="listes">Vue Tâches</TabsTrigger>
-          <TabsTrigger value="gantt">Vue Gantt</TabsTrigger>
+        <TabsList className={`grid w-full ${isEmbedded ? 'grid-cols-3 md:w-full' : 'grid-cols-3 md:w-[500px]'}`}>
+          <TabsTrigger value="listes">Tâches</TabsTrigger>
+          <TabsTrigger value="calendrier">Calendrier</TabsTrigger>
+          <TabsTrigger value="gantt">Gantt</TabsTrigger>
         </TabsList>
 
         <TabsContent value="listes">
@@ -211,10 +191,32 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
                       lots={globalLots}
                       onEdit={() => openEditTacheDialog(tache)}
                       onDelete={() => handleDeleteTache(tache.id)}
-                      conflicts={conflictsForChantier}
+                      conflicts={conflictsByChantier}
                     />
                   ))}
                 </div>
+              ) : (
+                renderEmptyState()
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="calendrier">
+          <Card className="mt-4 shadow-none border-0 sm:border sm:shadow-sm">
+            {!isEmbedded && (
+              <CardHeader>
+                <CardTitle>Vue Calendrier</CardTitle>
+              </CardHeader>
+            )}
+            <CardContent className={isEmbedded ? 'p-0 pt-4 sm:p-6' : ''}>
+              {chantiersTaches.length > 0 ? (
+                <CalendrierView 
+                  taches={chantiersTaches} 
+                  lots={globalLots} 
+                  conflictsByChantier={conflictsByChantier}
+                  onEditTache={openEditTacheDialog}
+                />
               ) : (
                 renderEmptyState()
               )}
@@ -230,7 +232,11 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
               </CardHeader>
             )}
             <CardContent className={isEmbedded ? 'p-0 pt-4 sm:p-6' : ''}>
-              <GanttChart taches={taches} chantierId={chantierId} />
+              <GanttChart 
+                taches={taches} 
+                chantierId={chantierId} 
+                onEditTache={openEditTacheDialog}
+              />
             </CardContent>
           </Card>
         </TabsContent>

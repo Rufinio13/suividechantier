@@ -1,7 +1,39 @@
 import { parseISO, addDays, format, getDay } from 'date-fns';
 
+// Liste des jours fériés 2025-2026
+const JOURS_FERIES = [
+  '2025-01-01', '2025-04-21', '2025-05-01', '2025-05-08', '2025-05-29', '2025-06-09',
+  '2025-07-14', '2025-08-15', '2025-11-01', '2025-11-11', '2025-12-25',
+  '2026-01-01', '2026-04-06', '2026-05-01', '2026-05-08', '2026-05-14', '2026-05-25',
+  '2026-07-14', '2026-08-15', '2026-11-01', '2026-11-11', '2026-12-25',
+];
+
 /**
- * Calcule la date de fin en ajoutant un nombre de jours OUVRÉS (sans weekends)
+ * Vérifie si une date est un jour férié
+ * @param {Date} date - Date à vérifier
+ * @returns {boolean}
+ */
+const isJourFerie = (date) => {
+  const dateStr = format(date, 'yyyy-MM-dd');
+  return JOURS_FERIES.includes(dateStr);
+};
+
+/**
+ * Vérifie si une date est un jour ouvré (ni week-end, ni férié)
+ * @param {Date} date - Date à vérifier
+ * @returns {boolean}
+ */
+const isJourOuvre = (date) => {
+  const dayOfWeek = getDay(date);
+  // Week-end = 0 (dimanche) ou 6 (samedi)
+  if (dayOfWeek === 0 || dayOfWeek === 6) return false;
+  // Jour férié
+  if (isJourFerie(date)) return false;
+  return true;
+};
+
+/**
+ * Calcule la date de fin en ajoutant un nombre de jours OUVRÉS (sans weekends ni fériés)
  * @param {string} dateDebut - Date de début au format 'yyyy-MM-dd'
  * @param {number} duree - Nombre de jours ouvrés
  * @returns {string|null} Date de fin au format 'yyyy-MM-dd'
@@ -15,11 +47,8 @@ export const calculateDateFinLogic = (dateDebut, duree) => {
     
     // On ajoute des jours jusqu'à atteindre la durée en jours ouvrés
     while (joursAjoutes < parseInt(duree, 10)) {
-      // getDay() retourne 0 (dimanche) à 6 (samedi)
-      const dayOfWeek = getDay(currentDate);
-      
-      // Si c'est un jour ouvré (lundi=1 à vendredi=5)
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      // Si c'est un jour ouvré (ni week-end, ni férié)
+      if (isJourOuvre(currentDate)) {
         joursAjoutes++;
       }
       
@@ -37,7 +66,7 @@ export const calculateDateFinLogic = (dateDebut, duree) => {
 };
 
 /**
- * Calcule le nombre de jours ouvrés entre deux dates
+ * Calcule le nombre de jours ouvrés entre deux dates (sans weekends ni fériés)
  * @param {string} dateDebut - Date de début au format 'yyyy-MM-dd'
  * @param {string} dateFin - Date de fin au format 'yyyy-MM-dd'
  * @returns {number} Nombre de jours ouvrés
@@ -51,10 +80,8 @@ export const calculateDureeOuvree = (dateDebut, dateFin) => {
     let joursOuvres = 0;
     
     while (currentDate <= endDate) {
-      const dayOfWeek = getDay(currentDate);
-      
-      // Si c'est un jour ouvré (lundi=1 à vendredi=5)
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      // Si c'est un jour ouvré (ni week-end, ni férié)
+      if (isJourOuvre(currentDate)) {
         joursOuvres++;
       }
       

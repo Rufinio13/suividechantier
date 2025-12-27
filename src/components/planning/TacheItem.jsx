@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { format, parseISO, isPast } from 'date-fns';
+import { format, parseISO, isPast, eachDayOfInterval, startOfDay } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -8,8 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Calendar, Edit, Trash2, User, Truck, AlertTriangle } from 'lucide-react';
 import { useChantier } from '@/context/ChantierContext';
 
-export function TacheItem({ tache, lots, onEdit, onDelete }) {
-  const { sousTraitants, fournisseurs, updateTache, chantiers, conflictsByChantier } = useChantier();
+export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
+  const { sousTraitants, fournisseurs, updateTache, chantiers } = useChantier();
 
   const formatDate = (dateString) => {
     try {
@@ -38,7 +38,6 @@ export function TacheItem({ tache, lots, onEdit, onDelete }) {
     AssigneIcon = Truck;
   }
 
-  // ✅ CORRIGÉ : Utilise les bons noms de colonnes selon la table
   const assigneNom = assigneEntity
     ? (tache.assignetype === 'soustraitant' 
         ? (assigneEntity.nomsocieteST || `${assigneEntity.PrenomST || ''} ${assigneEntity.nomST || ''}`.trim() || 'Artisan')
@@ -48,34 +47,45 @@ export function TacheItem({ tache, lots, onEdit, onDelete }) {
   // --------------------- RETARD ---------------------
   const isRetard = !tache.terminee && tache.datefin && isPast(parseISO(tache.datefin));
 
-  // --------------------- CONFLITS ---------------------
+  // --------------------- CONFLITS - CORRIGÉ ---------------------
   const tacheConflictInfo = useMemo(() => {
-    if (!tache.assigneid || tache.assignetype !== 'soustraitant') return null;
+    if (!tache.assigneid || tache.assignetype !== 'soustraitant' || !tache.datedebut || !tache.datefin) return null;
 
-    const key = `${tache.assigneid}-${format(parseISO(tache.datedebut), 'yyyy-MM-dd')}`;
-    const conflict = conflictsByChantier[key];
-
-    if (conflict && conflict.count > 1 && conflict.chantierids.includes(tache.chantierid)) {
-      const otherIds = conflict.chantierids.filter(id => id !== tache.chantierid);
-
-      if (otherIds.length > 0) {
-        const otherNames = otherIds
-          // ✅ CORRIGÉ : nomchantier au lieu de nom
-          .map(id => chantiers.find(c => c.id === id)?.nomchantier)
-          .filter(Boolean);
-
-        return {
-          message: `Artisan en conflit le ${formatDate(tache.datedebut)} avec chantier(s): ${otherNames.join(', ')}.`,
-        };
+    try {
+      // Vérifier TOUS les jours de la tâche
+      const start = startOfDay(parseISO(tache.datedebut));
+      const end = startOfDay(parseISO(tache.datefin));
+      const days = eachDayOfInterval({ start, end });
+      
+      for (const day of days) {
+        const key = `${tache.assigneid}-${format(day, "yyyy-MM-dd")}`;
+        const conflict = conflicts[key];
+        
+        if (conflict && conflict.chantierids && conflict.chantierids.length > 1) {
+          const otherIds = conflict.chantierids.filter(id => id !== tache.chantierid);
+          
+          if (otherIds.length > 0) {
+            const otherNames = otherIds
+              .map(id => chantiers.find(c => c.id === id)?.nomchantier)
+              .filter(Boolean);
+            
+            return {
+              message: `Artisan en conflit le ${format(day, 'dd/MM/yyyy')} avec: ${otherNames.join(', ')}.`,
+            };
+          }
+        }
       }
+    } catch (err) {
+      console.error("Erreur parsing conflit:", err);
     }
+    
     return null;
-  }, [tache, conflictsByChantier, chantiers]);
+  }, [tache, conflicts, chantiers]);
 
   const hasConflict = !!tacheConflictInfo;
 
   const cardClasses = `p-4 border rounded-lg hover:bg-gray-50 transition-colors 
-    ${hasConflict ? 'border-red-600 bg-red-100' : (isRetard ? 'border-red-500 bg-red-50' : '')}`;
+    ${hasConflict ? 'border-red-600 bg-red-50' : (isRetard ? 'border-red-500 bg-red-50' : '')}`;
 
   const titleClasses = `font-medium ${hasConflict ? 'text-red-700' : (isRetard ? 'text-red-700' : '')}`;
 
@@ -88,7 +98,6 @@ export function TacheItem({ tache, lots, onEdit, onDelete }) {
       <div className="flex justify-between items-start mb-2">
         <div>
           <h3 className={titleClasses}>{tache.nom}</h3>
-          {/* ✅ CORRIGÉ : lot.lot au lieu de lot.nom */}
           {lot && <p className="text-xs text-muted-foreground">Lot: {lot.lot}</p>}
         </div>
         <div className="flex space-x-2">
