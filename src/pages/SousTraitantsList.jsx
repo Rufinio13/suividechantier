@@ -18,16 +18,19 @@ export function SousTraitantsList() {
     setIsModalOpen(true);
   };
 
+  // ✅ Filtre + tri alphabétique
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
-    return (sousTraitants ?? []).filter(
-      st =>
-        st.nomsocieteST?.toLowerCase().includes(term) ||
-        st.nomST?.toLowerCase().includes(term) ||
-        st.PrenomST?.toLowerCase().includes(term) ||
-        st.email?.toLowerCase().includes(term) ||
-        st.telephone?.toLowerCase().includes(term)
-    );
+    return (sousTraitants ?? [])
+      .filter(
+        st =>
+          st.nomsocieteST?.toLowerCase().includes(term) ||
+          st.nomST?.toLowerCase().includes(term) ||
+          st.PrenomST?.toLowerCase().includes(term) ||
+          st.email?.toLowerCase().includes(term) ||
+          st.telephone?.toLowerCase().includes(term)
+      )
+      .sort((a, b) => (a.nomsocieteST || "").localeCompare(b.nomsocieteST || "")); // ✅ Tri A-Z
   }, [sousTraitants, search]);
 
   if (loading) {

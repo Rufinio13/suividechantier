@@ -62,7 +62,26 @@ export function SousTraitantProvider({ children }) {
 
   // ---- Ajouter un sous-traitant ----
   const addSousTraitant = async (st) => {
-    if (!user || !profile?.nomsociete) return;
+    // ✅ VÉRIFIER LA SESSION EN DÉTAIL
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    console.log("🔐 Session avant insert:", { 
+      hasSession: !!session, 
+      userId: session?.user?.id,
+      expiresAt: session?.expires_at,
+      accessToken: session?.access_token ? 'présent' : 'absent',
+      error: sessionError
+    });
+
+    if (!session) {
+      throw new Error("Session Supabase expirée");
+    }
+    
+    console.log("📥 addSousTraitant appelé avec:", st);
+    
+    if (!user || !profile?.nomsociete) {
+      console.error("❌ User ou nomsociete manquant:", { user: !!user, nomsociete: profile?.nomsociete });
+      throw new Error("User ou société non définis");
+    }
 
     const payload = {
       nomST: st.nomST || null,
@@ -78,20 +97,40 @@ export function SousTraitantProvider({ children }) {
 
     console.log("📤 Insertion ST payload :", payload);
 
-    const { data, error } = await supabase
-      .from("soustraitants")
-      .insert([payload])
-      .select()
-      .single();
+    try {
+      console.log("🔄 Appel Supabase insert...");
+      
+      // ✅ Ajouter un timeout de 10 secondes
+      const insertPromise = supabase
+        .from("soustraitants")
+        .insert([payload])
+        .select()
+        .single();
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout: la requête a pris plus de 10 secondes')), 10000)
+      );
+      
+      const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
 
-    if (error) {
-      console.error("❌ addSousTraitant :", error);
-      throw error;
+      console.log("📥 Réponse Supabase:", { data, error });
+
+      if (error) {
+        console.error("❌ Erreur Supabase:", error);
+        throw error;
+      }
+
+      if (!data) {
+        throw new Error("Aucune donnée retournée par Supabase");
+      }
+
+      console.log("✅ Sous-traitant inséré :", data);
+      setSousTraitants((prev) => [data, ...(prev || [])]);
+      return data;
+    } catch (err) {
+      console.error("❌ Exception addSousTraitant:", err);
+      throw err;
     }
-
-    console.log("✅ Sous-traitant inséré :", data);
-    setSousTraitants((prev) => [data, ...(prev || [])]);
-    return data;
   };
 
   // ---- Mise à jour d'un sous-traitant ----

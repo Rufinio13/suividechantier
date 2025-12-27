@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,6 +14,16 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
   const { toast } = useToast();
   const { addSousTraitant, updateSousTraitant } = useSousTraitant();
   const { lots: globalLots = [] } = useLots();
+
+  // ✅ Protection anti-double-submit
+  const isSavingRef = useRef(false);
+
+  // ✅ Tri alphabétique des lots
+  const sortedLots = useMemo(() => {
+    return [...globalLots].sort((a, b) => 
+      (a.lot || "").localeCompare(b.lot || "")
+    );
+  }, [globalLots]);
 
   const [formData, setFormData] = useState({
     nomsocieteST: "",
@@ -55,11 +65,23 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
   };
 
   const handleSubmit = async (e) => {
+    console.log('🔵 handleSubmit SousTraitant appelé !');
+    console.log('📋 FormData:', formData);
     e.preventDefault();
+    
+    // ✅ Bloquer si déjà en cours
+    if (isSavingRef.current) {
+      console.log('⚠️ Sauvegarde déjà en cours, ignoré');
+      return;
+    }
+
+    isSavingRef.current = true;
+
     try {
       let result;
       if (initialData?.id) {
         // ✅ Envoyer UNIQUEMENT les champs modifiables
+        console.log('📝 Mode édition - ID:', initialData.id);
         const updates = {
           nomsocieteST: formData.nomsocieteST,
           nomST: formData.nomST,
@@ -72,9 +94,14 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
         result = await updateSousTraitant(initialData.id, updates);
         toast({ title: "Sous-traitant mis à jour ✅", description: result.nomsocieteST });
       } else {
+        // ✅ Envoyer UNIQUEMENT les champs modifiables
+        console.log('➕ Mode création');
         result = await addSousTraitant(formData);
         toast({ title: "Sous-traitant créé ✅", description: result.nomsocieteST });
       }
+      
+      console.log('✅ Résultat:', result);
+      
       onSuccess?.();
       onClose?.();
       setFormData({
@@ -87,8 +114,13 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
         assigned_lots: [],
       });
     } catch (err) {
-      console.error(err);
+      console.error('❌ Erreur handleSubmit:', err);
       toast({ title: "Erreur ❌", description: "Impossible de sauvegarder le sous-traitant", variant: "destructive" });
+    } finally {
+      // ✅ Débloquer après 1 seconde
+      setTimeout(() => {
+        isSavingRef.current = false;
+      }, 1000);
     }
   };
 
@@ -99,7 +131,7 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
           <DialogTitle>{initialData ? "Modifier Sous-Traitant" : "Nouveau Sous-Traitant"}</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+        <form id="soustraitant-form" onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="nomsocieteST">Nom de la société <span className="text-red-500">*</span></Label>
             <Input id="nomsocieteST" name="nomsocieteST" value={formData.nomsocieteST || ""} onChange={handleChange} required />
@@ -136,7 +168,7 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
           <div className="space-y-2">
             <Label>Lots / Compétences</Label>
             <div className="max-h-40 overflow-auto border rounded-md p-2 space-y-1">
-              {globalLots.map(lot => (
+              {sortedLots.map(lot => (
                 <div key={lot.id} className="flex items-center gap-2">
                   <Checkbox
                     checked={formData.assigned_lots.includes(lot.lot)}
@@ -151,7 +183,10 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
-            <Button type="submit"><Plus className="mr-2 h-4 w-4" />{initialData ? "Modifier" : "Créer"}</Button>
+            <Button type="submit" disabled={isSavingRef.current}>
+              <Plus className="mr-2 h-4 w-4" />
+              {isSavingRef.current ? 'Enregistrement...' : (initialData ? "Modifier" : "Créer")}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

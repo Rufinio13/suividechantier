@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,13 @@ export function FournisseurForm({ initialData = null, onClose, onSuccess }) {
   const { user, profile } = useAuth();
   const { addFournisseur, updateFournisseur, loadSAV } = useFournisseur();
   const { lots: globalLots = [] } = useLots();
+
+  // ✅ Tri alphabétique des lots
+  const sortedLots = useMemo(() => {
+    return [...globalLots].sort((a, b) => 
+      (a.lot || "").localeCompare(b.lot || "")
+    );
+  }, [globalLots]);
 
   const [formData, setFormData] = useState({
     nomsocieteF: "",
@@ -214,7 +221,7 @@ export function FournisseurForm({ initialData = null, onClose, onSuccess }) {
         </Label>
 
         <div className="max-h-40 overflow-auto border rounded-md p-2 space-y-1">
-          {globalLots.map(lot => (
+          {sortedLots.map(lot => (
             <div key={lot.id} className="flex items-center gap-2">
               <Checkbox
                 id={`lot-${lot.id}`}
@@ -240,7 +247,7 @@ export function FournisseurForm({ initialData = null, onClose, onSuccess }) {
         <Button type="button" variant="outline" onClick={onClose}>
           Annuler
         </Button>
-        <Button type="submit" form="fournisseur-form">
+        <Button type="submit">
           <Plus className="mr-2 h-4 w-4" />
           {initialData ? "Enregistrer" : "Créer"}
         </Button>

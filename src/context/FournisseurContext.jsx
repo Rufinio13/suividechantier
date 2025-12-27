@@ -39,6 +39,20 @@ export function FournisseurProvider({ children }) {
   // AJOUTER UN FOURNISSEUR
   // -----------------------------
   const addFournisseur = async (fournisseurData) => {
+    // ✅ VÉRIFIER LA SESSION
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    console.log("🔐 Session avant insert:", { 
+      hasSession: !!session, 
+      userId: session?.user?.id,
+      expiresAt: session?.expires_at,
+      accessToken: session?.access_token ? 'présent' : 'absent',
+      error: sessionError
+    });
+
+    if (!session) {
+      throw new Error("Session Supabase expirée");
+    }
+
     if (!profile?.nomsociete || !user) return;
 
     const payload = {

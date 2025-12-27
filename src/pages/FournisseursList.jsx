@@ -49,15 +49,18 @@ export function FournisseursList() {
     }
   };
 
+  // ✅ Filtre + tri alphabétique
   const filteredFournisseurs = useMemo(() => {
     const searchLower = searchTerm.toLowerCase();
-    return fournisseurs.filter((f) =>
-      f.nomsocieteF?.toLowerCase().includes(searchLower) ||
-      f.nomcontact?.toLowerCase().includes(searchLower) ||
-      f.email?.toLowerCase().includes(searchLower) ||
-      f.telephone?.toLowerCase().includes(searchLower) ||
-      (f.assignedlots?.join(", ") || "").toLowerCase().includes(searchLower)
-    );
+    return fournisseurs
+      .filter((f) =>
+        f.nomsocieteF?.toLowerCase().includes(searchLower) ||
+        f.nomcontact?.toLowerCase().includes(searchLower) ||
+        f.email?.toLowerCase().includes(searchLower) ||
+        f.telephone?.toLowerCase().includes(searchLower) ||
+        (f.assignedlots?.join(", ") || "").toLowerCase().includes(searchLower)
+      )
+      .sort((a, b) => (a.nomsocieteF || "").localeCompare(b.nomsocieteF || "")); // ✅ Tri A-Z
   }, [fournisseurs, searchTerm]);
 
   if (loading) {

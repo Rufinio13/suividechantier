@@ -119,41 +119,55 @@ export function ChantierProvider({ children }) {
   // CRUD TACHES
   // ---------------------
   const addTache = async (tache) => {
-  // Vérification des UUID
-  if (!tache.chantierid || typeof tache.chantierid !== "string") {
-    throw new Error("chantierid doit être un UUID valide.");
-  }
-  if (!tache.lotid || typeof tache.lotid !== "string") {
-    throw new Error("lotid doit être un UUID valide.");
-  }
-  if (tache.assigneid && typeof tache.assigneid !== "string") {
-    throw new Error("assigneid doit être un UUID valide si renseigné.");
-  }
+    // ✅ VÉRIFIER LA SESSION
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    console.log("🔐 Session avant insert:", { 
+      hasSession: !!session, 
+      userId: session?.user?.id,
+      expiresAt: session?.expires_at,
+      accessToken: session?.access_token ? 'présent' : 'absent',
+      error: sessionError
+    });
 
-  const { data, error } = await supabase
-    .from("taches")
-    .insert([{
-      nom: tache.nom ?? null,
-      description: tache.description ?? null,
-      chantierid: tache.chantierid,
-      lotid: tache.lotid,
-      assigneid: tache.assigneid ?? null,
-      assignetype: tache.assignetype ?? null, // 'soustraitant' ou 'fournisseur'
-      datedebut: tache.datedebut ?? null,
-      datefin: tache.datefin ?? null,
-      terminee: tache.terminee ?? false,
-    }])
-    .select("*")
-    .single();
+    if (!session) {
+      throw new Error("Session Supabase expirée");
+    }
 
-  if (error) {
-    console.error("❌ Erreur save tâche:", error);
-    throw error;
-  }
+    // Vérification des UUID
+    if (!tache.chantierid || typeof tache.chantierid !== "string") {
+      throw new Error("chantierid doit être un UUID valide.");
+    }
+    if (!tache.lotid || typeof tache.lotid !== "string") {
+      throw new Error("lotid doit être un UUID valide.");
+    }
+    if (tache.assigneid && typeof tache.assigneid !== "string") {
+      throw new Error("assigneid doit être un UUID valide si renseigné.");
+    }
 
-  setTaches(prev => [data, ...prev]);
-  return data;
-};
+    const { data, error } = await supabase
+      .from("taches")
+      .insert([{
+        nom: tache.nom ?? null,
+        description: tache.description ?? null,
+        chantierid: tache.chantierid,
+        lotid: tache.lotid,
+        assigneid: tache.assigneid ?? null,
+        assignetype: tache.assignetype ?? null, // 'soustraitant' ou 'fournisseur'
+        datedebut: tache.datedebut ?? null,
+        datefin: tache.datefin ?? null,
+        terminee: tache.terminee ?? false,
+      }])
+      .select("*")
+      .single();
+
+    if (error) {
+      console.error("❌ Erreur save tâche:", error);
+      throw error;
+    }
+
+    setTaches(prev => [data, ...prev]);
+    return data;
+  };
 
   const updateTache = async (id, updates) => {
     if (updates.lotid && typeof updates.lotid !== "string") {
@@ -180,29 +194,26 @@ export function ChantierProvider({ children }) {
     return data;
   };
 
-// Remplace ta fonction deleteTache dans ChantierContext.jsx par celle-ci :
-
-const deleteTache = async (id) => {
-  console.log("🗑️ Tentative de suppression tâche:", id);
-  
-  const { data, error } = await supabase
-    .from("taches")
-    .delete()
-    .eq("id", id)
-    .select(); // Ajoute .select() pour voir ce qui est supprimé
-  
-  console.log("🗑️ Résultat suppression:", { data, error });
-  
-  if (error) {
-    console.error("❌ Erreur suppression tâche:", error);
-    throw error;
-  }
-  
-  setTaches(prev => prev.filter(t => t.id !== id));
-  console.log("✅ Tâche supprimée du state local");
-return data;  
-
-};
+  const deleteTache = async (id) => {
+    console.log("🗑️ Tentative de suppression tâche:", id);
+    
+    const { data, error } = await supabase
+      .from("taches")
+      .delete()
+      .eq("id", id)
+      .select();
+    
+    console.log("🗑️ Résultat suppression:", { data, error });
+    
+    if (error) {
+      console.error("❌ Erreur suppression tâche:", error);
+      throw error;
+    }
+    
+    setTaches(prev => prev.filter(t => t.id !== id));
+    console.log("✅ Tâche supprimée du state local");
+    return data;
+  };
 
   // ---------------------
   // CRUD CHANTIERS / SOUS-TRAITANTS / FOURNISSEURS / SAV
@@ -213,38 +224,37 @@ return data;
     setChantiers(prev => [data, ...prev]);
     return data;
   };
-  // Dans ChantierContext.jsx
-// Remplace la fonction updateChantier (ligne ~245) par celle-ci :
 
-const updateChantier = async (id, updates) => {
-  console.log('📤 updateChantier - ID:', id);
-  console.log('📤 updateChantier - Updates:', updates);
-  
-  try {
-    const { data, error } = await supabase
-      .from("chantiers")
-      .update(updates)
-      .eq("id", id)
-      .select()
-      .single();
+  const updateChantier = async (id, updates) => {
+    console.log('📤 updateChantier - ID:', id);
+    console.log('📤 updateChantier - Updates:', updates);
     
-    console.log('📥 Réponse Supabase:', { data, error });
-    
-    if (error) {
-      console.error('❌ Erreur Supabase updateChantier:', error);
+    try {
+      const { data, error } = await supabase
+        .from("chantiers")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+      
+      console.log('📥 Réponse Supabase:', { data, error });
+      
+      if (error) {
+        console.error('❌ Erreur Supabase updateChantier:', error);
+        throw error;
+      }
+      
+      console.log('✅ Chantier mis à jour:', data);
+      
+      setChantiers(prev => prev.map(c => c.id === id ? data : c));
+      
+      return data;
+    } catch (error) {
+      console.error('❌ Exception updateChantier:', error);
       throw error;
     }
-    
-    console.log('✅ Chantier mis à jour:', data);
-    
-    setChantiers(prev => prev.map(c => c.id === id ? data : c));
-    
-    return data;
-  } catch (error) {
-    console.error('❌ Exception updateChantier:', error);
-    throw error;
-  }
-};
+  };
+
   const deleteChantier = async (id) => {
     const { error } = await supabase.from("chantiers").delete().eq("id", id);
     if (error) throw error;

@@ -14,7 +14,7 @@ export function TacheFormModal({
   isOpen,
   onClose,
   tache,
-  chantierId,  // ✅ CORRIGÉ : majuscule pour matcher Planning.jsx
+  chantierId,
   lots: globalLots,
   addTache,
   updateTache
@@ -37,13 +37,21 @@ export function TacheFormModal({
   });
 
   // ---------------------------------------------------------
+  // LOTS TRIÉS PAR ORDRE ALPHABÉTIQUE
+  // ---------------------------------------------------------
+  const sortedLots = useMemo(() => {
+    return [...(globalLots || [])].sort((a, b) => 
+      (a.lot || "").localeCompare(b.lot || "")
+    );
+  }, [globalLots]);
+
+  // ---------------------------------------------------------
   // INITIALISATION + PRÉ-REMPLISSAGE
   // ---------------------------------------------------------
   useEffect(() => {
     if (!isOpen) return;
 
     if (tache) {
-      // ✅ CORRIGÉ : Calcule la durée en jours ouvrés uniquement
       const duree =
         tache.datedebut && tache.datefin
           ? calculateDureeOuvree(tache.datedebut, tache.datefin)
@@ -52,7 +60,7 @@ export function TacheFormModal({
       setFormData({
         nom: tache.nom || "",
         description: tache.description || "",
-        lotid: tache.lotid || (globalLots?.[0]?.id || ""),
+        lotid: tache.lotid || (sortedLots?.[0]?.id || ""),
         datedebut: tache.datedebut || "",
         duree,
         datefin: tache.datefin || "",
@@ -64,7 +72,7 @@ export function TacheFormModal({
       setFormData({
         nom: "",
         description: "",
-        lotid: globalLots?.[0]?.id || "",
+        lotid: sortedLots?.[0]?.id || "",
         datedebut: "",
         duree: "",
         datefin: "",
@@ -73,7 +81,7 @@ export function TacheFormModal({
         terminee: false,
       });
     }
-  }, [isOpen, tache, globalLots]);
+  }, [isOpen, tache, sortedLots]);
 
   // ---------------------------------------------------------
   // CALCUL AUTO DE LA DATE DE FIN
@@ -88,12 +96,12 @@ export function TacheFormModal({
   }, [formData.datedebut, formData.duree]);
 
   // ---------------------------------------------------------
-  // ENTITÉS ASSIGNABLES PAR LOT
+  // ENTITÉS ASSIGNABLES PAR LOT (TRIÉES ALPHABÉTIQUEMENT)
   // ---------------------------------------------------------
   const assignableEntities = useMemo(() => {
     if (!formData.lotid) return [];
 
-    const lotObj = globalLots.find(l => l.id === formData.lotid);
+    const lotObj = sortedLots.find(l => l.id === formData.lotid);
     if (!lotObj) return [];
 
     const lotName = lotObj.lot;
@@ -116,8 +124,11 @@ export function TacheFormModal({
           assignetype: "fournisseur",
         })) || [];
 
-    return [...stOpts, ...fOpts].sort((a, b) => a.nom.localeCompare(b.nom));
-  }, [formData.lotid, sousTraitants, fournisseurs, globalLots]);
+    // ✅ Tri alphabétique des entités assignables
+    return [...stOpts, ...fOpts].sort((a, b) => 
+      (a.nom || "").localeCompare(b.nom || "")
+    );
+  }, [formData.lotid, sousTraitants, fournisseurs, sortedLots]);
 
   // ---------------------------------------------------------
   // RESET ASSIGNE SI NON VALIDE
@@ -183,11 +194,10 @@ export function TacheFormModal({
       return;
     }
 
-    // ✅ CORRIGÉ : utilise chantierid (minuscule) pour matcher la colonne Supabase
     const payload = {
       nom: formData.nom,
       description: formData.description || null,
-      chantierid: chantierId,  // ✅ minuscule pour Supabase
+      chantierid: chantierId,
       lotid: formData.lotid,
       datedebut: formData.datedebut,
       datefin: calculateDateFinLogic(formData.datedebut, parseInt(formData.duree, 10)),
@@ -251,13 +261,13 @@ export function TacheFormModal({
               value={formData.lotid} 
               onValueChange={v => handleSelectChange("lotid", v)} 
               required
-              key={`lot-${formData.lotid}`}  // ✅ AJOUTÉ : Force le re-render
+              key={`lot-${formData.lotid}`}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Choisir lot..." />
               </SelectTrigger>
               <SelectContent>
-                {globalLots.map(l => (
+                {sortedLots.map(l => (
                   <SelectItem key={l.id} value={l.id}>{l.lot}</SelectItem>
                 ))}
               </SelectContent>
@@ -270,7 +280,7 @@ export function TacheFormModal({
               value={formData.assignetype && formData.assigneid ? `${formData.assignetype}:${formData.assigneid}` : ""}
               onValueChange={v => handleSelectChange("assigneCombined", v)}
               disabled={assignableEntities.length === 0}
-              key={`assigne-${formData.assignetype}-${formData.assigneid}`}  // ✅ AJOUTÉ : Force le re-render
+              key={`assigne-${formData.assignetype}-${formData.assigneid}`}
             >
               <SelectTrigger>
                 <SelectValue placeholder={assignableEntities.length === 0 ? "Aucun disponible" : "Choisir..."} />

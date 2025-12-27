@@ -52,6 +52,20 @@ export function LotsProvider({ children }) {
 
   // 🎯 Ajouter un lot
   const addLot = async (lotData) => {
+    // ✅ VÉRIFIER LA SESSION
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    console.log("🔐 Session avant insert:", { 
+      hasSession: !!session, 
+      userId: session?.user?.id,
+      expiresAt: session?.expires_at,
+      accessToken: session?.access_token ? 'présent' : 'absent',
+      error: sessionError
+    });
+
+    if (!session) {
+      throw new Error("Session Supabase expirée");
+    }
+
     if (!profile?.nomsociete) throw new Error("Société non définie");
     
     const { data, error } = await supabase

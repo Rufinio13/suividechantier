@@ -23,14 +23,17 @@ export function LotsList() {
     setIsModalOpen(false);
   };
 
+  // ✅ Filtre + tri alphabétique
   const filtered = useMemo(() => {
     const term = search.toLowerCase();
-    return (lots ?? []).filter(
-      l =>
-        l.lot?.toLowerCase().includes(term) ||
-        l.description?.toLowerCase().includes(term) ||
-        l.nomsociete?.toLowerCase().includes(term)
-    );
+    return (lots ?? [])
+      .filter(
+        l =>
+          l.lot?.toLowerCase().includes(term) ||
+          l.description?.toLowerCase().includes(term) ||
+          l.nomsociete?.toLowerCase().includes(term)
+      )
+      .sort((a, b) => (a.lot || "").localeCompare(b.lot || "")); // ✅ Tri A-Z
   }, [lots, search]);
 
   if (loading) {
