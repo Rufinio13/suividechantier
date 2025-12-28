@@ -10,7 +10,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   
   // ✅ INACTIVITÉ - Timer de 1 minute pour TEST (changer à 10 après)
-  const INACTIVITY_TIMEOUT = 1 * 60 * 1000; // 1 minute pour test
+  const INACTIVITY_TIMEOUT = 10 * 60 * 1000; 
   const inactivityTimerRef = useRef(null);
   const lastActivityRef = useRef(Date.now());
 
