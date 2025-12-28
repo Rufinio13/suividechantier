@@ -1,7 +1,6 @@
 // src/context/AuthProvider.jsx
-import { createContext, useEffect, useState, useRef, useCallback } from "react";
+import { createContext, useEffect, useState, useRef } from "react";
 import { supabase, setSupabaseRLSContext } from "@/lib/supabaseClient";
-import { useNavigate } from "react-router-dom";
 
 export const AuthContext = createContext();
 
@@ -10,9 +9,10 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  // ✅ INACTIVITÉ - Timer de 10 minutes (600000ms)
-  const INACTIVITY_TIMEOUT = 10 * 60 * 1000; // 10 minutes
+  // ✅ INACTIVITÉ - Timer de 1 minute pour TEST (changer à 10 après)
+  const INACTIVITY_TIMEOUT = 1 * 60 * 1000; // 1 minute pour test
   const inactivityTimerRef = useRef(null);
+  const lastActivityRef = useRef(Date.now());
 
   // Charger le profil via API REST directement
   const loadProfile = async (userId) => {
@@ -85,59 +85,86 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // ✅ RESET DU TIMER D'INACTIVITÉ
-  const resetInactivityTimer = useCallback(() => {
+  // ✅ DÉCONNEXION AUTOMATIQUE
+  const handleInactivityLogout = async () => {
+    console.log('⏰⏰⏰ DÉCONNEXION AUTOMATIQUE - Inactivité détectée !');
+    await supabase.auth.signOut();
+    setUser(null);
+    setProfile(null);
+    
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = null;
+    }
+  };
+
+  // ✅ DÉMARRER LE TIMER
+  const startInactivityTimer = () => {
     // Nettoyer l'ancien timer
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current);
     }
 
-    // Démarrer un nouveau timer
-    inactivityTimerRef.current = setTimeout(async () => {
-      console.log('⏰ Déconnexion automatique après 10 minutes d\'inactivité');
-      await supabase.auth.signOut();
-      setUser(null);
-      setProfile(null);
+    console.log('⏱️ Timer inactivité démarré - Déconnexion dans', INACTIVITY_TIMEOUT / 1000, 'secondes');
+
+    // Nouveau timer
+    inactivityTimerRef.current = setTimeout(() => {
+      handleInactivityLogout();
     }, INACTIVITY_TIMEOUT);
-  }, [INACTIVITY_TIMEOUT]); // ✅ Pas besoin de signOut dans les dépendances
+  };
+
+  // ✅ RESET DU TIMER (throttle 1 seconde pour éviter trop d'appels)
+  const resetInactivityTimer = () => {
+    const now = Date.now();
+    
+    // Throttle : ne pas réinitialiser si moins de 1 seconde depuis dernière activité
+    if (now - lastActivityRef.current < 1000) {
+      return;
+    }
+    
+    lastActivityRef.current = now;
+    console.log('🔄 Activité détectée - Timer réinitialisé');
+    
+    startInactivityTimer();
+  };
 
   // ✅ ÉCOUTER LES ÉVÉNEMENTS D'ACTIVITÉ
   useEffect(() => {
     // Ne démarrer le timer que si l'utilisateur est connecté
-    if (!user) return;
+    if (!user) {
+      console.log('❌ Pas d\'utilisateur connecté, pas de surveillance inactivité');
+      return;
+    }
 
-    console.log('🎯 Démarrage surveillance inactivité (10 min)');
+    console.log('🎯 DÉMARRAGE surveillance inactivité (timeout:', INACTIVITY_TIMEOUT / 1000, 'secondes)');
 
     // Démarrer le timer initial
-    resetInactivityTimer();
+    startInactivityTimer();
 
     // Liste des événements à surveiller
-    const events = [
-      'mousedown',
-      'mousemove',
-      'keydown',
-      'scroll',
-      'touchstart',
-      'click'
-    ];
+    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
+
+    // Log pour debug
+    console.log('👂 Écoute des événements:', events.join(', '));
 
     // Ajouter les listeners
     events.forEach(event => {
-      document.addEventListener(event, resetInactivityTimer, true);
+      window.addEventListener(event, resetInactivityTimer, { passive: true });
     });
 
     // Cleanup
     return () => {
       console.log('🧹 Nettoyage surveillance inactivité');
       events.forEach(event => {
-        document.removeEventListener(event, resetInactivityTimer, true);
+        window.removeEventListener(event, resetInactivityTimer);
       });
       
       if (inactivityTimerRef.current) {
         clearTimeout(inactivityTimerRef.current);
+        inactivityTimerRef.current = null;
       }
     };
-  }, [user, resetInactivityTimer]);
+  }, [user, INACTIVITY_TIMEOUT]);
 
   useEffect(() => {
     console.log('🚀 AuthProvider useEffect DÉMARRE');
