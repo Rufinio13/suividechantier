@@ -93,11 +93,13 @@ export function AuthProvider({ children }) {
     }
 
     // Démarrer un nouveau timer
-    inactivityTimerRef.current = setTimeout(() => {
+    inactivityTimerRef.current = setTimeout(async () => {
       console.log('⏰ Déconnexion automatique après 10 minutes d\'inactivité');
-      signOut();
+      await supabase.auth.signOut();
+      setUser(null);
+      setProfile(null);
     }, INACTIVITY_TIMEOUT);
-  }, [INACTIVITY_TIMEOUT]);
+  }, [INACTIVITY_TIMEOUT]); // ✅ Pas besoin de signOut dans les dépendances
 
   // ✅ ÉCOUTER LES ÉVÉNEMENTS D'ACTIVITÉ
   useEffect(() => {

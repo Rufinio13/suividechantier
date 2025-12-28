@@ -14,8 +14,8 @@ export function LotsProvider({ children }) {
 
   // 🎯 Charger tous les lots pour la société
   useEffect(() => {
-    const loadLots = async () => {
-      if (!profile?.nomsociete) { // ✅ Utiliser profile?.nomsociete directement
+    const loadLotsInitial = async () => {
+      if (!profile?.nomsociete) {
         console.log("LotsContext : En attente de nomsociete...");
         setLots([]);
         setLoading(false);
@@ -28,7 +28,7 @@ export function LotsProvider({ children }) {
       const { data, error } = await supabase
         .from("lots")
         .select("*")
-        .eq("nomsociete", profile.nomsociete) // ✅ Utiliser profile.nomsociete
+        .eq("nomsociete", profile.nomsociete)
         .order("created_at", { ascending: true });
 
       if (error) {
@@ -47,8 +47,29 @@ export function LotsProvider({ children }) {
       setLoading(false);
     };
 
-    loadLots();
-  }, [profile?.nomsociete]); // ✅ Dépendre de profile?.nomsociete
+    loadLotsInitial();
+  }, [profile?.nomsociete]);
+
+  // 🎯 Rafraîchir les lots
+  const loadLots = async () => {
+    if (!profile?.nomsociete) return;
+
+    console.log("🔄 Rechargement lots...");
+
+    const { data, error } = await supabase
+      .from("lots")
+      .select("*")
+      .eq("nomsociete", profile.nomsociete)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("❌ loadLots :", error);
+      setLots([]);
+    } else {
+      console.log("✅ Lots rechargés :", data?.length);
+      setLots(data || []);
+    }
+  };
 
   // 🎯 Ajouter un lot
   const addLot = async (lotData) => {
@@ -80,7 +101,13 @@ export function LotsProvider({ children }) {
     }
 
     console.log("✅ Lot ajouté :", data);
-    setLots((prev) => [...prev, data]);
+    
+    // ✅ Recharger IMMÉDIATEMENT les lots pour tous les contexts
+    await loadLots();
+    
+    // ✅ Déclencher un événement custom pour notifier ChantierContext
+    window.dispatchEvent(new CustomEvent('lots-updated'));
+    
     return data;
   };
 
@@ -100,7 +127,13 @@ export function LotsProvider({ children }) {
     }
 
     console.log("✅ Lot mis à jour :", data);
-    setLots((prev) => prev.map((l) => (l.id === id ? data : l)));
+    
+    // ✅ Recharger IMMÉDIATEMENT
+    await loadLots();
+    
+    // ✅ Notifier ChantierContext
+    window.dispatchEvent(new CustomEvent('lots-updated'));
+    
     return data;
   };
 
@@ -123,29 +156,12 @@ export function LotsProvider({ children }) {
     }
 
     console.log("✅ Lot supprimé");
-    setLots((prev) => prev.filter((l) => l.id !== id));
-  };
-
-  // 🎯 Rafraîchir les lots
-  const loadLots = async () => {
-    if (!profile?.nomsociete) return;
-
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from("lots")
-      .select("*")
-      .eq("nomsociete", profile.nomsociete)
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      console.error("❌ loadLots :", error);
-      setLots([]);
-    } else {
-      setLots(data || []);
-    }
-
-    setLoading(false);
+    
+    // ✅ Recharger IMMÉDIATEMENT
+    await loadLots();
+    
+    // ✅ Notifier ChantierContext
+    window.dispatchEvent(new CustomEvent('lots-updated'));
   };
 
   return (

@@ -108,6 +108,20 @@ export function ChantierProvider({ children }) {
     loadAll();
   }, [profile?.nomsociete]);
 
+  // ✅ ÉCOUTER LES MISES À JOUR DE LOTS DEPUIS LotsContext
+  useEffect(() => {
+    const handleLotsUpdate = () => {
+      console.log('🔔 ChantierContext : Lots mis à jour, rechargement...');
+      loadLots();
+    };
+
+    window.addEventListener('lots-updated', handleLotsUpdate);
+    
+    return () => {
+      window.removeEventListener('lots-updated', handleLotsUpdate);
+    };
+  }, [profile?.nomsociete]);
+
   // ---------------------
   // FONCTIONS DE RECHARGEMENT MANUEL (pour refresh après CRUD)
   // ---------------------
