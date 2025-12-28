@@ -20,7 +20,7 @@ export function ControleQualiteDomaineItem({
     onUpdateNomCategorie,
     onSupprimerCategorie,
     onSupprimerSousCategorie,
-    onAddSousCategorie,  // ✅ NOUVEAU
+    onAddSousCategorie,
     documents = []
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -50,6 +50,13 @@ export function ControleQualiteDomaineItem({
     return { totalPoints, conformes, nonConformes, sansObjet };
   }, [domaine.sousCategories, resultatsDomaine, pointsControleStructure]);
 
+  // ✅ VÉRIFIER SI TOUS LES POINTS SONT VÉRIFIÉS
+  const isComplete = useMemo(() => {
+    if (stats.totalPoints === 0) return false;
+    const verifies = stats.conformes + stats.nonConformes + stats.sansObjet;
+    return verifies === stats.totalPoints;
+  }, [stats]);
+
   const toggleExpand = () => {
     setIsExpanded(prev => !prev);
   };
@@ -76,9 +83,9 @@ export function ControleQualiteDomaineItem({
   };
 
   return (
-    <Card className="mb-4 shadow-md border-l-4 border-l-blue-500">
+    <Card className={`mb-4 shadow-md border-l-4 border-l-blue-500 ${isComplete ? 'bg-emerald-50' : ''}`}>
       <CardHeader 
-        className="cursor-pointer hover:bg-slate-50 transition-colors py-3"
+        className={`cursor-pointer transition-colors py-3 ${isComplete ? 'hover:bg-emerald-100' : 'hover:bg-slate-50'}`}
         onClick={toggleExpand}
       >
         <div className="flex items-center justify-between">
@@ -131,7 +138,7 @@ export function ControleQualiteDomaineItem({
 
             {/* ✅ BADGES STATISTIQUES */}
             <div className="flex items-center gap-2 ml-4">
-              <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-xs font-medium rounded">
+              <span className={`px-2 py-0.5 text-xs font-medium rounded ${isComplete ? 'bg-emerald-200 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>
                 {stats.totalPoints} point{stats.totalPoints > 1 ? 's' : ''}
               </span>
               {stats.conformes > 0 && (
@@ -153,7 +160,6 @@ export function ControleQualiteDomaineItem({
           </div>
           
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-            {/* ✅ MODIFIÉ : Bouton + pour ajouter une sous-catégorie */}
             <Button 
               variant="ghost" 
               size="icon" 

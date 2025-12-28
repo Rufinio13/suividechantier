@@ -1,6 +1,7 @@
 // src/context/AuthProvider.jsx
-import { createContext, useEffect, useState } from "react";
+import { createContext, useEffect, useState, useRef, useCallback } from "react";
 import { supabase, setSupabaseRLSContext } from "@/lib/supabaseClient";
+import { useNavigate } from "react-router-dom";
 
 export const AuthContext = createContext();
 
@@ -8,6 +9,10 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  // ✅ INACTIVITÉ - Timer de 10 minutes (600000ms)
+  const INACTIVITY_TIMEOUT = 10 * 60 * 1000; // 10 minutes
+  const inactivityTimerRef = useRef(null);
 
   // Charger le profil via API REST directement
   const loadProfile = async (userId) => {
@@ -67,6 +72,71 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const signOut = async () => {
+    console.log('👋 Déconnexion...');
+    await supabase.auth.signOut();
+    setUser(null);
+    setProfile(null);
+    
+    // ✅ Nettoyer le timer d'inactivité
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = null;
+    }
+  };
+
+  // ✅ RESET DU TIMER D'INACTIVITÉ
+  const resetInactivityTimer = useCallback(() => {
+    // Nettoyer l'ancien timer
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+
+    // Démarrer un nouveau timer
+    inactivityTimerRef.current = setTimeout(() => {
+      console.log('⏰ Déconnexion automatique après 10 minutes d\'inactivité');
+      signOut();
+    }, INACTIVITY_TIMEOUT);
+  }, [INACTIVITY_TIMEOUT]);
+
+  // ✅ ÉCOUTER LES ÉVÉNEMENTS D'ACTIVITÉ
+  useEffect(() => {
+    // Ne démarrer le timer que si l'utilisateur est connecté
+    if (!user) return;
+
+    console.log('🎯 Démarrage surveillance inactivité (10 min)');
+
+    // Démarrer le timer initial
+    resetInactivityTimer();
+
+    // Liste des événements à surveiller
+    const events = [
+      'mousedown',
+      'mousemove',
+      'keydown',
+      'scroll',
+      'touchstart',
+      'click'
+    ];
+
+    // Ajouter les listeners
+    events.forEach(event => {
+      document.addEventListener(event, resetInactivityTimer, true);
+    });
+
+    // Cleanup
+    return () => {
+      console.log('🧹 Nettoyage surveillance inactivité');
+      events.forEach(event => {
+        document.removeEventListener(event, resetInactivityTimer, true);
+      });
+      
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+    };
+  }, [user, resetInactivityTimer]);
+
   useEffect(() => {
     console.log('🚀 AuthProvider useEffect DÉMARRE');
     let mounted = true;
@@ -116,12 +186,6 @@ export function AuthProvider({ children }) {
 
   const signIn = (email, password) =>
     supabase.auth.signInWithPassword({ email, password });
-
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setProfile(null);
-  };
 
   console.log('📊 AuthProvider render - user:', !!user, 'profile:', !!profile, 'loading:', loading);
 

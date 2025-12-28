@@ -254,6 +254,7 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
           lots={globalLots}
           addTache={addTache}
           updateTache={updateTache}
+          conflictsByChantier={conflictsByChantier}
         />
       )}
     </div>

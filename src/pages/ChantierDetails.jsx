@@ -176,10 +176,19 @@ export function ChantierDetails() {
                   &nbsp;{chantier.client_mail || "N/A"}
                 </div>
 
-                <div className="flex items-start">
+                {/* ✅ ADRESSE COMPLÈTE SUR UNE LIGNE */}
+                <div className="flex items-center">
                   <MapPin className="mr-3 h-5 w-5 text-primary" />
                   <span className="font-medium">Adresse :</span>
-                  &nbsp;{chantier.adresse || "N/A"}
+                  &nbsp;
+                  <span className="text-slate-700">
+                    {chantier.adresse && chantier.adresse}
+                    {chantier.adresse && (chantier.codepostal || chantier.ville) && ", "}
+                    {chantier.codepostal} {chantier.ville}
+                    {!chantier.adresse && !chantier.codepostal && !chantier.ville && (
+                      <span className="text-slate-400">N/A</span>
+                    )}
+                  </span>
                 </div>
 
                 {chantier.description && (

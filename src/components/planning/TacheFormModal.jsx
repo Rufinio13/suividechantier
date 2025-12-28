@@ -5,10 +5,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { parseISO, isValid } from "date-fns";
+import { parseISO, isValid, format, eachDayOfInterval, startOfDay } from "date-fns";
 import { calculateDateFinLogic, calculateDureeOuvree } from "@/context/chantierContextLogics/tacheLogics";
 import { useSousTraitant } from "@/context/SousTraitantContext";
 import { useFournisseur } from "@/context/FournisseurContext";
+import { useChantier } from "@/context/ChantierContext";
+import { AlertTriangle } from "lucide-react";
 
 export function TacheFormModal({
   isOpen,
@@ -17,12 +19,50 @@ export function TacheFormModal({
   chantierId,
   lots: globalLots,
   addTache,
-  updateTache
+  updateTache,
+  conflictsByChantier = {}
 }) {
   console.log("🎯 TacheFormModal reçoit chantierId:", chantierId);
   
   const { sousTraitants } = useSousTraitant();
   const { fournisseurs } = useFournisseur();
+  const { chantiers } = useChantier();
+
+  // ✅ DÉTECTER LE CONFLIT
+  const tacheConflictInfo = useMemo(() => {
+    if (!tache || !tache.assigneid || tache.assignetype !== 'soustraitant' || !tache.datedebut || !tache.datefin) {
+      return null;
+    }
+
+    try {
+      const start = startOfDay(parseISO(tache.datedebut));
+      const end = startOfDay(parseISO(tache.datefin));
+      const days = eachDayOfInterval({ start, end });
+      
+      for (const day of days) {
+        const key = `${tache.assigneid}-${format(day, "yyyy-MM-dd")}`;
+        const conflict = conflictsByChantier[key];
+        
+        if (conflict && conflict.chantierids && conflict.chantierids.length > 1) {
+          const otherIds = conflict.chantierids.filter(id => id !== tache.chantierid);
+          
+          if (otherIds.length > 0) {
+            const otherNames = otherIds
+              .map(id => chantiers.find(c => c.id === id)?.nomchantier)
+              .filter(Boolean);
+            
+            return {
+              message: `Artisan en conflit le ${format(day, 'dd/MM/yyyy')} avec: ${otherNames.join(', ')}`,
+            };
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Erreur parsing conflit:", err);
+    }
+    
+    return null;
+  }, [tache, conflictsByChantier, chantiers]);
 
   const [formData, setFormData] = useState({
     nom: "",
@@ -228,12 +268,22 @@ export function TacheFormModal({
   // ---------------------------------------------------------
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{tache ? "Modifier la tâche" : "Ajouter une tâche"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
+          {/* ✅ AFFICHER LE CONFLIT EN HAUT */}
+          {tacheConflictInfo && (
+            <div className="p-3 bg-red-50 border-2 border-red-500 rounded-md flex items-start gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-red-800 font-medium">
+                {tacheConflictInfo.message}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-1">
             <Label>Nom <span className="text-red-500">*</span></Label>
             <Input name="nom" value={formData.nom} onChange={handleChange} required />
@@ -295,6 +345,22 @@ export function TacheFormModal({
               </SelectContent>
             </Select>
           </div>
+
+          {/* ✅ CHECKBOX TERMINÉ */}
+          {tache && (
+            <div className="flex items-center space-x-2 p-3 bg-slate-50 rounded border">
+              <input
+                type="checkbox"
+                id="terminee"
+                checked={formData.terminee || false}
+                onChange={(e) => setFormData(prev => ({ ...prev, terminee: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 cursor-pointer"
+              />
+              <Label htmlFor="terminee" className="cursor-pointer font-medium">
+                Marquer comme terminée
+              </Label>
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>

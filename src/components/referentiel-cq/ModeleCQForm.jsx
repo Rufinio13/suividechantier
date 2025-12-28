@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, isOpen, onClose }) {
@@ -17,7 +17,6 @@ export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, 
     if (modele) {
       setTitreModele(modele.titre || '');
 
-      // ✅ CORRIGÉ : On charge depuis 'categories' maintenant
       if (Array.isArray(modele.categories)) {
         setCategories(deepClone(modele.categories));
       } else {
@@ -43,6 +42,62 @@ export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, 
       ]);
     }
   }, [modele, isOpen]);
+
+  // ✅ DÉPLACER UNE CATÉGORIE
+  const moveCategorie = (index, direction) => {
+    const newCategories = [...categories];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    
+    if (targetIndex < 0 || targetIndex >= newCategories.length) return;
+    
+    [newCategories[index], newCategories[targetIndex]] = [newCategories[targetIndex], newCategories[index]];
+    setCategories(newCategories);
+  };
+
+  // ✅ DÉPLACER UNE SOUS-CATÉGORIE
+  const moveSousCategorie = (categorieId, scIndex, direction) => {
+    setCategories(
+      categories.map((categorie) => {
+        if (categorie.id !== categorieId) return categorie;
+        
+        const newSousCategories = [...categorie.sousCategories];
+        const targetIndex = direction === 'up' ? scIndex - 1 : scIndex + 1;
+        
+        if (targetIndex < 0 || targetIndex >= newSousCategories.length) return categorie;
+        
+        [newSousCategories[scIndex], newSousCategories[targetIndex]] = 
+          [newSousCategories[targetIndex], newSousCategories[scIndex]];
+        
+        return { ...categorie, sousCategories: newSousCategories };
+      })
+    );
+  };
+
+  // ✅ DÉPLACER UN POINT DE CONTRÔLE
+  const movePointControle = (categorieId, sousCategorieId, pcIndex, direction) => {
+    setCategories(
+      categories.map((categorie) => {
+        if (categorie.id !== categorieId) return categorie;
+        
+        return {
+          ...categorie,
+          sousCategories: categorie.sousCategories.map((sc) => {
+            if (sc.id !== sousCategorieId) return sc;
+            
+            const newPointsControle = [...sc.pointsControle];
+            const targetIndex = direction === 'up' ? pcIndex - 1 : pcIndex + 1;
+            
+            if (targetIndex < 0 || targetIndex >= newPointsControle.length) return sc;
+            
+            [newPointsControle[pcIndex], newPointsControle[targetIndex]] = 
+              [newPointsControle[targetIndex], newPointsControle[pcIndex]];
+            
+            return { ...sc, pointsControle: newPointsControle };
+          })
+        };
+      })
+    );
+  };
 
   const ajouterCategorie = () => {
     setCategories([
@@ -150,13 +205,11 @@ export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, 
   };
 
   const handleSave = async () => {
-    // Validation basique
     if (!titreModele.trim()) {
       alert('Veuillez saisir un titre pour le modèle');
       return;
     }
 
-    // ✅ CORRIGÉ : On envoie 'categories' maintenant (pas 'domaines')
     const modeleData = {
       titre: titreModele,
       categories: deepClone(categories),
@@ -165,14 +218,11 @@ export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, 
 
     try {
       if (modele) {
-        // Mode édition : on met à jour
         await updateModeleCQ(modele.id, modeleData);
       } else {
-        // Mode création : on ajoute
         await addModeleCQ(modeleData);
       }
       
-      // Fermer le modal après succès
       onClose();
     } catch (error) {
       console.error('Erreur lors de la sauvegarde:', error);
@@ -207,9 +257,33 @@ export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, 
           </div>
 
           <div className="space-y-6">
-            {categories.map((categorie) => (
+            {categories.map((categorie, catIndex) => (
               <Card key={categorie.id} className="border rounded-lg p-4 bg-gray-50">
-                <div className="flex justify-between items-center mb-2">
+                <div className="flex gap-2 mb-2">
+                  {/* ✅ FLÈCHES CATÉGORIE */}
+                  <div className="flex flex-col gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => moveCategorie(catIndex, 'up')}
+                      disabled={catIndex === 0}
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => moveCategorie(catIndex, 'down')}
+                      disabled={catIndex === categories.length - 1}
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </div>
+
                   <Input
                     placeholder="Nom du domaine"
                     value={categorie.nom}
@@ -220,8 +294,10 @@ export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, 
                         )
                       )
                     }
+                    className="flex-1"
                   />
                   <Button
+                    type="button"
                     variant="destructive"
                     size="icon"
                     onClick={() => supprimerCategorie(categorie.id)}
@@ -231,9 +307,33 @@ export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, 
                 </div>
 
                 <div className="ml-4 space-y-4">
-                  {categorie.sousCategories.map((sc) => (
+                  {categorie.sousCategories.map((sc, scIndex) => (
                     <Card key={sc.id} className="p-4 bg-white border rounded-lg">
-                      <div className="flex justify-between mb-2">
+                      <div className="flex gap-2 mb-2">
+                        {/* ✅ FLÈCHES SOUS-CATÉGORIE */}
+                        <div className="flex flex-col gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => moveSousCategorie(categorie.id, scIndex, 'up')}
+                            disabled={scIndex === 0}
+                          >
+                            <ChevronUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => moveSousCategorie(categorie.id, scIndex, 'down')}
+                            disabled={scIndex === categorie.sousCategories.length - 1}
+                          >
+                            <ChevronDown className="h-4 w-4" />
+                          </Button>
+                        </div>
+
                         <Input
                           placeholder="Nom de la sous-catégorie"
                           value={sc.nom}
@@ -253,8 +353,10 @@ export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, 
                               )
                             )
                           }
+                          className="flex-1"
                         />
                         <Button
+                          type="button"
                           variant="destructive"
                           size="icon"
                           onClick={() =>
@@ -266,9 +368,33 @@ export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, 
                       </div>
 
                       <div className="space-y-4 ml-4">
-                        {sc.pointsControle.map((pc) => (
+                        {sc.pointsControle.map((pc, pcIndex) => (
                           <Card key={pc.id} className="p-4">
-                            <div className="flex justify-between">
+                            <div className="flex gap-2 mb-3">
+                              {/* ✅ FLÈCHES POINT CONTRÔLE */}
+                              <div className="flex flex-col gap-1">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => movePointControle(categorie.id, sc.id, pcIndex, 'up')}
+                                  disabled={pcIndex === 0}
+                                >
+                                  <ChevronUp className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => movePointControle(categorie.id, sc.id, pcIndex, 'down')}
+                                  disabled={pcIndex === sc.pointsControle.length - 1}
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </div>
+
                               <Input
                                 placeholder="Libellé du point de contrôle"
                                 value={pc.libelle}
@@ -301,9 +427,11 @@ export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, 
                                     )
                                   )
                                 }
+                                className="flex-1"
                               />
 
                               <Button
+                                type="button"
                                 variant="destructive"
                                 size="icon"
                                 onClick={() =>
@@ -356,6 +484,7 @@ export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, 
                         ))}
 
                         <Button
+                          type="button"
                           variant="outline"
                           size="sm"
                           onClick={() =>
@@ -370,6 +499,7 @@ export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, 
                   ))}
 
                   <Button
+                    type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => ajouterSousCategorie(categorie.id)}
@@ -380,16 +510,16 @@ export function ModeleCQForm({ modele, addModeleCQ, updateModeleCQ, nomsociete, 
               </Card>
             ))}
 
-            <Button variant="secondary" onClick={ajouterCategorie}>
+            <Button type="button" variant="secondary" onClick={ajouterCategorie}>
               <Plus className="h-4 w-4 mr-2" /> Ajouter un domaine
             </Button>
           </div>
 
           <div className="flex justify-end space-x-3 pt-4">
-            <Button variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Annuler
             </Button>
-            <Button onClick={handleSave}>Enregistrer</Button>
+            <Button type="button" onClick={handleSave}>Enregistrer</Button>
           </div>
         </CardContent>
       </Card>
