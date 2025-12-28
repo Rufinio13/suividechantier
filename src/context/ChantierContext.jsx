@@ -261,9 +261,10 @@ export function ChantierProvider({ children }) {
 
       console.log('✅ Validations OK, insertion dans Supabase...');
 
-      const { data, error } = await supabase
-        .from("taches")
-        .insert([{
+      try {
+        console.log('⏳ Préparation de la requête Supabase...');
+        
+        const payload = {
           nom: tache.nom ?? null,
           description: tache.description ?? null,
           chantierid: tache.chantierid,
@@ -273,27 +274,46 @@ export function ChantierProvider({ children }) {
           datedebut: tache.datedebut ?? null,
           datefin: tache.datefin ?? null,
           terminee: tache.terminee ?? false,
-        }])
-        .select("*")
-        .single();
+        };
+        
+        console.log('📦 Payload final:', payload);
+        console.log('🚀 Appel Supabase.from("taches").insert()...');
 
-      console.log('📡 Réponse Supabase:', { data, error });
+        const { data, error } = await supabase
+          .from("taches")
+          .insert([payload])
+          .select("*")
+          .single();
 
-      if (error) {
-        console.error("❌ Erreur save tâche:", error);
-        console.error("❌ Détails erreur:", JSON.stringify(error, null, 2));
-        throw error;
+        console.log('📡 Réponse Supabase reçue:', { 
+          hasData: !!data, 
+          hasError: !!error,
+          data: data ? 'présent' : 'null',
+          error: error ? error.message : 'null'
+        });
+
+        if (error) {
+          console.error("❌ Erreur save tâche:", error);
+          console.error("❌ Détails erreur:", JSON.stringify(error, null, 2));
+          throw error;
+        }
+
+        console.log('✅ Tâche insérée en BDD:', data);
+        setTaches(prev => {
+          const newTaches = [data, ...prev];
+          console.log('✅ Tâches mises à jour dans le state, total:', newTaches.length);
+          return newTaches;
+        });
+        
+        console.log('✅ addTache TERMINÉ');
+        return data;
+      } catch (insertError) {
+        console.error('❌ Exception DANS le bloc insert:', insertError);
+        console.error('❌ Type:', typeof insertError);
+        console.error('❌ Message:', insertError?.message);
+        console.error('❌ Stack:', insertError?.stack);
+        throw insertError;
       }
-
-      console.log('✅ Tâche insérée en BDD:', data);
-      setTaches(prev => {
-        const newTaches = [data, ...prev];
-        console.log('✅ Tâches mises à jour dans le state, total:', newTaches.length);
-        return newTaches;
-      });
-      
-      console.log('✅ addTache TERMINÉ');
-      return data;
     } catch (error) {
       console.error('❌ Exception dans addTache:', error);
       console.error('❌ Stack:', error.stack);
