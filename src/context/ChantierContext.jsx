@@ -245,43 +245,7 @@ export function ChantierProvider({ children }) {
     console.log('🔵 addTache DÉBUT - Payload reçu:', tache);
     
     try {
-      // ✅ VÉRIFIER LA SESSION AVEC TIMEOUT
-      console.log('🔍 Vérification session...');
-      
-      const sessionPromise = supabase.auth.getSession();
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout getSession')), 5000)
-      );
-      
-      const { data: sessionData, error: sessionError } = await Promise.race([
-        sessionPromise,
-        timeoutPromise
-      ]).catch(err => {
-        console.error('❌ Timeout ou erreur getSession:', err);
-        throw new Error('Impossible de vérifier la session. Veuillez vous reconnecter.');
-      });
-      
-      console.log("🔐 Résultat getSession:", { 
-        hasData: !!sessionData,
-        hasSession: !!sessionData?.session,
-        userId: sessionData?.session?.user?.id,
-        error: sessionError
-      });
-
-      if (sessionError) {
-        console.error('❌ Erreur getSession:', sessionError);
-        throw new Error('Session expirée. Veuillez vous reconnecter.');
-      }
-
-      if (!sessionData?.session) {
-        console.error('❌ Pas de session active !');
-        throw new Error('Session expirée. Veuillez vous reconnecter.');
-      }
-
-      const session = sessionData.session;
-      console.log('✅ Session valide, userId:', session.user.id);
-
-      // Vérification des UUID
+      // ✅ Vérification des UUID
       if (!tache.chantierid || typeof tache.chantierid !== "string") {
         console.error('❌ chantierid invalide:', tache.chantierid);
         throw new Error("chantierid doit être un UUID valide.");
