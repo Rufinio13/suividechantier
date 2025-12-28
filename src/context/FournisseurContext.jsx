@@ -1,4 +1,3 @@
-// src/context/FournisseurContext.jsx
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
@@ -39,64 +38,75 @@ export function FournisseurProvider({ children }) {
   // AJOUTER UN FOURNISSEUR
   // -----------------------------
   const addFournisseur = async (fournisseurData) => {
-    // ✅ VÉRIFIER LA SESSION
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    console.log("🔐 Session avant insert:", { 
-      hasSession: !!session, 
-      userId: session?.user?.id,
-      expiresAt: session?.expires_at,
-      accessToken: session?.access_token ? 'présent' : 'absent',
-      error: sessionError
-    });
+    try {
+      console.log("🔵 addFournisseur - Début");
+      
+      if (!profile?.nomsociete || !user) {
+        throw new Error("User ou société non définis");
+      }
 
-    if (!session) {
-      throw new Error("Session Supabase expirée");
-    }
+      const payload = {
+        nomsocieteF: fournisseurData.nomsocieteF,
+        nomcontact: fournisseurData.nomcontact || null,
+        email: fournisseurData.email || null,
+        telephone: fournisseurData.telephone || null,
+        adresse: fournisseurData.adresse || null,
+        assignedlots: fournisseurData.assignedlots || [],
+        nomsociete: profile.nomsociete,
+      };
 
-    if (!profile?.nomsociete || !user) return;
+      console.log("📦 Payload fournisseur:", payload);
+      console.log('🚀 Appel Supabase.from("fournisseurs").insert()...');
 
-    const payload = {
-      nomsocieteF: fournisseurData.nomsocieteF,
-      nomcontact: fournisseurData.nomcontact || null,
-      email: fournisseurData.email || null,
-      telephone: fournisseurData.telephone || null,
-      adresse: fournisseurData.adresse || null,
-      assignedlots: fournisseurData.assignedlots || [],
-      nomsociete: profile.nomsociete,
-    };
+      // ✅ Timeout de 10 secondes
+      const insertPromise = supabase
+        .from("fournisseurs")
+        .insert([payload])
+        .select("*")
+        .single();
 
-    const { data, error } = await supabase
-      .from("fournisseurs")
-      .insert([payload])
-      .select("*")
-      .single();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => {
+          console.error('⏰ TIMEOUT addFournisseur ! 30 secondes dépassées');
+          reject(new Error('Timeout: la requête a pris plus de 30 secondes'));
+        }, 30000) // 30 secondes
+      );
 
-    if (error) {
-      console.error("Erreur insertion fournisseur Supabase :", error);
+      console.log('⏳ En attente réponse Supabase...');
+      const result = await Promise.race([insertPromise, timeoutPromise]);
+      const { data, error } = result;
+
+      console.log('📡 Réponse Supabase:', { hasData: !!data, hasError: !!error });
+
+      if (error) {
+        console.error("❌ Erreur insertion fournisseur:", error);
+        throw error;
+      }
+
+      console.log("✅ Fournisseur ajouté:", data);
+      setFournisseurs((prev) => [data, ...prev]);
+      return data;
+    } catch (error) {
+      console.error("❌ Exception addFournisseur:", error);
+      alert(`Erreur lors de la création du fournisseur: ${error.message}`);
       throw error;
     }
-
-    setFournisseurs((prev) => [data, ...prev]);
-    return data;
   };
 
   // -----------------------------
   // METTRE À JOUR UN FOURNISSEUR
   // -----------------------------
   const updateFournisseur = async (id, updates) => {
-    console.log('📤 updateFournisseur - ID:', id);
-    console.log('📤 updateFournisseur - Updates BRUT:', updates);
-    
     try {
-      // ✅ NETTOYER les updates : enlever id, created_at, updated_at, user_id, nomsociete
+      console.log('📤 updateFournisseur - ID:', id);
+      
+      // ✅ NETTOYER les updates
       const cleanUpdates = { ...updates };
       delete cleanUpdates.id;
       delete cleanUpdates.created_at;
       delete cleanUpdates.updated_at;
       delete cleanUpdates.user_id;
       delete cleanUpdates.nomsociete;
-      
-      console.log('📤 updateFournisseur - Updates NETTOYÉS:', cleanUpdates);
       
       const { data, error } = await supabase
         .from("fournisseurs")
@@ -105,15 +115,12 @@ export function FournisseurProvider({ children }) {
         .select()
         .single();
 
-      console.log('📥 Réponse Supabase:', { data, error });
-
       if (error) {
         console.error("❌ Erreur Supabase updateFournisseur:", error);
         throw error;
       }
 
       console.log("✅ Fournisseur mis à jour:", data);
-
       setFournisseurs((prev) =>
         prev.map((f) => (f.id === id ? data : f))
       );
@@ -121,6 +128,7 @@ export function FournisseurProvider({ children }) {
       return data;
     } catch (error) {
       console.error('❌ Exception updateFournisseur:', error);
+      alert(`Erreur lors de la modification: ${error.message}`);
       throw error;
     }
   };
@@ -129,10 +137,16 @@ export function FournisseurProvider({ children }) {
   // SUPPRIMER UN FOURNISSEUR
   // -----------------------------
   const deleteFournisseur = async (id) => {
-    const { error } = await supabase.from("fournisseurs").delete().eq("id", id);
-    if (error) throw error;
+    try {
+      const { error } = await supabase.from("fournisseurs").delete().eq("id", id);
+      if (error) throw error;
 
-    setFournisseurs((prev) => prev.filter((f) => f.id !== id));
+      setFournisseurs((prev) => prev.filter((f) => f.id !== id));
+    } catch (error) {
+      console.error('❌ Exception deleteFournisseur:', error);
+      alert(`Erreur lors de la suppression: ${error.message}`);
+      throw error;
+    }
   };
 
   // -----------------------------

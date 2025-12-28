@@ -62,66 +62,51 @@ export function SousTraitantProvider({ children }) {
 
   // ---- Ajouter un sous-traitant ----
   const addSousTraitant = async (st) => {
-    // ✅ VÉRIFIER LA SESSION EN DÉTAIL
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    console.log("🔐 Session avant insert:", { 
-      hasSession: !!session, 
-      userId: session?.user?.id,
-      expiresAt: session?.expires_at,
-      accessToken: session?.access_token ? 'présent' : 'absent',
-      error: sessionError
-    });
-
-    if (!session) {
-      throw new Error("Session Supabase expirée");
-    }
-    
-    console.log("📥 addSousTraitant appelé avec:", st);
-    
-    if (!user || !profile?.nomsociete) {
-      console.error("❌ User ou nomsociete manquant:", { user: !!user, nomsociete: profile?.nomsociete });
-      throw new Error("User ou société non définis");
-    }
-
-    const payload = {
-      nomST: st.nomST || null,
-      PrenomST: st.PrenomST || null,
-      email: st.email || null,
-      telephone: st.telephone || null,
-      adresseST: st.adresseST || null,
-      assigned_lots: st.assigned_lots || [],
-      user_id: user.id,
-      nomsociete: profile.nomsociete,
-      nomsocieteST: st.nomsocieteST,
-    };
-
-    console.log("📤 Insertion ST payload :", payload);
-
     try {
-      console.log("🔄 Appel Supabase insert...");
+      console.log("🔵 addSousTraitant - Début");
       
-      // ✅ Ajouter un timeout de 10 secondes
+      if (!user || !profile?.nomsociete) {
+        throw new Error("User ou société non définis");
+      }
+
+      const payload = {
+        nomST: st.nomST || null,
+        PrenomST: st.PrenomST || null,
+        email: st.email || null,
+        telephone: st.telephone || null,
+        adresseST: st.adresseST || null,
+        assigned_lots: st.assigned_lots || [],
+        user_id: user.id,
+        nomsociete: profile.nomsociete,
+        nomsocieteST: st.nomsocieteST,
+      };
+
+      console.log("📦 Payload ST:", payload);
+      console.log('🚀 Appel Supabase.from("soustraitants").insert()...');
+
+      // ✅ Timeout de 10 secondes
       const insertPromise = supabase
         .from("soustraitants")
         .insert([payload])
         .select()
         .single();
-      
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout: la requête a pris plus de 10 secondes')), 10000)
-      );
-      
-      const { data, error } = await Promise.race([insertPromise, timeoutPromise]);
 
-      console.log("📥 Réponse Supabase:", { data, error });
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => {
+          console.error('⏰ TIMEOUT addSousTraitant ! 30 secondes dépassées');
+          reject(new Error('Timeout: la requête a pris plus de 30 secondes'));
+        }, 30000) // 30 secondes
+      );
+
+      console.log('⏳ En attente réponse Supabase...');
+      const result = await Promise.race([insertPromise, timeoutPromise]);
+      const { data, error } = result;
+
+      console.log('📡 Réponse Supabase:', { hasData: !!data, hasError: !!error });
 
       if (error) {
         console.error("❌ Erreur Supabase:", error);
         throw error;
-      }
-
-      if (!data) {
-        throw new Error("Aucune donnée retournée par Supabase");
       }
 
       console.log("✅ Sous-traitant inséré :", data);
@@ -129,18 +114,17 @@ export function SousTraitantProvider({ children }) {
       return data;
     } catch (err) {
       console.error("❌ Exception addSousTraitant:", err);
+      alert(`Erreur lors de la création du sous-traitant: ${err.message}`);
       throw err;
     }
   };
 
   // ---- Mise à jour d'un sous-traitant ----
   const updateSousTraitant = async (id, updates) => {
-    console.log('📤 updateSousTraitant - ID:', id);
-    console.log('📤 updateSousTraitant - Updates BRUT:', updates);
-    console.log('📤 updateSousTraitant - nomsociete:', profile?.nomsociete);
-    
     try {
-      // ✅ NETTOYER les updates : enlever id, created_at, updated_at, user_id, nomsociete, nomsocieteST
+      console.log('📤 updateSousTraitant - ID:', id);
+      
+      // ✅ NETTOYER les updates
       const cleanUpdates = { ...updates };
       delete cleanUpdates.id;
       delete cleanUpdates.created_at;
@@ -148,8 +132,6 @@ export function SousTraitantProvider({ children }) {
       delete cleanUpdates.user_id;
       delete cleanUpdates.nomsociete;
       delete cleanUpdates.nomsocieteST;
-      
-      console.log('📤 updateSousTraitant - Updates NETTOYÉS:', cleanUpdates);
       
       const { data, error } = await supabase
         .from("soustraitants")
@@ -159,15 +141,12 @@ export function SousTraitantProvider({ children }) {
         .select()
         .single();
 
-      console.log('📥 Réponse Supabase:', { data, error });
-
       if (error) {
         console.error("❌ Erreur Supabase updateSousTraitant:", error);
         throw error;
       }
 
       console.log("✅ Sous-traitant mis à jour:", data);
-      
       setSousTraitants((prev) =>
         (prev || []).map((s) => (s.id === id ? data : s))
       );
@@ -175,29 +154,35 @@ export function SousTraitantProvider({ children }) {
       return data;
     } catch (error) {
       console.error('❌ Exception updateSousTraitant:', error);
+      alert(`Erreur lors de la modification: ${error.message}`);
       throw error;
     }
   };
 
   // ---- Suppression d'un ST ----
   const deleteSousTraitant = async (id) => {
-    console.log("📤 Delete ST :", id);
+    try {
+      console.log("📤 Delete ST :", id);
 
-    const { error } = await supabase
-      .from("soustraitants")
-      .delete()
-      .eq("id", id)
-      .eq("nomsociete", profile?.nomsociete);
+      const { error } = await supabase
+        .from("soustraitants")
+        .delete()
+        .eq("id", id)
+        .eq("nomsociete", profile?.nomsociete);
 
-    if (error) {
-      console.error("❌ deleteSousTraitant :", error);
+      if (error) {
+        console.error("❌ deleteSousTraitant :", error);
+        throw error;
+      }
+
+      setSousTraitants((prev) => (prev || []).filter((s) => s.id !== id));
+      console.log("✅ ST supprimé du state local");
+      return true;
+    } catch (error) {
+      console.error('❌ Exception deleteSousTraitant:', error);
+      alert(`Erreur lors de la suppression: ${error.message}`);
       throw error;
     }
-
-    setSousTraitants((prev) => (prev || []).filter((s) => s.id !== id));
-    console.log("✅ ST supprimé du state local");
-
-    return true;
   };
 
   // ---- Rafraîchir manuellement ----
@@ -239,11 +224,9 @@ export function SousTraitantProvider({ children }) {
   );
 }
 
-// ---- Hook sécurisé ----
 export function useSousTraitant() {
   const ctx = useContext(SousTraitantContext);
   if (!ctx) {
-    console.error("🚨 useSousTraitant doit être utilisé dans un <SousTraitantProvider>");
     throw new Error("useSousTraitant utilisé hors provider !");
   }
   return ctx;

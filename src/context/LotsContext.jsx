@@ -73,95 +73,119 @@ export function LotsProvider({ children }) {
 
   // 🎯 Ajouter un lot
   const addLot = async (lotData) => {
-    // ✅ VÉRIFIER LA SESSION
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    console.log("🔐 Session avant insert:", { 
-      hasSession: !!session, 
-      userId: session?.user?.id,
-      expiresAt: session?.expires_at,
-      accessToken: session?.access_token ? 'présent' : 'absent',
-      error: sessionError
-    });
+    try {
+      if (!profile?.nomsociete) throw new Error("Société non définie");
 
-    if (!session) {
-      throw new Error("Session Supabase expirée");
-    }
+      console.log('🔵 addLot - Début');
+      
+      const payload = { ...lotData, nomsociete: profile.nomsociete };
+      console.log('📦 Payload:', payload);
+      console.log('🔍 Client Supabase:', { 
+        hasSupabase: !!supabase,
+        hasFrom: !!supabase?.from,
+        type: typeof supabase
+      });
+      
+      if (!supabase || typeof supabase.from !== 'function') {
+        throw new Error('Client Supabase non disponible ou corrompu');
+      }
+      
+      console.log('🚀 Appel Supabase.from("lots").insert()...');
+      
+      // ✅ Timeout de 30 secondes
+      const insertPromise = supabase
+        .from("lots")
+        .insert([payload])
+        .select()
+        .single();
 
-    if (!profile?.nomsociete) throw new Error("Société non définie");
-    
-    const { data, error } = await supabase
-      .from("lots")
-      .insert([{ ...lotData, nomsociete: profile.nomsociete }])
-      .select()
-      .single();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => {
+          console.error('⏰ TIMEOUT addLot ! 30 secondes dépassées');
+          reject(new Error('Timeout: la requête a pris plus de 30 secondes'));
+        }, 30000) // 30 secondes
+      );
 
-    if (error) {
-      console.error("❌ addLot :", error);
+      console.log('⏳ En attente réponse Supabase...');
+      const result = await Promise.race([insertPromise, timeoutPromise]);
+      const { data, error } = result;
+
+      console.log('📡 Réponse Supabase:', { hasData: !!data, hasError: !!error });
+
+      if (error) {
+        console.error("❌ addLot :", error);
+        throw error;
+      }
+
+      console.log("✅ Lot ajouté :", data);
+      
+      // ✅ Recharger IMMÉDIATEMENT
+      await loadLots();
+      
+      // ✅ Notifier ChantierContext
+      window.dispatchEvent(new CustomEvent('lots-updated'));
+      
+      return data;
+    } catch (error) {
+      console.error('❌ Exception addLot:', error);
+      alert(`Erreur lors de la création du lot: ${error.message}`);
       throw error;
     }
-
-    console.log("✅ Lot ajouté :", data);
-    
-    // ✅ Recharger IMMÉDIATEMENT les lots pour tous les contexts
-    await loadLots();
-    
-    // ✅ Déclencher un événement custom pour notifier ChantierContext
-    window.dispatchEvent(new CustomEvent('lots-updated'));
-    
-    return data;
   };
 
   // 🎯 Mettre à jour un lot
   const updateLot = async (id, lotData) => {
-    const { data, error } = await supabase
-      .from("lots")
-      .update({ ...lotData })
-      .eq("id", id)
-      .eq("nomsociete", profile?.nomsociete)
-      .select()
-      .single();
+    try {
+      const { data, error } = await supabase
+        .from("lots")
+        .update({ ...lotData })
+        .eq("id", id)
+        .eq("nomsociete", profile?.nomsociete)
+        .select()
+        .single();
 
-    if (error) {
-      console.error("❌ updateLot :", error);
+      if (error) {
+        console.error("❌ updateLot :", error);
+        throw error;
+      }
+
+      console.log("✅ Lot mis à jour :", data);
+      await loadLots();
+      window.dispatchEvent(new CustomEvent('lots-updated'));
+      
+      return data;
+    } catch (error) {
+      console.error('❌ Exception updateLot:', error);
+      alert(`Erreur lors de la modification du lot: ${error.message}`);
       throw error;
     }
-
-    console.log("✅ Lot mis à jour :", data);
-    
-    // ✅ Recharger IMMÉDIATEMENT
-    await loadLots();
-    
-    // ✅ Notifier ChantierContext
-    window.dispatchEvent(new CustomEvent('lots-updated'));
-    
-    return data;
   };
 
   // 🎯 Supprimer un lot
   const deleteLot = async (id) => {
-    const { error } = await supabase
-      .from("lots")
-      .delete()
-      .eq("id", id)
-      .eq("nomsociete", profile?.nomsociete);
+    try {
+      const { error } = await supabase
+        .from("lots")
+        .delete()
+        .eq("id", id)
+        .eq("nomsociete", profile?.nomsociete);
 
-    if (error) {
-      console.error("❌ deleteLot :", error);
+      if (error) {
+        console.error("❌ deleteLot :", error);
+        throw error;
+      }
+
+      console.log("✅ Lot supprimé");
+      await loadLots();
+      window.dispatchEvent(new CustomEvent('lots-updated'));
+    } catch (error) {
+      console.error('❌ Exception deleteLot:', error);
       toast({
         title: "Erreur",
         description: "Impossible de supprimer le lot",
         variant: "destructive",
       });
-      return;
     }
-
-    console.log("✅ Lot supprimé");
-    
-    // ✅ Recharger IMMÉDIATEMENT
-    await loadLots();
-    
-    // ✅ Notifier ChantierContext
-    window.dispatchEvent(new CustomEvent('lots-updated'));
   };
 
   return (

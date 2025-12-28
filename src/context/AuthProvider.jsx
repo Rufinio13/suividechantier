@@ -12,11 +12,6 @@ export function AuthProvider({ children }) {
   // ✅ Refs pour éviter doubles appels
   const isLoadingProfile = useRef(false);
   const isMounted = useRef(true);
-  
-  // ✅ INACTIVITÉ - Timer de 10 minutes
-  const INACTIVITY_TIMEOUT = 10 * 60 * 1000; 
-  const inactivityTimerRef = useRef(null);
-  const lastActivityRef = useRef(Date.now());
 
   // Charger le profil via API REST directement
   const loadProfile = async (userId) => {
@@ -94,80 +89,7 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
-    
-    // ✅ Nettoyer le timer d'inactivité
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current);
-      inactivityTimerRef.current = null;
-    }
   };
-
-  // ✅ DÉCONNEXION AUTOMATIQUE
-  const handleInactivityLogout = async () => {
-    console.log('⏰⏰⏰ DÉCONNEXION AUTOMATIQUE - Inactivité détectée !');
-    await supabase.auth.signOut();
-    setUser(null);
-    setProfile(null);
-    
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current);
-      inactivityTimerRef.current = null;
-    }
-  };
-
-  // ✅ DÉMARRER LE TIMER
-  const startInactivityTimer = () => {
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current);
-    }
-
-    console.log('⏱️ Timer inactivité démarré - Déconnexion dans', INACTIVITY_TIMEOUT / 1000, 'secondes');
-
-    inactivityTimerRef.current = setTimeout(() => {
-      handleInactivityLogout();
-    }, INACTIVITY_TIMEOUT);
-  };
-
-  // ✅ RESET DU TIMER (throttle 1 seconde)
-  const resetInactivityTimer = () => {
-    const now = Date.now();
-    
-    if (now - lastActivityRef.current < 1000) {
-      return;
-    }
-    
-    lastActivityRef.current = now;
-    startInactivityTimer();
-  };
-
-  // ✅ ÉCOUTER LES ÉVÉNEMENTS D'ACTIVITÉ
-  useEffect(() => {
-    if (!user) {
-      return;
-    }
-
-    console.log('🎯 DÉMARRAGE surveillance inactivité');
-    startInactivityTimer();
-
-    const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
-
-    events.forEach(event => {
-      window.addEventListener(event, resetInactivityTimer, { passive: true });
-    });
-
-    return () => {
-      console.log('🧹 Nettoyage surveillance inactivité');
-      events.forEach(event => {
-        window.removeEventListener(event, resetInactivityTimer);
-      });
-      
-      if (inactivityTimerRef.current) {
-        clearTimeout(inactivityTimerRef.current);
-        inactivityTimerRef.current = null;
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
 
   useEffect(() => {
     console.log('🚀 AuthProvider useEffect DÉMARRE');

@@ -288,9 +288,9 @@ export function ChantierProvider({ children }) {
 
         const timeoutPromise = new Promise((_, reject) => 
           setTimeout(() => {
-            console.error('⏰ TIMEOUT ! La requête a pris plus de 10 secondes');
-            reject(new Error('Timeout: la requête Supabase a pris plus de 10 secondes'));
-          }, 10000)
+            console.error('⏰ TIMEOUT ! La requête a pris plus de 30 secondes');
+            reject(new Error('Timeout: la requête Supabase a pris plus de 30 secondes'));
+          }, 30000) // 30 secondes
         );
 
         const result = await Promise.race([insertPromise, timeoutPromise]);
