@@ -279,11 +279,22 @@ export function ChantierProvider({ children }) {
         console.log('📦 Payload final:', payload);
         console.log('🚀 Appel Supabase.from("taches").insert()...');
 
-        const { data, error } = await supabase
+        // ✅ Forcer un timeout de 10 secondes
+        const insertPromise = supabase
           .from("taches")
           .insert([payload])
           .select("*")
           .single();
+
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => {
+            console.error('⏰ TIMEOUT ! La requête a pris plus de 10 secondes');
+            reject(new Error('Timeout: la requête Supabase a pris plus de 10 secondes'));
+          }, 10000)
+        );
+
+        const result = await Promise.race([insertPromise, timeoutPromise]);
+        const { data, error } = result;
 
         console.log('📡 Réponse Supabase reçue:', { 
           hasData: !!data, 
