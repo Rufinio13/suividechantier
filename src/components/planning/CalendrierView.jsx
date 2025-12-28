@@ -13,13 +13,23 @@ const JOURS_FERIES = [
   '2026-07-14', '2026-08-15', '2026-11-01', '2026-11-11', '2026-12-25',
 ];
 
-export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {}, onEditTache }) {
+export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {}, onEditTache, onAddTache }) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
   // Navigation mois
   const goToPreviousMonth = () => setCurrentDate(prev => subMonths(prev, 1));
   const goToNextMonth = () => setCurrentDate(prev => addMonths(prev, 1));
   const goToToday = () => setCurrentDate(new Date());
+
+  // ✅ GESTION CLIC SUR DATE (MÊME SI TÂCHES PRÉSENTES)
+  const handleDayClick = (day) => {
+    // Créer nouvelle tâche sur n'importe quel jour (sauf week-end/férié)
+    if (onAddTache) {
+      const dateStr = format(day, 'yyyy-MM-dd');
+      console.log('📅 Clic sur date:', dateStr);
+      onAddTache(dateStr);
+    }
+  };
 
   // Fonction pour obtenir la couleur d'une tâche - CORRIGÉE
   const getTacheColor = (tache) => {
@@ -176,8 +186,16 @@ export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {
                     'border-r last:border-r-0 p-1 min-h-[100px]',
                     !isCurrentMonth && 'bg-muted/20',
                     isToday && 'bg-blue-50',
-                    isNonOuvre && isCurrentMonth && !isToday && 'bg-slate-100'
+                    isNonOuvre && isCurrentMonth && !isToday && 'bg-slate-100',
+                    // ✅ Curseur pointer sur TOUS les jours ouvrés du mois
+                    isCurrentMonth && !isNonOuvre && 'cursor-pointer hover:bg-slate-50'
                   )}
+                  onClick={() => {
+                    // ✅ Clic sur cellule = créer tâche (sauf week-end/férié)
+                    if (isCurrentMonth && !isNonOuvre) {
+                      handleDayClick(day);
+                    }
+                  }}
                 >
                   {/* Numéro du jour */}
                   <div className={cn(
@@ -198,7 +216,11 @@ export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {
                           tache.tacheColor
                         )}
                         title={`${tache.lotNom}: ${tache.nom} - Cliquer pour modifier`}
-                        onClick={() => onEditTache && onEditTache(tache)}
+                        onClick={(e) => {
+                          // ✅ Empêcher propagation pour ne pas déclencher le clic sur la cellule
+                          e.stopPropagation();
+                          onEditTache && onEditTache(tache);
+                        }}
                       >
                         <div className="font-medium truncate">{tache.nom}</div>
                       </div>

@@ -10,7 +10,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   
   // ✅ INACTIVITÉ - Timer de 1 minute pour TEST (changer à 10 après)
-  const INACTIVITY_TIMEOUT = 10 * 60 * 1000; 
+  const INACTIVITY_TIMEOUT = 1 * 60 * 1000; // 1 minute pour test
   const inactivityTimerRef = useRef(null);
   const lastActivityRef = useRef(Date.now());
 
@@ -164,16 +164,31 @@ export function AuthProvider({ children }) {
         inactivityTimerRef.current = null;
       }
     };
-  }, [user, INACTIVITY_TIMEOUT]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]); // ✅ RETIRÉ INACTIVITY_TIMEOUT des dépendances
 
   useEffect(() => {
     console.log('🚀 AuthProvider useEffect DÉMARRE');
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data }) => {
+    // ✅ VÉRIFIER LA SESSION ET NETTOYER SI INVALIDE
+    supabase.auth.getSession().then(({ data, error }) => {
       console.log('📡 getSession retour');
       
       if (!mounted) return;
+
+      // ✅ Si erreur refresh token, nettoyer et déconnecter
+      if (error) {
+        console.error('❌ Erreur getSession:', error);
+        if (error.message?.includes('Refresh Token')) {
+          console.warn('⚠️ Refresh token invalide, nettoyage localStorage...');
+          localStorage.clear();
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
+      }
 
       if (data?.session?.user) {
         console.log('👤 User trouvé:', data.session.user.id);
@@ -183,6 +198,13 @@ export function AuthProvider({ children }) {
         console.log('❌ Pas de session');
         setLoading(false);
       }
+    }).catch(err => {
+      console.error('❌ Exception getSession:', err);
+      // Nettoyer en cas d'erreur critique
+      localStorage.clear();
+      setUser(null);
+      setProfile(null);
+      setLoading(false);
     });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(

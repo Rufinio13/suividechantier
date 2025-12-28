@@ -242,54 +242,91 @@ export function ChantierProvider({ children }) {
   // CRUD TACHES
   // ---------------------
   const addTache = async (tache) => {
-    // ✅ VÉRIFIER LA SESSION
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    console.log("🔐 Session avant insert:", { 
-      hasSession: !!session, 
-      userId: session?.user?.id,
-      expiresAt: session?.expires_at,
-      accessToken: session?.access_token ? 'présent' : 'absent',
-      error: sessionError
-    });
+    console.log('🔵 addTache DÉBUT - Payload reçu:', tache);
+    
+    try {
+      // ✅ VÉRIFIER LA SESSION
+      console.log('🔍 Vérification session...');
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      console.log("🔐 Résultat getSession:", { 
+        hasData: !!sessionData,
+        hasSession: !!sessionData?.session,
+        userId: sessionData?.session?.user?.id,
+        error: sessionError
+      });
 
-    if (!session) {
-      throw new Error("Session Supabase expirée");
-    }
+      if (sessionError) {
+        console.error('❌ Erreur getSession:', sessionError);
+        alert('Session expirée. Veuillez vous reconnecter.');
+        window.location.href = '/login';
+        return;
+      }
 
-    // Vérification des UUID
-    if (!tache.chantierid || typeof tache.chantierid !== "string") {
-      throw new Error("chantierid doit être un UUID valide.");
-    }
-    if (!tache.lotid || typeof tache.lotid !== "string") {
-      throw new Error("lotid doit être un UUID valide.");
-    }
-    if (tache.assigneid && typeof tache.assigneid !== "string") {
-      throw new Error("assigneid doit être un UUID valide si renseigné.");
-    }
+      if (!sessionData?.session) {
+        console.error('❌ Pas de session active !');
+        alert('Session expirée. Veuillez vous reconnecter.');
+        window.location.href = '/login';
+        return;
+      }
 
-    const { data, error } = await supabase
-      .from("taches")
-      .insert([{
-        nom: tache.nom ?? null,
-        description: tache.description ?? null,
-        chantierid: tache.chantierid,
-        lotid: tache.lotid,
-        assigneid: tache.assigneid ?? null,
-        assignetype: tache.assignetype ?? null,
-        datedebut: tache.datedebut ?? null,
-        datefin: tache.datefin ?? null,
-        terminee: tache.terminee ?? false,
-      }])
-      .select("*")
-      .single();
+      const session = sessionData.session;
+      console.log('✅ Session valide, userId:', session.user.id);
 
-    if (error) {
-      console.error("❌ Erreur save tâche:", error);
+      // Vérification des UUID
+      if (!tache.chantierid || typeof tache.chantierid !== "string") {
+        console.error('❌ chantierid invalide:', tache.chantierid);
+        throw new Error("chantierid doit être un UUID valide.");
+      }
+      if (!tache.lotid || typeof tache.lotid !== "string") {
+        console.error('❌ lotid invalide:', tache.lotid);
+        throw new Error("lotid doit être un UUID valide.");
+      }
+      if (tache.assigneid && typeof tache.assigneid !== "string") {
+        console.error('❌ assigneid invalide:', tache.assigneid);
+        throw new Error("assigneid doit être un UUID valide si renseigné.");
+      }
+
+      console.log('✅ Validations OK, insertion dans Supabase...');
+
+      const { data, error } = await supabase
+        .from("taches")
+        .insert([{
+          nom: tache.nom ?? null,
+          description: tache.description ?? null,
+          chantierid: tache.chantierid,
+          lotid: tache.lotid,
+          assigneid: tache.assigneid ?? null,
+          assignetype: tache.assignetype ?? null,
+          datedebut: tache.datedebut ?? null,
+          datefin: tache.datefin ?? null,
+          terminee: tache.terminee ?? false,
+        }])
+        .select("*")
+        .single();
+
+      console.log('📡 Réponse Supabase:', { data, error });
+
+      if (error) {
+        console.error("❌ Erreur save tâche:", error);
+        console.error("❌ Détails erreur:", JSON.stringify(error, null, 2));
+        throw error;
+      }
+
+      console.log('✅ Tâche insérée en BDD:', data);
+      setTaches(prev => {
+        const newTaches = [data, ...prev];
+        console.log('✅ Tâches mises à jour dans le state, total:', newTaches.length);
+        return newTaches;
+      });
+      
+      console.log('✅ addTache TERMINÉ');
+      return data;
+    } catch (error) {
+      console.error('❌ Exception dans addTache:', error);
+      console.error('❌ Stack:', error.stack);
       throw error;
     }
-
-    setTaches(prev => [data, ...prev]);
-    return data;
   };
 
   const updateTache = async (id, updates) => {

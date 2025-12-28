@@ -20,7 +20,8 @@ export function TacheFormModal({
   lots: globalLots,
   addTache,
   updateTache,
-  conflictsByChantier = {}
+  conflictsByChantier = {},
+  prefilledDate = null // ✅ NOUVEAU
 }) {
   console.log("🎯 TacheFormModal reçoit chantierId:", chantierId);
   
@@ -109,11 +110,12 @@ export function TacheFormModal({
         terminee: tache.terminee || false,
       });
     } else {
+      // ✅ Mode création : pré-remplir avec prefilledDate si fournie
       setFormData({
         nom: "",
         description: "",
         lotid: sortedLots?.[0]?.id || "",
-        datedebut: "",
+        datedebut: prefilledDate || "", // ✅ UTILISER LA DATE PRÉ-REMPLIE
         duree: "",
         datefin: "",
         assigneid: "",
@@ -121,7 +123,7 @@ export function TacheFormModal({
         terminee: false,
       });
     }
-  }, [isOpen, tache, sortedLots]);
+  }, [isOpen, tache, sortedLots, prefilledDate]); // ✅ Ajouter prefilledDate aux dépendances
 
   // ---------------------------------------------------------
   // CALCUL AUTO DE LA DATE DE FIN
