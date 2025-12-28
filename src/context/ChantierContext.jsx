@@ -245,9 +245,21 @@ export function ChantierProvider({ children }) {
     console.log('🔵 addTache DÉBUT - Payload reçu:', tache);
     
     try {
-      // ✅ VÉRIFIER LA SESSION
+      // ✅ VÉRIFIER LA SESSION AVEC TIMEOUT
       console.log('🔍 Vérification session...');
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout getSession')), 5000)
+      );
+      
+      const { data: sessionData, error: sessionError } = await Promise.race([
+        sessionPromise,
+        timeoutPromise
+      ]).catch(err => {
+        console.error('❌ Timeout ou erreur getSession:', err);
+        throw new Error('Impossible de vérifier la session. Veuillez vous reconnecter.');
+      });
       
       console.log("🔐 Résultat getSession:", { 
         hasData: !!sessionData,
@@ -258,16 +270,12 @@ export function ChantierProvider({ children }) {
 
       if (sessionError) {
         console.error('❌ Erreur getSession:', sessionError);
-        alert('Session expirée. Veuillez vous reconnecter.');
-        window.location.href = '/login';
-        return;
+        throw new Error('Session expirée. Veuillez vous reconnecter.');
       }
 
       if (!sessionData?.session) {
         console.error('❌ Pas de session active !');
-        alert('Session expirée. Veuillez vous reconnecter.');
-        window.location.href = '/login';
-        return;
+        throw new Error('Session expirée. Veuillez vous reconnecter.');
       }
 
       const session = sessionData.session;
@@ -325,6 +333,10 @@ export function ChantierProvider({ children }) {
     } catch (error) {
       console.error('❌ Exception dans addTache:', error);
       console.error('❌ Stack:', error.stack);
+      
+      // Afficher l'erreur à l'utilisateur
+      alert(`Erreur lors de la création de la tâche: ${error.message}`);
+      
       throw error;
     }
   };

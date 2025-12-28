@@ -9,13 +9,24 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  // ✅ INACTIVITÉ - Timer de 1 minute pour TEST (changer à 10 après)
-  const INACTIVITY_TIMEOUT = 1 * 60 * 1000; // 1 minute pour test
+  // ✅ Refs pour éviter doubles appels
+  const isLoadingProfile = useRef(false);
+  const isMounted = useRef(true);
+  
+  // ✅ INACTIVITÉ - Timer de 10 minutes
+  const INACTIVITY_TIMEOUT = 10 * 60 * 1000; 
   const inactivityTimerRef = useRef(null);
   const lastActivityRef = useRef(Date.now());
 
   // Charger le profil via API REST directement
   const loadProfile = async (userId) => {
+    // ✅ Éviter doubles appels
+    if (isLoadingProfile.current) {
+      console.log('⚠️ loadProfile déjà en cours, ignoré');
+      return;
+    }
+    
+    isLoadingProfile.current = true;
     console.log('🔍 loadProfile via API REST pour userId:', userId);
     
     try {
@@ -58,8 +69,10 @@ export function AuthProvider({ children }) {
       const profileData = data[0];
       console.log('✅ Profile chargé:', profileData);
       
-      setProfile(profileData);
-      setLoading(false);
+      if (isMounted.current) {
+        setProfile(profileData);
+        setLoading(false);
+      }
       
       if (profileData?.nomsociete) {
         await setSupabaseRLSContext(profileData.nomsociete);
@@ -67,8 +80,12 @@ export function AuthProvider({ children }) {
       
     } catch (err) {
       console.error("❌ Exception loadProfile:", err);
-      setProfile(null);
-      setLoading(false);
+      if (isMounted.current) {
+        setProfile(null);
+        setLoading(false);
+      }
+    } finally {
+      isLoadingProfile.current = false;
     }
   };
 
@@ -100,59 +117,44 @@ export function AuthProvider({ children }) {
 
   // ✅ DÉMARRER LE TIMER
   const startInactivityTimer = () => {
-    // Nettoyer l'ancien timer
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current);
     }
 
     console.log('⏱️ Timer inactivité démarré - Déconnexion dans', INACTIVITY_TIMEOUT / 1000, 'secondes');
 
-    // Nouveau timer
     inactivityTimerRef.current = setTimeout(() => {
       handleInactivityLogout();
     }, INACTIVITY_TIMEOUT);
   };
 
-  // ✅ RESET DU TIMER (throttle 1 seconde pour éviter trop d'appels)
+  // ✅ RESET DU TIMER (throttle 1 seconde)
   const resetInactivityTimer = () => {
     const now = Date.now();
     
-    // Throttle : ne pas réinitialiser si moins de 1 seconde depuis dernière activité
     if (now - lastActivityRef.current < 1000) {
       return;
     }
     
     lastActivityRef.current = now;
-    console.log('🔄 Activité détectée - Timer réinitialisé');
-    
     startInactivityTimer();
   };
 
   // ✅ ÉCOUTER LES ÉVÉNEMENTS D'ACTIVITÉ
   useEffect(() => {
-    // Ne démarrer le timer que si l'utilisateur est connecté
     if (!user) {
-      console.log('❌ Pas d\'utilisateur connecté, pas de surveillance inactivité');
       return;
     }
 
-    console.log('🎯 DÉMARRAGE surveillance inactivité (timeout:', INACTIVITY_TIMEOUT / 1000, 'secondes)');
-
-    // Démarrer le timer initial
+    console.log('🎯 DÉMARRAGE surveillance inactivité');
     startInactivityTimer();
 
-    // Liste des événements à surveiller
     const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
 
-    // Log pour debug
-    console.log('👂 Écoute des événements:', events.join(', '));
-
-    // Ajouter les listeners
     events.forEach(event => {
       window.addEventListener(event, resetInactivityTimer, { passive: true });
     });
 
-    // Cleanup
     return () => {
       console.log('🧹 Nettoyage surveillance inactivité');
       events.forEach(event => {
@@ -165,58 +167,84 @@ export function AuthProvider({ children }) {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]); // ✅ RETIRÉ INACTIVITY_TIMEOUT des dépendances
+  }, [user]);
 
   useEffect(() => {
     console.log('🚀 AuthProvider useEffect DÉMARRE');
-    let mounted = true;
+    isMounted.current = true;
 
-    // ✅ VÉRIFIER LA SESSION ET NETTOYER SI INVALIDE
-    supabase.auth.getSession().then(({ data, error }) => {
-      console.log('📡 getSession retour');
-      
-      if (!mounted) return;
-
-      // ✅ Si erreur refresh token, nettoyer et déconnecter
-      if (error) {
-        console.error('❌ Erreur getSession:', error);
-        if (error.message?.includes('Refresh Token')) {
-          console.warn('⚠️ Refresh token invalide, nettoyage localStorage...');
-          localStorage.clear();
+    // ✅ NETTOYER LES TOKENS INVALIDES AU DÉMARRAGE
+    const cleanInvalidTokens = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('❌ Erreur getSession:', error);
+          
+          // Si erreur de refresh token, nettoyer TOUT
+          if (error.message?.includes('Refresh Token') || error.message?.includes('Invalid')) {
+            console.warn('⚠️ Token invalide détecté, nettoyage complet...');
+            
+            // Nettoyer localStorage
+            localStorage.clear();
+            
+            // Nettoyer sessionStorage
+            sessionStorage.clear();
+            
+            // Déconnecter proprement
+            await supabase.auth.signOut();
+            
+            console.log('✅ Nettoyage complet effectué');
+          }
+          
           setUser(null);
           setProfile(null);
           setLoading(false);
           return;
         }
-      }
 
-      if (data?.session?.user) {
-        console.log('👤 User trouvé:', data.session.user.id);
-        setUser(data.session.user);
-        loadProfile(data.session.user.id);
-      } else {
-        console.log('❌ Pas de session');
+        if (data?.session?.user) {
+          console.log('👤 User trouvé:', data.session.user.id);
+          setUser(data.session.user);
+          await loadProfile(data.session.user.id);
+        } else {
+          console.log('❌ Pas de session');
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('❌ Exception critique getSession:', err);
+        
+        // Nettoyage d'urgence
+        localStorage.clear();
+        sessionStorage.clear();
+        await supabase.auth.signOut();
+        
+        setUser(null);
+        setProfile(null);
         setLoading(false);
       }
-    }).catch(err => {
-      console.error('❌ Exception getSession:', err);
-      // Nettoyer en cas d'erreur critique
-      localStorage.clear();
-      setUser(null);
-      setProfile(null);
-      setLoading(false);
-    });
+    };
 
+    // ✅ VÉRIFIER LA SESSION INITIALE
+    cleanInvalidTokens();
+
+    // ✅ ÉCOUTER LES CHANGEMENTS D'AUTH
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔔 onAuthStateChange:', event);
         
-        if (!mounted) return;
+        if (!isMounted.current) return;
 
         if (event === "SIGNED_IN" && session?.user) {
           console.log('✅ SIGNED_IN - userId:', session.user.id);
-          setUser(session.user);
-          await loadProfile(session.user.id);
+          
+          // ✅ Ne charger le profile QUE si on n'a pas déjà un user avec le même ID
+          if (user?.id !== session.user.id) {
+            setUser(session.user);
+            await loadProfile(session.user.id);
+          } else {
+            console.log('ℹ️ User déjà chargé, ignoré');
+          }
         }
 
         if (event === "SIGNED_OUT") {
@@ -230,10 +258,10 @@ export function AuthProvider({ children }) {
 
     return () => {
       console.log('🧹 AuthProvider cleanup');
-      mounted = false;
+      isMounted.current = false;
       authListener?.subscription?.unsubscribe();
     };
-  }, []);
+  }, []); // ✅ Dépendances vides pour éviter re-déclenchements
 
   const signIn = (email, password) =>
     supabase.auth.signInWithPassword({ email, password });
