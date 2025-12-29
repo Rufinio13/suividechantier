@@ -34,7 +34,7 @@ export function ChantierDetails() {
   } = useChantier();
 
   const [isEditing, setIsEditing] = useState(false);
-  const [activeTab, setActiveTab] = useState("planning");
+  const [activeTab, setActiveTab] = useState("planning"); // ✅ Onglet Planning par défaut
 
   const chantier = useMemo(
     () => chantiers?.find((c) => c.id === id),

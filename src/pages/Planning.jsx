@@ -167,7 +167,7 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
         </motion.div>
       )}
 
-      <Tabs defaultValue="listes" className="w-full">
+      <Tabs defaultValue="calendrier" className="w-full">
         <TabsList className={`grid w-full ${isEmbedded ? 'grid-cols-3 md:w-full' : 'grid-cols-3 md:w-[500px]'}`}>
           <TabsTrigger value="listes">Tâches</TabsTrigger>
           <TabsTrigger value="calendrier">Calendrier</TabsTrigger>
