@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Menu, X, LogOut, HardHat, Truck, Wrench, Users, ShieldCheck, ListChecks, Package } from 'lucide-react'; // ✅ Package ajouté
+import { LayoutDashboard, Menu, X, LogOut, HardHat, Truck, Wrench, Users, ShieldCheck, ListChecks, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -19,7 +19,7 @@ export function Layout() {
     { name: 'Artisans', href: '/sous-traitants', icon: Users },
     { name: 'Fournisseurs', href: '/fournisseurs', icon: Truck },
     { name: 'Référentiel CQ', href: '/referentiel-cq', icon: ShieldCheck },
-    { name: 'Référentiel Commande', href: '/referentiel-commande', icon: Package }, // ✅ AJOUTÉ
+    { name: 'Référentiel Commande', href: '/referentiel-commande', icon: Package },
     { name: 'Lots', href: '/lots', icon: ListChecks },
     { name: 'SAV', href: '/sav', icon: Wrench },
   ];
@@ -33,19 +33,20 @@ export function Layout() {
     
     try {
       console.log('🔓 Déconnexion en cours...');
+      
+      // ✅ Déconnexion Supabase (efface sessionStorage automatiquement)
       await signOut();
-      console.log('✅ Déconnexion Supabase OK');
-      await new Promise(resolve => setTimeout(resolve, 500));
       
-      localStorage.clear();
-      sessionStorage.clear();
+      console.log('✅ Déconnexion OK');
       
-      console.log('🔄 Redirection vers /login');
+      // ✅ Redirection simple vers login
       navigate('/login', { replace: true });
-      window.location.href = '/login';
+      
     } catch (error) {
       console.error('❌ Erreur déconnexion:', error);
-      window.location.href = '/login';
+      
+      // ✅ En cas d'erreur, forcer redirection
+      navigate('/login', { replace: true });
     } finally {
       setIsLoggingOut(false);
     }

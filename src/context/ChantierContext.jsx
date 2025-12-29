@@ -91,7 +91,8 @@ export function ChantierProvider({ children }) {
         console.log("6️⃣ loadLots...");
         const { data: lotsData, error: errorLots } = await supabase
           .from("lots")
-          .select("*");
+          .select("*")
+          .eq("nomsociete", profile.nomsociete); // ✅ Filtrer par société
         if (errorLots) console.error("❌ Erreur loadLots :", errorLots);
         setLots(lotsData || []);
         console.log("✅ loadLots OK -", lotsData?.length);
@@ -182,9 +183,11 @@ export function ChantierProvider({ children }) {
   };
 
   const loadLots = async () => {
+    if (!profile?.nomsociete) return; // ✅ Vérifier nomsociete
     const { data, error } = await supabase
       .from("lots")
-      .select("*");
+      .select("*")
+      .eq("nomsociete", profile.nomsociete); // ✅ Filtrer par société
     if (error) console.error("❌ Erreur loadLots :", error);
     setLots(data || []);
   };

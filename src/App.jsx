@@ -14,19 +14,20 @@ import { CompteRendu } from '@/pages/CompteRendu.jsx';
 import { LotsList } from '@/pages/LotsList.jsx';
 import { SAVList } from '@/pages/SAVList.jsx';
 import { ReferentielControleQualite } from '@/pages/ReferentielControleQualite.jsx';
-import { ReferentielCommande } from '@/pages/ReferentielCommande.jsx'; // ✅ AJOUTÉ
-import { Commandes } from '@/pages/Commandes.jsx'; // ✅ AJOUTÉ
+import { ReferentielCommande } from '@/pages/ReferentielCommande.jsx';
+import { Commandes } from '@/pages/Commandes.jsx';
 import { ChantierProvider } from '@/context/ChantierContext.jsx';
 import { FournisseurProvider } from '@/context/FournisseurContext.jsx';
 import { SousTraitantProvider } from '@/context/SousTraitantContext.jsx';
 import { LotsProvider } from '@/context/LotsContext.jsx';
 import { SAVProvider } from '@/context/SAVContext.jsx';
 import { ReferentielCQProvider } from '@/context/ReferentielCQContext.jsx';
-import { ReferentielCommandeProvider } from '@/context/ReferentielCommandeContext.jsx'; // ✅ AJOUTÉ
-import { CommandesProvider } from '@/context/CommandesContext.jsx'; // ✅ AJOUTÉ
+import { ReferentielCommandeProvider } from '@/context/ReferentielCommandeContext.jsx';
+import { CommandesProvider } from '@/context/CommandesContext.jsx';
 import { CommentairesProvider } from '@/context/CommentairesContext.jsx';
 import { CompteRenduProvider } from '@/context/CompteRenduContext.jsx';
 import { Login } from '@/pages/Login.jsx';
+import { ResetPassword } from '@/pages/ResetPassword.jsx'; // ✅ AJOUTÉ
 import { AuthProvider } from '@/context/AuthProvider.jsx';
 import { useAuth } from '@/hooks/useAuth.jsx';
 
@@ -58,14 +59,15 @@ function App() {
               <LotsProvider>
                 <SAVProvider>
                   <ReferentielCQProvider>
-                    <ReferentielCommandeProvider> {/* ✅ AJOUTÉ */}
-                      <CommandesProvider> {/* ✅ AJOUTÉ */}
+                    <ReferentielCommandeProvider>
+                      <CommandesProvider>
                         <CommentairesProvider>
                           <CompteRenduProvider>
 
                             <Routes>
                               {/* PUBLIC */}
                               <Route path="/login" element={<Login />} />
+                              <Route path="/reset-password" element={<ResetPassword />} /> {/* ✅ AJOUTÉ */}
 
                               {/* PRIVATE + Layout */}
                               <Route
@@ -84,13 +86,13 @@ function App() {
                                 <Route path="chantiers/:id/planning" element={<Planning />} />
                                 <Route path="chantiers/:id/controle-qualite" element={<ControlQualite />} />
                                 <Route path="chantiers/:id/compte-rendu" element={<CompteRendu />} />
-                                <Route path="chantiers/:id/commandes" element={<Commandes />} /> {/* ✅ AJOUTÉ */}
+                                <Route path="chantiers/:id/commandes" element={<Commandes />} />
 
                                 {/* Référentiel CQ */}
                                 <Route path="referentiel-cq" element={<ReferentielControleQualite />} />
 
                                 {/* Référentiel Commandes */}
-                                <Route path="referentiel-commande" element={<ReferentielCommande />} /> {/* ✅ AJOUTÉ */}
+                                <Route path="referentiel-commande" element={<ReferentielCommande />} />
 
                                 {/* Lots */}
                                 <Route path="lots" element={<LotsList />} />
@@ -112,8 +114,8 @@ function App() {
 
                           </CompteRenduProvider>
                         </CommentairesProvider>
-                      </CommandesProvider> {/* ✅ AJOUTÉ */}
-                    </ReferentielCommandeProvider> {/* ✅ AJOUTÉ */}
+                      </CommandesProvider>
+                    </ReferentielCommandeProvider>
                   </ReferentielCQProvider>
                 </SAVProvider>
               </LotsProvider>
