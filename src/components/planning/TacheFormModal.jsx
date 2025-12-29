@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { parseISO, isValid, format, eachDayOfInterval, startOfDay } from "date-fns";
 import { calculateDateFinLogic, calculateDureeOuvree } from "@/context/chantierContextLogics/tacheLogics";
@@ -21,7 +20,7 @@ export function TacheFormModal({
   addTache,
   updateTache,
   conflictsByChantier = {},
-  prefilledDate = null // ✅ NOUVEAU
+  prefilledDate = null
 }) {
   console.log("🎯 TacheFormModal reçoit chantierId:", chantierId);
   
@@ -110,12 +109,11 @@ export function TacheFormModal({
         terminee: tache.terminee || false,
       });
     } else {
-      // ✅ Mode création : pré-remplir avec prefilledDate si fournie
       setFormData({
         nom: "",
         description: "",
         lotid: sortedLots?.[0]?.id || "",
-        datedebut: prefilledDate || "", // ✅ UTILISER LA DATE PRÉ-REMPLIE
+        datedebut: prefilledDate || "",
         duree: "",
         datefin: "",
         assigneid: "",
@@ -123,7 +121,7 @@ export function TacheFormModal({
         terminee: false,
       });
     }
-  }, [isOpen, tache, sortedLots, prefilledDate]); // ✅ Ajouter prefilledDate aux dépendances
+  }, [isOpen, tache, sortedLots, prefilledDate]);
 
   // ---------------------------------------------------------
   // CALCUL AUTO DE LA DATE DE FIN
@@ -166,7 +164,6 @@ export function TacheFormModal({
           assignetype: "fournisseur",
         })) || [];
 
-    // ✅ Tri alphabétique des entités assignables
     return [...stOpts, ...fOpts].sort((a, b) => 
       (a.nom || "").localeCompare(b.nom || "")
     );
@@ -286,66 +283,61 @@ export function TacheFormModal({
             </div>
           )}
 
-          <div className="space-y-1">
-            <Label>Nom <span className="text-red-500">*</span></Label>
-            <Input name="nom" value={formData.nom} onChange={handleChange} required />
+          <div className="space-y-2">
+            <Label htmlFor="nom">Nom <span className="text-red-500">*</span></Label>
+            <Input id="nom" name="nom" value={formData.nom} onChange={handleChange} required />
           </div>
 
-          <div className="space-y-1">
-            <Label>Description</Label>
-            <Textarea name="description" value={formData.description} onChange={handleChange} rows={2} />
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea id="description" name="description" value={formData.description} onChange={handleChange} rows={2} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Label>Date de début <span className="text-red-500">*</span></Label>
-              <Input type="date" name="datedebut" value={formData.datedebut} onChange={handleChange} required />
+            <div className="space-y-2">
+              <Label htmlFor="datedebut">Date de début <span className="text-red-500">*</span></Label>
+              <Input type="date" id="datedebut" name="datedebut" value={formData.datedebut} onChange={handleChange} required />
             </div>
-            <div className="space-y-1">
-              <Label>Durée (jours) <span className="text-red-500">*</span></Label>
-              <Input type="number" min="1" name="duree" value={formData.duree} onChange={handleChange} required />
+            <div className="space-y-2">
+              <Label htmlFor="duree">Durée (jours) <span className="text-red-500">*</span></Label>
+              <Input type="number" min="1" id="duree" name="duree" value={formData.duree} onChange={handleChange} required />
             </div>
           </div>
 
-          <div className="space-y-1">
-            <Label>Lot <span className="text-red-500">*</span></Label>
-            <Select 
-              value={formData.lotid} 
-              onValueChange={v => handleSelectChange("lotid", v)} 
+          <div className="space-y-2">
+            <Label htmlFor="lotid">Lot <span className="text-red-500">*</span></Label>
+            <select
+              id="lotid"
+              name="lotid"
+              value={formData.lotid}
+              onChange={(e) => handleSelectChange("lotid", e.target.value)}
               required
-              key={`lot-${formData.lotid}`}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Choisir lot..." />
-              </SelectTrigger>
-              <SelectContent>
-                {sortedLots.map(l => (
-                  <SelectItem key={l.id} value={l.id}>{l.lot}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <option value="">Choisir un lot...</option>
+              {sortedLots.map(l => (
+                <option key={l.id} value={l.id}>{l.lot}</option>
+              ))}
+            </select>
           </div>
 
-          <div className="space-y-1">
-            <Label>Assigné à</Label>
-            <Select
+          <div className="space-y-2">
+            <Label htmlFor="assigneCombined">Assigné à</Label>
+            <select
+              id="assigneCombined"
+              name="assigneCombined"
               value={formData.assignetype && formData.assigneid ? `${formData.assignetype}:${formData.assigneid}` : ""}
-              onValueChange={v => handleSelectChange("assigneCombined", v)}
+              onChange={(e) => handleSelectChange("assigneCombined", e.target.value)}
               disabled={assignableEntities.length === 0}
-              key={`assigne-${formData.assignetype}-${formData.assigneid}`}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <SelectTrigger>
-                <SelectValue placeholder={assignableEntities.length === 0 ? "Aucun disponible" : "Choisir..."} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Aucun</SelectItem>
-                {assignableEntities.map(e => (
-                  <SelectItem key={`${e.assignetype}-${e.id}`} value={`${e.assignetype}:${e.id}`}>
-                    {e.nom}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <option value="">{assignableEntities.length === 0 ? "Aucun disponible" : "Choisir..."}</option>
+              {assignableEntities.map(e => (
+                <option key={`${e.assignetype}-${e.id}`} value={`${e.assignetype}:${e.id}`}>
+                  {e.nom}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* ✅ CHECKBOX TERMINÉ */}
