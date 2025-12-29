@@ -13,7 +13,7 @@ export function AuthProvider({ children }) {
   const isLoadingProfile = useRef(false);
   const isMounted = useRef(true);
 
-  // Charger le profil via API REST directement
+  // Charger le profil via le client Supabase authentifié
   const loadProfile = async (userId) => {
     // ✅ Éviter doubles appels
     if (isLoadingProfile.current) {
@@ -22,55 +22,42 @@ export function AuthProvider({ children }) {
     }
     
     isLoadingProfile.current = true;
-    console.log('🔍 loadProfile via API REST pour userId:', userId);
+    console.log('🔍 loadProfile pour userId:', userId);
     
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
+      console.log('📡 Appel Supabase client...');
       
-      console.log('📡 Appel API REST...');
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
       
-      const response = await fetch(
-        `${supabaseUrl}/rest/v1/profiles?id=eq.${userId}&select=*`,
-        {
-          headers: {
-            'apikey': supabaseKey,
-            'Authorization': `Bearer ${supabaseKey}`,
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-          }
-        }
-      );
+      console.log('📡 Réponse Supabase:', { hasData: !!data, error });
       
-      console.log('📡 Réponse API:', response.status);
-      
-      if (!response.ok) {
-        console.error('❌ Erreur HTTP:', response.status, response.statusText);
+      if (error) {
+        console.error('❌ Erreur Supabase:', error);
         setProfile(null);
         setLoading(false);
         return;
       }
       
-      const data = await response.json();
-      console.log('📡 Data reçue:', data);
-      
-      if (!data || data.length === 0) {
+      if (!data) {
         console.error('❌ Aucun profile trouvé');
         setProfile(null);
         setLoading(false);
         return;
       }
       
-      const profileData = data[0];
-      console.log('✅ Profile chargé:', profileData);
+      console.log('✅ Profile chargé:', data);
       
       if (isMounted.current) {
-        setProfile(profileData);
+        setProfile(data);
         setLoading(false);
       }
       
-      if (profileData?.nomsociete) {
-        await setSupabaseRLSContext(profileData.nomsociete);
+      if (data?.nomsociete) {
+        await setSupabaseRLSContext(data.nomsociete);
       }
       
     } catch (err) {
