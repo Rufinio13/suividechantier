@@ -80,35 +80,14 @@ export function LotsProvider({ children }) {
       
       const payload = { ...lotData, nomsociete: profile.nomsociete };
       console.log('📦 Payload:', payload);
-      console.log('🔍 Client Supabase:', { 
-        hasSupabase: !!supabase,
-        hasFrom: !!supabase?.from,
-        type: typeof supabase
-      });
-      
-      if (!supabase || typeof supabase.from !== 'function') {
-        throw new Error('Client Supabase non disponible ou corrompu');
-      }
-      
       console.log('🚀 Appel Supabase.from("lots").insert()...');
       
-      // ✅ Timeout de 30 secondes
-      const insertPromise = supabase
+      // ✅ Appel direct - Supabase est rapide
+      const { data, error } = await supabase
         .from("lots")
         .insert([payload])
         .select()
         .single();
-
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => {
-          console.error('⏰ TIMEOUT addLot ! 30 secondes dépassées');
-          reject(new Error('Timeout: la requête a pris plus de 30 secondes'));
-        }, 30000) // 30 secondes
-      );
-
-      console.log('⏳ En attente réponse Supabase...');
-      const result = await Promise.race([insertPromise, timeoutPromise]);
-      const { data, error } = result;
 
       console.log('📡 Réponse Supabase:', { hasData: !!data, hasError: !!error });
 

@@ -4,11 +4,13 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
-// ✅ Crée le client Supabase
+// ✅ Crée le client Supabase avec sessionStorage
+// La session sera effacée à la fermeture du navigateur/onglet
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
+    storage: window.sessionStorage, // ✅ Utilise sessionStorage au lieu de localStorage
     autoRefreshToken: true,
-    persistSession: true,
+    persistSession: true, // Persiste pendant la session seulement
     detectSessionInUrl: true
   }
 });

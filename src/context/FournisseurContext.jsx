@@ -58,23 +58,12 @@ export function FournisseurProvider({ children }) {
       console.log("📦 Payload fournisseur:", payload);
       console.log('🚀 Appel Supabase.from("fournisseurs").insert()...');
 
-      // ✅ Timeout de 10 secondes
-      const insertPromise = supabase
+      // ✅ Appel direct - Supabase est rapide
+      const { data, error } = await supabase
         .from("fournisseurs")
         .insert([payload])
         .select("*")
         .single();
-
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => {
-          console.error('⏰ TIMEOUT addFournisseur ! 30 secondes dépassées');
-          reject(new Error('Timeout: la requête a pris plus de 30 secondes'));
-        }, 30000) // 30 secondes
-      );
-
-      console.log('⏳ En attente réponse Supabase...');
-      const result = await Promise.race([insertPromise, timeoutPromise]);
-      const { data, error } = result;
 
       console.log('📡 Réponse Supabase:', { hasData: !!data, hasError: !!error });
 
