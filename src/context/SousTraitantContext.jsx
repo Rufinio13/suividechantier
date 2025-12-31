@@ -76,7 +76,7 @@ export function SousTraitantProvider({ children }) {
         telephone: st.telephone || null,
         adresseST: st.adresseST || null,
         assigned_lots: st.assigned_lots || [],
-        user_id: user.id,
+        // ✅ user_id sera NULL par défaut (rempli uniquement si compte créé)
         nomsociete: profile.nomsociete,
         nomsocieteST: st.nomsocieteST,
       };

@@ -204,18 +204,21 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
             let taskColor = 'bg-gray-400';
 
             if (isConflict) {
-              // 🔴 ROUGE : Conflit artisan
-              taskColor = 'bg-red-600';
-            } else if (tache.terminee) {
-              // 🔵 BLEU : Tâche terminée
-              taskColor = 'bg-blue-500';
-            } else if (isValidDate(tacheDateFin) && isPast(tacheDateFin)) {
-              // 🟠 ORANGE : En retard (non terminée + date fin passée)
-              taskColor = 'bg-orange-500';
-            } else {
-              // 🟢 VERT : À faire (non terminée + date fin >= aujourd'hui)
-              taskColor = 'bg-green-500';
-            }
+             // 🔴 ROUGE : Conflit artisan
+             taskColor = 'bg-red-600';
+             } else if (tache.artisan_termine && !tache.constructeur_valide) {
+              // 🟡 JAUNE : Terminée par artisan (en attente validation)
+              taskColor = 'bg-yellow-500';
+             } else if (tache.constructeur_valide || tache.terminee) {
+               // 🔵 BLEU : Tâche validée/terminée
+               taskColor = 'bg-blue-500';
+             } else if (isValidDate(tacheDateFin) && isPast(tacheDateFin)) {
+               // 🟠 ORANGE : En retard
+               taskColor = 'bg-orange-500';
+             } else {
+               // 🟢 VERT : À faire
+               taskColor = 'bg-green-500';
+             }
 
             return {
               id: `task-${tache.id}`,

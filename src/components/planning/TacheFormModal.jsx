@@ -9,7 +9,7 @@ import { calculateDateFinLogic, calculateDureeOuvree } from "@/context/chantierC
 import { useSousTraitant } from "@/context/SousTraitantContext";
 import { useFournisseur } from "@/context/FournisseurContext";
 import { useChantier } from "@/context/ChantierContext";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, CheckCircle } from "lucide-react";
 
 export function TacheFormModal({
   isOpen,
@@ -28,7 +28,6 @@ export function TacheFormModal({
   const { fournisseurs } = useFournisseur();
   const { chantiers } = useChantier();
 
-  // ✅ DÉTECTER LE CONFLIT
   const tacheConflictInfo = useMemo(() => {
     if (!tache || !tache.assigneid || tache.assignetype !== 'soustraitant' || !tache.datedebut || !tache.datefin) {
       return null;
@@ -74,20 +73,15 @@ export function TacheFormModal({
     assigneid: "",
     assignetype: "",
     terminee: false,
+    constructeur_valide: false,
   });
 
-  // ---------------------------------------------------------
-  // LOTS TRIÉS PAR ORDRE ALPHABÉTIQUE
-  // ---------------------------------------------------------
   const sortedLots = useMemo(() => {
     return [...(globalLots || [])].sort((a, b) => 
       (a.lot || "").localeCompare(b.lot || "")
     );
   }, [globalLots]);
 
-  // ---------------------------------------------------------
-  // INITIALISATION + PRÉ-REMPLISSAGE
-  // ---------------------------------------------------------
   useEffect(() => {
     if (!isOpen) return;
 
@@ -107,6 +101,7 @@ export function TacheFormModal({
         assigneid: tache.assigneid || "",
         assignetype: tache.assignetype || "",
         terminee: tache.terminee || false,
+        constructeur_valide: tache.constructeur_valide || false,
       });
     } else {
       setFormData({
@@ -119,13 +114,11 @@ export function TacheFormModal({
         assigneid: "",
         assignetype: "",
         terminee: false,
+        constructeur_valide: false,
       });
     }
   }, [isOpen, tache, sortedLots, prefilledDate]);
 
-  // ---------------------------------------------------------
-  // CALCUL AUTO DE LA DATE DE FIN
-  // ---------------------------------------------------------
   useEffect(() => {
     if (formData.datedebut && formData.duree) {
       const fin = calculateDateFinLogic(formData.datedebut, parseInt(formData.duree, 10));
@@ -135,9 +128,6 @@ export function TacheFormModal({
     }
   }, [formData.datedebut, formData.duree]);
 
-  // ---------------------------------------------------------
-  // ENTITÉS ASSIGNABLES PAR LOT (TRIÉES ALPHABÉTIQUEMENT)
-  // ---------------------------------------------------------
   const assignableEntities = useMemo(() => {
     if (!formData.lotid) return [];
 
@@ -169,9 +159,6 @@ export function TacheFormModal({
     );
   }, [formData.lotid, sousTraitants, fournisseurs, sortedLots]);
 
-  // ---------------------------------------------------------
-  // RESET ASSIGNE SI NON VALIDE
-  // ---------------------------------------------------------
   useEffect(() => {
     if (formData.assigneid) {
       const stillValid = assignableEntities.some(
@@ -183,9 +170,6 @@ export function TacheFormModal({
     }
   }, [assignableEntities]);
 
-  // ---------------------------------------------------------
-  // HANDLERS
-  // ---------------------------------------------------------
   const handleSelectChange = (name, value) => {
     if (name === "assigneCombined") {
       if (value) {
@@ -211,9 +195,6 @@ export function TacheFormModal({
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // ---------------------------------------------------------
-  // SUBMIT
-  // ---------------------------------------------------------
   const handleSubmit = async e => {
     e.preventDefault();
 
@@ -243,11 +224,12 @@ export function TacheFormModal({
       assigneid: formData.assigneid || null,
       assignetype: formData.assignetype || null,
       terminee: formData.terminee,
+      constructeur_valide: formData.constructeur_valide,
+      constructeur_valide_date: formData.constructeur_valide ? new Date().toISOString() : null,
     };
 
     console.log("🔍 FormData avant payload:", formData);
     console.log("📤 Payload envoyé à Supabase:", payload);
-    console.log("🔍 Type de chantierId:", typeof chantierId, "| Valeur:", chantierId);
 
     try {
       if (tache) {
@@ -262,9 +244,6 @@ export function TacheFormModal({
     }
   };
 
-  // ---------------------------------------------------------
-  // RENDER
-  // ---------------------------------------------------------
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
@@ -273,7 +252,6 @@ export function TacheFormModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
-          {/* ✅ AFFICHER LE CONFLIT EN HAUT */}
           {tacheConflictInfo && (
             <div className="p-3 bg-red-50 border-2 border-red-500 rounded-md flex items-start gap-2">
               <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -340,19 +318,96 @@ export function TacheFormModal({
             </select>
           </div>
 
-          {/* ✅ CHECKBOX TERMINÉ */}
+          {/* ✅ VALIDATION CONSTRUCTEUR - ENCADRÉ TOUJOURS VISIBLE */}
           {tache && (
-            <div className="flex items-center space-x-2 p-3 bg-slate-50 rounded border">
-              <input
-                type="checkbox"
-                id="terminee"
-                checked={formData.terminee || false}
-                onChange={(e) => setFormData(prev => ({ ...prev, terminee: e.target.checked }))}
-                className="h-4 w-4 rounded border-gray-300 cursor-pointer"
-              />
-              <Label htmlFor="terminee" className="cursor-pointer font-medium">
-                Marquer comme terminée
-              </Label>
+            <div>
+              {/* ✅ Afficher si artisan a terminé OU si constructeur a validé (pour garder historique) */}
+              {(tache.artisan_termine || tache.constructeur_valide) && (
+                <div className="space-y-2 mb-3 p-3 rounded-md border bg-gray-50 border-gray-300">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-5 w-5 text-gray-600" />
+                    <span className="font-medium text-gray-700">
+                      L'artisan a marqué cette tâche comme terminée
+                    </span>
+                  </div>
+                  
+                  {tache.artisan_termine_date && (
+                    <p className="text-xs text-gray-600">
+                      Date : {format(new Date(tache.artisan_termine_date), 'dd/MM/yyyy à HH:mm')}
+                    </p>
+                  )}
+                  
+                  {/* ✅ PHOTOS CLIQUABLES */}
+                  {tache.artisan_photos && tache.artisan_photos.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold mb-2 text-gray-700">
+                        📸 {tache.artisan_photos.length} photo(s)
+                      </p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {tache.artisan_photos.map((photo, idx) => (
+                          <img 
+                            key={idx}
+                            src={photo.url} 
+                            alt={photo.name || `Photo ${idx + 1}`}
+                            className="w-full h-20 object-cover rounded border cursor-pointer hover:opacity-80"
+                            onClick={() => window.open(photo.url, '_blank')}
+                            title="Cliquer pour agrandir"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* ✅ CHECKBOX VALIDATION */}
+              {(tache.artisan_termine || tache.constructeur_valide) && (
+                <div className={`flex items-center space-x-2 p-3 rounded border mb-3 ${
+                  formData.constructeur_valide 
+                    ? 'bg-green-50 border-green-200' 
+                    : 'bg-yellow-50 border-yellow-200'
+                }`}>
+                  <input
+                    type="checkbox"
+                    id="valider_tache"
+                    checked={formData.constructeur_valide || false}
+                    onChange={(e) => setFormData(prev => ({ 
+                      ...prev, 
+                      constructeur_valide: e.target.checked,
+                      terminee: e.target.checked 
+                    }))}
+                    className="h-4 w-4 rounded border-gray-300 cursor-pointer"
+                  />
+                  <Label htmlFor="valider_tache" className={`cursor-pointer font-medium ${
+                    formData.constructeur_valide ? 'text-green-900' : 'text-yellow-800'
+                  }`}>
+                    {formData.constructeur_valide ? '✅ Tâche validée (décocher pour invalider)' : '⏳ Valider la tâche terminée par l\'artisan'}
+                  </Label>
+                </div>
+              )}
+
+              {/* Checkbox normale (seulement si artisan n'a PAS terminé ET pas validé) */}
+              {!tache.artisan_termine && !tache.constructeur_valide && (
+                <div className="flex items-center space-x-2 p-3 bg-slate-50 rounded border">
+                  <input
+                    type="checkbox"
+                    id="terminee"
+                    checked={formData.terminee || false}
+                    onChange={(e) => setFormData(prev => ({ ...prev, terminee: e.target.checked }))}
+                    className="h-4 w-4 rounded border-gray-300 cursor-pointer"
+                  />
+                  <Label htmlFor="terminee" className="cursor-pointer font-medium">
+                    Marquer comme terminée
+                  </Label>
+                </div>
+              )}
+
+              {/* Info validation (en dessous de la checkbox) */}
+              {formData.constructeur_valide && tache.constructeur_valide_date && (
+                <p className="text-xs text-green-700 ml-7 -mt-2 mb-3">
+                  Validée le {format(new Date(tache.constructeur_valide_date), 'dd/MM/yyyy à HH:mm')}
+                </p>
+              )}
             </div>
           )}
 

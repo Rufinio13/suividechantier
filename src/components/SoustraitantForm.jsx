@@ -9,16 +9,15 @@ import { useToast } from "@/components/ui/use-toast";
 import { useSousTraitant } from "@/context/SousTraitantContext";
 import { useLots } from "@/context/LotsContext";
 import { Checkbox } from "@/components/ui/checkbox";
+import { supabase } from "@/lib/supabaseClient";
 
-export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
+export function SousTraitantForm({ initialData = null, onClose, onSuccess, onArtisanCreated }) {
   const { toast } = useToast();
   const { addSousTraitant, updateSousTraitant } = useSousTraitant();
   const { lots: globalLots = [] } = useLots();
 
-  // ✅ Protection anti-double-submit
   const isSavingRef = useRef(false);
 
-  // ✅ Tri alphabétique des lots
   const sortedLots = useMemo(() => {
     return [...globalLots].sort((a, b) => 
       (a.lot || "").localeCompare(b.lot || "")
@@ -35,9 +34,10 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
     assigned_lots: [],
   });
 
+  const [hasAuthAccount, setHasAuthAccount] = useState(false);
+
   useEffect(() => {
     if (initialData) {
-      // ✅ Copier UNIQUEMENT les champs modifiables
       setFormData({
         nomsocieteST: initialData.nomsocieteST || "",
         nomST: initialData.nomST || "",
@@ -47,8 +47,36 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
         adresseST: initialData.adresseST || "",
         assigned_lots: initialData.assigned_lots || [],
       });
+      
+      // ✅ Vérifier si cet artisan a un compte
+      if (initialData.user_id) {
+        checkIfHasAuthAccount(initialData.user_id);
+      }
     }
   }, [initialData]);
+
+  // ✅ Vérifier si le user_id existe dans profiles
+  const checkIfHasAuthAccount = async (userId) => {
+    if (!userId) {
+      setHasAuthAccount(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+
+      const hasAccount = !!data && !error;
+      setHasAuthAccount(hasAccount);
+      console.log(`✅ Artisan ${userId} a un compte dans profiles:`, hasAccount);
+    } catch (err) {
+      console.error('❌ Erreur vérification compte:', err);
+      setHasAuthAccount(false);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -65,23 +93,18 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
   };
 
   const handleSubmit = async (e) => {
-    console.log('🔵 handleSubmit SousTraitant appelé !');
-    console.log('📋 FormData:', formData);
     e.preventDefault();
     
-    // ✅ Bloquer si déjà en cours
-    if (isSavingRef.current) {
-      console.log('⚠️ Sauvegarde déjà en cours, ignoré');
-      return;
-    }
+    if (isSavingRef.current) return;
 
     isSavingRef.current = true;
 
     try {
       let result;
+
       if (initialData?.id) {
-        // ✅ Envoyer UNIQUEMENT les champs modifiables
-        console.log('📝 Mode édition - ID:', initialData.id);
+        // MODE ÉDITION
+        console.log('📝 Mode édition');
         const updates = {
           nomsocieteST: formData.nomsocieteST,
           nomST: formData.nomST,
@@ -91,19 +114,25 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
           adresseST: formData.adresseST,
           assigned_lots: formData.assigned_lots,
         };
+        
         result = await updateSousTraitant(initialData.id, updates);
-        toast({ title: "Sous-traitant mis à jour ✅", description: result.nomsocieteST });
+        toast({ title: "Sous-traitant mis à jour ✅" });
+        
       } else {
-        // ✅ Envoyer UNIQUEMENT les champs modifiables
+        // MODE CRÉATION
         console.log('➕ Mode création');
         result = await addSousTraitant(formData);
         toast({ title: "Sous-traitant créé ✅", description: result.nomsocieteST });
+        
+        // ✅ Callback pour proposer création de compte
+        if (onArtisanCreated && result) {
+          onArtisanCreated(result);
+        }
       }
-      
-      console.log('✅ Résultat:', result);
       
       onSuccess?.();
       onClose?.();
+      
       setFormData({
         nomsocieteST: "",
         nomST: "",
@@ -113,11 +142,15 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
         adresseST: "",
         assigned_lots: [],
       });
+      
     } catch (err) {
-      console.error('❌ Erreur handleSubmit:', err);
-      toast({ title: "Erreur ❌", description: "Impossible de sauvegarder le sous-traitant", variant: "destructive" });
+      console.error('❌ Erreur:', err);
+      toast({ 
+        title: "Erreur ❌", 
+        description: err.message || "Impossible de sauvegarder", 
+        variant: "destructive" 
+      });
     } finally {
-      // ✅ Débloquer après 1 seconde
       setTimeout(() => {
         isSavingRef.current = false;
       }, 1000);
@@ -126,45 +159,44 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[540px]">
+      <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{initialData ? "Modifier Sous-Traitant" : "Nouveau Sous-Traitant"}</DialogTitle>
         </DialogHeader>
 
-        <form id="soustraitant-form" onSubmit={handleSubmit} className="space-y-4 py-4">
+        <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="nomsocieteST">Nom de la société <span className="text-red-500">*</span></Label>
-            <Input id="nomsocieteST" name="nomsocieteST" value={formData.nomsocieteST || ""} onChange={handleChange} required />
+            <Input id="nomsocieteST" name="nomsocieteST" value={formData.nomsocieteST} onChange={handleChange} required />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="PrenomST">Prénom</Label>
-              <Input id="PrenomST" name="PrenomST" value={formData.PrenomST || ""} onChange={handleChange} />
+              <Input id="PrenomST" name="PrenomST" value={formData.PrenomST} onChange={handleChange} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="nomST">Nom</Label>
-              <Input id="nomST" name="nomST" value={formData.nomST || ""} onChange={handleChange} />
+              <Input id="nomST" name="nomST" value={formData.nomST} onChange={handleChange} />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" name="email" type="email" value={formData.email || ""} onChange={handleChange} />
+              <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="telephone">Téléphone</Label>
-              <Input id="telephone" name="telephone" value={formData.telephone || ""} onChange={handleChange} />
+              <Input id="telephone" name="telephone" value={formData.telephone} onChange={handleChange} />
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="adresseST">Adresse</Label>
-            <Textarea id="adresseST" name="adresseST" value={formData.adresseST || ""} onChange={handleChange} rows={2} />
+            <Textarea id="adresseST" name="adresseST" value={formData.adresseST} onChange={handleChange} rows={2} />
           </div>
 
-          {/* Sélection des lots via checkbox */}
           <div className="space-y-2">
             <Label>Lots / Compétences</Label>
             <div className="max-h-40 overflow-auto border rounded-md p-2 space-y-1">
@@ -180,6 +212,39 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess }) {
               ))}
             </div>
           </div>
+
+          {/* ✅ Si artisan a déjà un compte (lecture seule) */}
+          {initialData && hasAuthAccount && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+              <p className="text-sm text-blue-800">
+                ✅ Cet artisan possède déjà un compte
+              </p>
+            </div>
+          )}
+
+          {/* ✅ Si artisan SANS compte → Bouton pour créer compte */}
+          {initialData && !hasAuthAccount && (
+            <div className="bg-slate-50 border rounded-md p-3">
+              <p className="text-sm text-muted-foreground mb-2">
+                Cet artisan n'a pas encore de compte.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // ✅ Appeler le callback avec l'artisan actuel
+                  if (onArtisanCreated) {
+                    onArtisanCreated(initialData);
+                  }
+                  onClose(); // Fermer le formulaire
+                }}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Créer un compte
+              </Button>
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>

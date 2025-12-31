@@ -27,7 +27,7 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   const [isEditTacheDialogOpen, setIsEditTacheDialogOpen] = useState(false);
   const [selectedTache, setSelectedTache] = useState(null);
   const [hideCompleted, setHideCompleted] = useState(true);
-  const [prefilledDate, setPrefilledDate] = useState(null); // ✅ NOUVEAU : Date pré-remplie
+  const [prefilledDate, setPrefilledDate] = useState(null);
 
   const chantier = useMemo(() => chantiers.find(c => c.id === chantierId), [chantiers, chantierId]);
 
@@ -37,9 +37,16 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
       .sort((a, b) => (a.datedebut && b.datedebut ? new Date(a.datedebut) - new Date(b.datedebut) : 0));
   }, [taches, chantierId]);
 
-  const displayedTaches = useMemo(() => (hideCompleted ? chantiersTaches.filter(t => !t.terminee) : chantiersTaches), [chantiersTaches, hideCompleted]);
+  // ✅ CORRIGÉ : Filtre prend en compte constructeur_valide
+  const displayedTaches = useMemo(() => {
+    if (hideCompleted) {
+      // Masquer si : constructeur a validé OU terminee est true
+      return chantiersTaches.filter(t => !t.constructeur_valide && !t.terminee);
+    }
+    return chantiersTaches;
+  }, [chantiersTaches, hideCompleted]);
 
-  const openAddTacheDialog = (date = null) => { // ✅ Accepter date optionnelle
+  const openAddTacheDialog = (date = null) => {
     if (!globalLots.length) {
       toast({
         title: 'Aucun type de lot disponible',
@@ -50,11 +57,10 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
       return;
     }
     setSelectedTache(null);
-    setPrefilledDate(date); // ✅ Sauvegarder la date
+    setPrefilledDate(date);
     setIsAddTacheDialogOpen(true);
   };
 
-  // ✅ NOUVEAU : Fonction appelée depuis le calendrier
   const handleAddTacheFromCalendar = (dateStr) => {
     console.log('📅 Création tâche depuis calendrier avec date:', dateStr);
     openAddTacheDialog(dateStr);
@@ -257,7 +263,7 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
           onClose={() => {
             setIsAddTacheDialogOpen(false);
             setIsEditTacheDialogOpen(false);
-            setPrefilledDate(null); // ✅ Reset date
+            setPrefilledDate(null);
           }}
           tache={selectedTache}
           chantierId={chantierId}
@@ -265,7 +271,7 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
           addTache={addTache}
           updateTache={updateTache}
           conflictsByChantier={conflictsByChantier}
-          prefilledDate={prefilledDate} // ✅ NOUVEAU
+          prefilledDate={prefilledDate}
         />
       )}
     </div>

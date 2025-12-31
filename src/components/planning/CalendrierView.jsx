@@ -13,25 +13,49 @@ const JOURS_FERIES = [
   '2026-07-14', '2026-08-15', '2026-11-01', '2026-11-11', '2026-12-25',
 ];
 
-export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {}, onEditTache, onAddTache }) {
+export function CalendrierView({ 
+  taches = [], 
+  lots = [], 
+  conflictsByChantier = {}, 
+  onEditTache, 
+  onAddTache,
+  chantierColors = null, // ✅ NOUVEAU : Couleurs par chantier pour artisan
+  readOnly = false // ✅ NOUVEAU : Mode lecture seule pour artisan
+}) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
-  // Navigation mois
   const goToPreviousMonth = () => setCurrentDate(prev => subMonths(prev, 1));
   const goToNextMonth = () => setCurrentDate(prev => addMonths(prev, 1));
   const goToToday = () => setCurrentDate(new Date());
 
-  // ✅ GESTION CLIC SUR DATE (MÊME SI TÂCHES PRÉSENTES)
   const handleDayClick = (day) => {
-    // Créer nouvelle tâche sur n'importe quel jour (sauf week-end/férié)
-    if (onAddTache) {
-      const dateStr = format(day, 'yyyy-MM-dd');
-      console.log('📅 Clic sur date:', dateStr);
-      onAddTache(dateStr);
-    }
+    // ✅ Pas de création si lecture seule
+    if (readOnly || !onAddTache) return;
+    
+    const dateStr = format(day, 'yyyy-MM-dd');
+    console.log('📅 Clic sur date:', dateStr);
+    onAddTache(dateStr);
   };
 
-  // Fonction pour obtenir la couleur d'une tâche - CORRIGÉE
+  // ✅ NOUVEAU : Fonction couleur par chantier pour artisan
+  const getTacheColorByChantier = (tache) => {
+    if (!chantierColors || !tache.chantierid) {
+      return 'bg-gray-100 border-gray-300 text-gray-600';
+    }
+    
+    const color = chantierColors[tache.chantierid];
+    if (!color) return 'bg-gray-100 border-gray-300 text-gray-600';
+    
+    // Style avec la couleur du chantier
+    return {
+      backgroundColor: `${color}20`, // 20% opacité
+      borderColor: color,
+      color: color,
+      borderWidth: '2px'
+    };
+  };
+
+  // Fonction couleur normale (constructeur)
   const getTacheColor = (tache) => {
     if (!tache.datedebut || !tache.datefin) return 'bg-gray-100 border-gray-300 text-gray-600';
 
@@ -39,7 +63,6 @@ export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {
     const tacheDateFin = parseISO(tache.datefin);
     const today = startOfDay(new Date());
 
-    // 1. Vérifier conflit artisan sur TOUTE la période
     let hasConflict = false;
     if (tache.assignetype === 'soustraitant' && tache.assigneid) {
       try {
@@ -60,21 +83,23 @@ export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {
     }
 
     if (hasConflict) {
-      // 🔴 ROUGE : Conflit artisan
       return 'bg-red-100 border-red-400 text-red-800';
-    } else if (tache.terminee) {
-      // 🔵 BLEU : Tâche terminée
+    } 
+    // ✅ JAUNE : Terminée par artisan (en attente validation)
+    else if (tache.artisan_termine && !tache.constructeur_valide) {
+      return 'bg-yellow-100 border-yellow-400 text-yellow-800';
+    }
+    // BLEU : Validée par constructeur
+    else if (tache.constructeur_valide || tache.terminee) {
       return 'bg-blue-100 border-blue-400 text-blue-800';
-    } else if (tacheDateFin < today) {
-      // 🟠 ORANGE : En retard (non terminée + date fin passée)
+    } 
+    else if (tacheDateFin < today) {
       return 'bg-orange-100 border-orange-400 text-orange-800';
     } else {
-      // 🟢 VERT : À faire (non terminée + date fin >= aujourd'hui)
       return 'bg-green-100 border-green-400 text-green-800';
     }
   };
 
-  // Calculer les semaines du mois
   const weeks = useMemo(() => {
     const start = startOfMonth(currentDate);
     const end = endOfMonth(currentDate);
@@ -95,23 +120,26 @@ export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {
     });
   }, [currentDate]);
 
-  // Ajouter les infos de lot à chaque tâche
   const tachesAvecLot = useMemo(() => {
     return taches.map(tache => {
       const lot = lots.find(l => l.id === tache.lotid);
       const lotNom = lot?.lot || 'Sans lot';
       
+      // ✅ Utiliser couleur par chantier si disponible
+      const tacheStyle = chantierColors 
+        ? getTacheColorByChantier(tache)
+        : getTacheColor(tache);
+      
       return {
         ...tache,
         lotNom,
-        tacheColor: getTacheColor(tache)
+        tacheColor: typeof tacheStyle === 'string' ? tacheStyle : null,
+        tacheStyle: typeof tacheStyle === 'object' ? tacheStyle : null
       };
     });
-  }, [taches, lots, conflictsByChantier]);
+  }, [taches, lots, conflictsByChantier, chantierColors]);
 
-  // Obtenir les tâches pour un jour spécifique - MASQUE WEEK-END/FÉRIÉS
   const getTachesForDay = (day) => {
-    // ✅ Ne pas afficher les tâches sur week-end/fériés
     if (isWeekend(day)) return [];
     
     const dayStr = format(day, 'yyyy-MM-dd');
@@ -124,14 +152,13 @@ export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {
       const tacheStart = format(parseISO(tache.datedebut), 'yyyy-MM-dd');
       const tacheEnd = tache.datefin ? format(parseISO(tache.datefin), 'yyyy-MM-dd') : tacheStart;
       
-      // La tâche est active ce jour si le jour est entre le début et la fin
       return dayStr >= tacheStart && dayStr <= tacheEnd;
     });
   };
 
   return (
     <div className="space-y-4">
-      {/* Header avec navigation */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={goToPreviousMonth}>
@@ -151,7 +178,7 @@ export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {
 
       {/* Calendrier */}
       <div className="border rounded-lg overflow-hidden">
-        {/* En-tête des jours */}
+        {/* En-tête */}
         <div className="grid grid-cols-8 bg-muted border-b">
           <div className="p-2 text-center text-sm font-medium">Semaine</div>
           {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
@@ -164,12 +191,10 @@ export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {
         {/* Semaines */}
         {weeks.map((week, weekIndex) => (
           <div key={weekIndex} className="grid grid-cols-8 border-b last:border-b-0">
-            {/* Numéro de semaine */}
             <div className="border-r p-2 bg-muted/30 flex items-start justify-center">
               <div className="text-xs font-medium">S-{week.weekNumber}</div>
             </div>
 
-            {/* Jours avec tâches à l'intérieur */}
             {week.days.map((day, dayIndex) => {
               const isCurrentMonth = isSameMonth(day, currentDate);
               const isToday = format(day, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
@@ -187,17 +212,15 @@ export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {
                     !isCurrentMonth && 'bg-muted/20',
                     isToday && 'bg-blue-50',
                     isNonOuvre && isCurrentMonth && !isToday && 'bg-slate-100',
-                    // ✅ Curseur pointer sur TOUS les jours ouvrés du mois
-                    isCurrentMonth && !isNonOuvre && 'cursor-pointer hover:bg-slate-50'
+                    // ✅ Curseur uniquement si pas lecture seule
+                    !readOnly && isCurrentMonth && !isNonOuvre && 'cursor-pointer hover:bg-slate-50'
                   )}
                   onClick={() => {
-                    // ✅ Clic sur cellule = créer tâche (sauf week-end/férié)
                     if (isCurrentMonth && !isNonOuvre) {
                       handleDayClick(day);
                     }
                   }}
                 >
-                  {/* Numéro du jour */}
                   <div className={cn(
                     'text-xs font-medium mb-1',
                     !isCurrentMonth && 'text-muted-foreground',
@@ -206,23 +229,30 @@ export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {
                     {format(day, 'd')}
                   </div>
 
-                  {/* Tâches de ce jour */}
+                  {/* Tâches */}
                   <div className="space-y-1">
                     {tachesForDay.map((tache, idx) => (
                       <div
                         key={`${tache.id}-${idx}`}
                         className={cn(
-                          'p-1 rounded border text-[10px] truncate cursor-pointer hover:opacity-80 transition-opacity',
-                          tache.tacheColor
+                          'p-1 rounded border text-[10px] truncate transition-opacity',
+                          tache.tacheColor || '',
+                          onEditTache && 'cursor-pointer hover:opacity-80' // ✅ Curseur si handler existe
                         )}
-                        title={`${tache.lotNom}: ${tache.nom} - Cliquer pour modifier`}
+                        style={tache.tacheStyle || {}}
+                        title={`${tache.lotNom}: ${tache.nom}${onEditTache ? ' - Cliquer pour voir détails' : ''}`}
                         onClick={(e) => {
-                          // ✅ Empêcher propagation pour ne pas déclencher le clic sur la cellule
                           e.stopPropagation();
-                          onEditTache && onEditTache(tache);
+                          // ✅ Clic fonctionne même en readOnly
+                          if (onEditTache) {
+                            onEditTache(tache);
+                          }
                         }}
                       >
-                        <div className="font-medium truncate">{tache.nom}</div>
+                        <div className="font-medium truncate flex items-center gap-0.5">
+                          {tache.artisan_termine && <span className="text-green-600 text-sm">✅</span>}
+                          <span>{tache.nom}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -234,25 +264,31 @@ export function CalendrierView({ taches = [], lots = [], conflictsByChantier = {
       </div>
 
       {/* Légende */}
-      <div className="flex flex-wrap gap-3 text-xs items-center">
-        <span className="font-medium">Légende :</span>
-        <span className="flex items-center gap-1">
-          <div className="w-4 h-4 rounded bg-green-500"></div>
-          À faire
-        </span>
-        <span className="flex items-center gap-1">
-          <div className="w-4 h-4 rounded bg-blue-500"></div>
-          Terminée
-        </span>
-        <span className="flex items-center gap-1">
-          <div className="w-4 h-4 rounded bg-orange-500"></div>
-          En retard
-        </span>
-        <span className="flex items-center gap-1">
-          <div className="w-4 h-4 rounded bg-red-600"></div>
-          Conflit artisan
-        </span>
-      </div>
+      {!chantierColors && (
+        <div className="flex flex-wrap gap-3 text-xs items-center">
+          <span className="font-medium">Légende :</span>
+          <span className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-green-500"></div>
+            À faire
+          </span>
+          <span className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-yellow-500"></div>
+            Terminée par artisan
+          </span>
+          <span className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-blue-500"></div>
+            Validée
+          </span>
+          <span className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-orange-500"></div>
+            En retard
+          </span>
+          <span className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-red-600"></div>
+            Conflit artisan
+          </span>
+        </div>
+      )}
     </div>
   );
 }

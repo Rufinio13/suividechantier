@@ -6,16 +6,28 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { useSousTraitant } from "@/context/SousTraitantContext.jsx";
 import { SousTraitantForm } from "@/components/SoustraitantForm.jsx";
+import { CreateArtisanAccountDialog } from "@/components/CreateArtisanAccountDialog.jsx"; // ✅ AJOUTÉ
 
 export function SousTraitantsList() {
   const { sousTraitants = [], loading, deleteSousTraitant } = useSousTraitant();
   const [search, setSearch] = useState("");
   const [editingST, setEditingST] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // ✅ NOUVEAU : État pour le dialogue de création de compte
+  const [showAccountDialog, setShowAccountDialog] = useState(false);
+  const [newlyCreatedArtisan, setNewlyCreatedArtisan] = useState(null);
 
   const openModal = (st = null) => {
     setEditingST(st);
     setIsModalOpen(true);
+  };
+
+  // ✅ NOUVEAU : Callback après création d'un artisan
+  const handleArtisanCreated = (artisan) => {
+    console.log('🎉 Artisan créé, proposition de compte:', artisan);
+    setNewlyCreatedArtisan(artisan);
+    setShowAccountDialog(true);
   };
 
   // ✅ Filtre + tri alphabétique
@@ -117,6 +129,22 @@ export function SousTraitantsList() {
           initialData={editingST}
           onClose={() => setIsModalOpen(false)}
           onSuccess={() => setIsModalOpen(false)}
+          onArtisanCreated={handleArtisanCreated} // ✅ NOUVEAU : Callback
+        />
+      )}
+
+      {/* ✅ NOUVEAU : DIALOGUE CRÉATION COMPTE */}
+      {showAccountDialog && newlyCreatedArtisan && (
+        <CreateArtisanAccountDialog
+          artisan={newlyCreatedArtisan}
+          isOpen={showAccountDialog}
+          onClose={() => {
+            setShowAccountDialog(false);
+            setNewlyCreatedArtisan(null);
+          }}
+          onSuccess={() => {
+            console.log('✅ Compte créé avec succès');
+          }}
         />
       )}
     </div>

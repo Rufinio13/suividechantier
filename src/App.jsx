@@ -1,8 +1,10 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout.jsx';
+import { LayoutArtisan } from '@/components/LayoutArtisan.jsx'; // ✅ NOUVEAU
 import { ErrorBoundary } from '@/components/ErrorBoundary.jsx';
 import { Dashboard } from '@/pages/Dashboard.jsx';
+import { DashboardArtisan } from '@/pages/DashboardArtisan.jsx'; // ✅ NOUVEAU
 import { ChantiersList } from '@/pages/ChantiersList.jsx';
 import { ChantierDetails } from '@/pages/ChantierDetails.jsx';
 import { Planning } from '@/pages/Planning.jsx';
@@ -27,12 +29,13 @@ import { CommandesProvider } from '@/context/CommandesContext.jsx';
 import { CommentairesProvider } from '@/context/CommentairesContext.jsx';
 import { CompteRenduProvider } from '@/context/CompteRenduContext.jsx';
 import { Login } from '@/pages/Login.jsx';
-import { ResetPassword } from '@/pages/ResetPassword.jsx'; // ✅ AJOUTÉ
+import { ResetPassword } from '@/pages/ResetPassword.jsx';
 import { AuthProvider } from '@/context/AuthProvider.jsx';
 import { useAuth } from '@/hooks/useAuth.jsx';
 
+// ✅ NOUVEAU : Route privée avec redirection selon user_type
 export function PrivateRoute({ children }) {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   
   if (loading) {
     return (
@@ -46,6 +49,22 @@ export function PrivateRoute({ children }) {
   }
   
   if (!user) return <Navigate to="/login" replace />;
+  
+  // ✅ Redirection selon user_type
+  const currentPath = window.location.pathname;
+  
+  if (profile?.user_type === 'artisan') {
+    // Artisan essaie d'accéder aux routes constructeur
+    if (!currentPath.startsWith('/artisan')) {
+      return <Navigate to="/artisan" replace />;
+    }
+  } else if (profile?.user_type === 'constructeur') {
+    // Constructeur essaie d'accéder aux routes artisan
+    if (currentPath.startsWith('/artisan')) {
+      return <Navigate to="/" replace />;
+    }
+  }
+  
   return children;
 }
 
@@ -67,9 +86,9 @@ function App() {
                             <Routes>
                               {/* PUBLIC */}
                               <Route path="/login" element={<Login />} />
-                              <Route path="/reset-password" element={<ResetPassword />} /> {/* ✅ AJOUTÉ */}
+                              <Route path="/reset-password" element={<ResetPassword />} />
 
-                              {/* PRIVATE + Layout */}
+                              {/* ✅ ROUTES CONSTRUCTEUR */}
                               <Route
                                 path="/"
                                 element={
@@ -79,33 +98,33 @@ function App() {
                                 }
                               >
                                 <Route index element={<Dashboard />} />
-
-                                {/* Chantiers */}
                                 <Route path="chantiers" element={<ChantiersList />} />
                                 <Route path="chantiers/:id" element={<ChantierDetails />} />
                                 <Route path="chantiers/:id/planning" element={<Planning />} />
                                 <Route path="chantiers/:id/controle-qualite" element={<ControlQualite />} />
                                 <Route path="chantiers/:id/compte-rendu" element={<CompteRendu />} />
                                 <Route path="chantiers/:id/commandes" element={<Commandes />} />
-
-                                {/* Référentiel CQ */}
                                 <Route path="referentiel-cq" element={<ReferentielControleQualite />} />
-
-                                {/* Référentiel Commandes */}
                                 <Route path="referentiel-commande" element={<ReferentielCommande />} />
-
-                                {/* Lots */}
                                 <Route path="lots" element={<LotsList />} />
-
-                                {/* Sous-traitants */}
                                 <Route path="sous-traitants" element={<SousTraitantsList />} />
                                 <Route path="sous-traitants/:id" element={<SousTraitantDetails />} />
-
-                                {/* Fournisseurs */}
                                 <Route path="fournisseurs" element={<FournisseursList />} />
-
-                                {/* SAV */}
                                 <Route path="sav" element={<SAVList />} />
+                              </Route>
+
+                              {/* ✅ ROUTES ARTISAN */}
+                              <Route
+                                path="/artisan"
+                                element={
+                                  <PrivateRoute>
+                                    <LayoutArtisan />
+                                  </PrivateRoute>
+                                }
+                              >
+                                <Route index element={<DashboardArtisan />} />
+                                <Route path="chantiers" element={<div>Mes chantiers - À créer</div>} />
+                                <Route path="sav" element={<div>SAV Artisan - À créer</div>} />
                               </Route>
 
                               {/* fallback */}

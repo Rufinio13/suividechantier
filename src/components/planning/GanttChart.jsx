@@ -65,7 +65,7 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
       const tacheDateFin = parseISO(tache.datefin);
       let color = 'bg-gray-400';
 
-      // 1. Vérifier conflit artisan sur TOUTE la période - CORRIGÉ
+      // 1. Vérifier conflit artisan sur TOUTE la période
       let hasConflict = false;
       if (tache.assignetype === 'soustraitant' && tache.assigneid) {
         try {
@@ -88,8 +88,11 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
       if (hasConflict) {
         // 🔴 ROUGE : Conflit artisan
         color = 'bg-red-600';
-      } else if (tache.terminee) {
-        // 🔵 BLEU : Tâche terminée
+      } else if (tache.artisan_termine && !tache.constructeur_valide) {
+        // 🟡 JAUNE : Terminée par artisan (en attente validation)
+        color = 'bg-yellow-500';
+      } else if (tache.constructeur_valide || tache.terminee) {
+        // 🔵 BLEU : Tâche validée/terminée
         color = 'bg-blue-500';
       } else if (isPast(tacheDateFin)) {
         // 🟠 ORANGE : En retard (non terminée + date fin passée)
@@ -358,7 +361,7 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
         </div>
       </div>
 
-      {/* ✅ LÉGENDE AJOUTÉE */}
+      {/* ✅ LÉGENDE AVEC JAUNE */}
       <div className="flex flex-wrap gap-3 text-xs items-center p-3 bg-white rounded border">
         <span className="font-medium">Légende :</span>
         <span className="flex items-center gap-1">
@@ -366,8 +369,12 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
           À faire
         </span>
         <span className="flex items-center gap-1">
+          <div className="w-4 h-4 rounded bg-yellow-500"></div>
+          Terminée par artisan
+        </span>
+        <span className="flex items-center gap-1">
           <div className="w-4 h-4 rounded bg-blue-500"></div>
-          Terminée
+          Validée
         </span>
         <span className="flex items-center gap-1">
           <div className="w-4 h-4 rounded bg-orange-500"></div>

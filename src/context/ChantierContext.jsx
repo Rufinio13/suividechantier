@@ -92,7 +92,7 @@ export function ChantierProvider({ children }) {
         const { data: lotsData, error: errorLots } = await supabase
           .from("lots")
           .select("*")
-          .eq("nomsociete", profile.nomsociete); // ✅ Filtrer par société
+          .eq("nomsociete", profile.nomsociete);
         if (errorLots) console.error("❌ Erreur loadLots :", errorLots);
         setLots(lotsData || []);
         console.log("✅ loadLots OK -", lotsData?.length);
@@ -183,11 +183,11 @@ export function ChantierProvider({ children }) {
   };
 
   const loadLots = async () => {
-    if (!profile?.nomsociete) return; // ✅ Vérifier nomsociete
+    if (!profile?.nomsociete) return;
     const { data, error } = await supabase
       .from("lots")
       .select("*")
-      .eq("nomsociete", profile.nomsociete); // ✅ Filtrer par société
+      .eq("nomsociete", profile.nomsociete);
     if (error) console.error("❌ Erreur loadLots :", error);
     setLots(data || []);
   };
@@ -282,7 +282,6 @@ export function ChantierProvider({ children }) {
         console.log('📦 Payload final:', payload);
         console.log('🚀 Appel Supabase.from("taches").insert()...');
 
-        // ✅ Appel direct sans timeout - Supabase est rapide (49ms)
         const { data, error } = await supabase
           .from("taches")
           .insert([payload])
@@ -322,34 +321,44 @@ export function ChantierProvider({ children }) {
       console.error('❌ Exception dans addTache:', error);
       console.error('❌ Stack:', error.stack);
       
-      // Afficher l'erreur à l'utilisateur
       alert(`Erreur lors de la création de la tâche: ${error.message}`);
       
       throw error;
     }
   };
 
+  // ✅ CORRIGÉ : Ne jamais toucher aux colonnes artisan
   const updateTache = async (id, updates) => {
     if (updates.lotid && typeof updates.lotid !== "string") {
       throw new Error("lotid doit être un UUID valide.");
     }
+    
+    // ✅ NE JAMAIS envoyer artisan_termine/artisan_termine_date/artisan_photos
+    // Ces colonnes sont gérées UNIQUEMENT par l'artisan
+    const { artisan_termine, artisan_termine_date, artisan_photos, ...safeUpdates } = updates;
+    
     const { data, error } = await supabase
       .from("taches")
       .update({
-        nom: updates.nom,
-        description: updates.description ?? null,
-        chantierid: updates.chantierid ?? null,
-        lotid: updates.lotid ?? null,
-        assigneid: updates.assigneid ?? null,
-        assignetype: updates.assignetype ?? null,
-        datedebut: updates.datedebut ?? null,
-        datefin: updates.datefin ?? null,
-        terminee: updates.terminee ?? false,
+        nom: safeUpdates.nom,
+        description: safeUpdates.description ?? null,
+        chantierid: safeUpdates.chantierid ?? null,
+        lotid: safeUpdates.lotid ?? null,
+        assigneid: safeUpdates.assigneid ?? null,
+        assignetype: safeUpdates.assignetype ?? null,
+        datedebut: safeUpdates.datedebut ?? null,
+        datefin: safeUpdates.datefin ?? null,
+        terminee: safeUpdates.terminee ?? false,
+        // ✅ Validation constructeur
+        constructeur_valide: safeUpdates.constructeur_valide ?? null,
+        constructeur_valide_date: safeUpdates.constructeur_valide_date ?? null,
       })
       .eq("id", id)
       .select("*")
       .single();
+      
     if (error) throw error;
+    
     setTaches(prev => prev.map(t => t.id === id ? data : t));
     return data;
   };
