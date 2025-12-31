@@ -231,6 +231,7 @@ export function DashboardArtisan() {
           onClose={handleModalClose}
           tache={selectedTache}
           lot={lots.find(l => l.id === selectedTache.lotid)}
+          chantier={chantiers.find(c => c.id === selectedTache.chantierid)}
           onSuccess={handleModalSuccess}
         />
       )}

@@ -14,6 +14,7 @@ export function TacheDetailModalArtisan({
   onClose, 
   tache, 
   lot,
+  chantier, // ✅ NOUVEAU
   onSuccess 
 }) {
   const { toast } = useToast();
@@ -144,8 +145,13 @@ export function TacheDetailModalArtisan({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Infos tâche */}
+          {/* Infos tâche - Ordre modifié */}
           <div>
+            {chantier && (
+              <h2 className="text-xl font-bold text-slate-900 mb-2">
+                Chantier : {chantier.nomchantier}
+              </h2>
+            )}
             <h3 className="text-lg font-semibold">{tache.nom}</h3>
             {lot && <p className="text-sm text-muted-foreground">Lot : {lot.lot}</p>}
           </div>
