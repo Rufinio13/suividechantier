@@ -168,6 +168,14 @@ export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
         </div>
       )}
 
+      {/* ✅ NOUVEAU : COMMENTAIRE ARTISAN */}
+      {tache.artisan_commentaire && (
+        <div className="mb-2 p-2 bg-slate-50 border border-slate-200 rounded-md">
+          <p className="text-xs font-semibold text-slate-700 mb-1">💬 Commentaire de l'artisan :</p>
+          <p className="text-sm text-slate-800 whitespace-pre-wrap">{tache.artisan_commentaire}</p>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:justify-between gap-3 items-start">
         <div className="flex items-center text-sm text-muted-foreground">
           <Calendar className="mr-2 h-4 w-4" />

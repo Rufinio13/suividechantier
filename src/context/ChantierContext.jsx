@@ -333,9 +333,9 @@ export function ChantierProvider({ children }) {
       throw new Error("lotid doit être un UUID valide.");
     }
     
-    // ✅ NE JAMAIS envoyer artisan_termine/artisan_termine_date/artisan_photos
+    // ✅ NE JAMAIS envoyer artisan_termine/artisan_termine_date/artisan_photos/artisan_commentaire
     // Ces colonnes sont gérées UNIQUEMENT par l'artisan
-    const { artisan_termine, artisan_termine_date, artisan_photos, ...safeUpdates } = updates;
+    const { artisan_termine, artisan_termine_date, artisan_photos, artisan_commentaire, ...safeUpdates } = updates;
     
     const { data, error } = await supabase
       .from("taches")

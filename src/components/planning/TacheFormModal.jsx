@@ -357,6 +357,14 @@ export function TacheFormModal({
                       </div>
                     </div>
                   )}
+
+                  {/* ✅ NOUVEAU : COMMENTAIRE ARTISAN */}
+                  {tache.artisan_commentaire && (
+                    <div className="mt-2 pt-2 border-t border-gray-300">
+                      <p className="text-xs font-semibold text-gray-700 mb-1">💬 Commentaire de l'artisan :</p>
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{tache.artisan_commentaire}</p>
+                    </div>
+                  )}
                 </div>
               )}
               

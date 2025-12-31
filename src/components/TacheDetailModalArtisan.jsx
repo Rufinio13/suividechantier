@@ -20,6 +20,7 @@ export function TacheDetailModalArtisan({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [photos, setPhotos] = useState(tache?.artisan_photos || []);
   const [uploadingPhotos, setUploadingPhotos] = useState([]);
+  const [commentaire, setCommentaire] = useState(tache?.artisan_commentaire || ''); // ✅ NOUVEAU
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -104,7 +105,8 @@ export function TacheDetailModalArtisan({
         .update({
           artisan_termine: true,
           artisan_termine_date: new Date().toISOString(),
-          artisan_photos: photos
+          artisan_photos: photos,
+          artisan_commentaire: commentaire || null // ✅ NOUVEAU
         })
         .eq('id', tache.id);
 
@@ -237,6 +239,31 @@ export function TacheDetailModalArtisan({
                 onChange={handlePhotoUpload}
                 disabled={uploadingPhotos.length > 0}
               />
+            </div>
+          )}
+
+          {/* ✅ NOUVEAU : Commentaire artisan */}
+          {!isDejaTermine && (
+            <div>
+              <Label htmlFor="commentaire">Commentaire (optionnel)</Label>
+              <Textarea
+                id="commentaire"
+                value={commentaire}
+                onChange={(e) => setCommentaire(e.target.value)}
+                placeholder="Ajoutez un commentaire sur cette tâche..."
+                rows={3}
+                className="mt-2"
+              />
+            </div>
+          )}
+
+          {/* Afficher commentaire existant si déjà terminé */}
+          {isDejaTermine && commentaire && (
+            <div>
+              <Label className="text-sm text-muted-foreground">Votre commentaire</Label>
+              <div className="mt-2 p-3 bg-slate-50 border rounded-md">
+                <p className="text-sm whitespace-pre-wrap">{commentaire}</p>
+              </div>
             </div>
           )}
         </div>
