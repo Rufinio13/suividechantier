@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   ArrowLeft, Edit, Trash2, Users, Truck, FileText, CheckSquare, ListChecks, 
-  MessageSquare, User, Phone, Mail, ExternalLink, Info, MapPin, Package 
+  MessageSquare, User, Phone, Mail, ExternalLink, Info, MapPin, Package, FolderOpen
 } from 'lucide-react';
 import { ChantierForm } from '@/components/ChantierForm.jsx';
 import { Planning } from '@/pages/Planning.jsx';
@@ -15,6 +15,7 @@ import { ControlQualite } from '@/pages/ControlQualite.jsx';
 import { CompteRendu } from '@/pages/CompteRendu.jsx';
 import { ChantierCommentaires } from '@/pages/ChantierCommentaires.jsx';
 import { Commandes } from '@/pages/Commandes.jsx';
+import { DocumentsTab } from '@/components/planning/DocumentsTab';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -34,7 +35,7 @@ export function ChantierDetails() {
   } = useChantier();
 
   const [isEditing, setIsEditing] = useState(false);
-  const [activeTab, setActiveTab] = useState("planning"); // ✅ Onglet Planning par défaut
+  const [activeTab, setActiveTab] = useState("planning");
 
   const chantier = useMemo(
     () => chantiers?.find((c) => c.id === id),
@@ -176,7 +177,6 @@ export function ChantierDetails() {
                   &nbsp;{chantier.client_mail || "N/A"}
                 </div>
 
-                {/* ✅ ADRESSE COMPLÈTE SUR UNE LIGNE */}
                 <div className="flex items-center">
                   <MapPin className="mr-3 h-5 w-5 text-primary" />
                   <span className="font-medium">Adresse :</span>
@@ -203,9 +203,9 @@ export function ChantierDetails() {
             </CardContent>
           </Card>
 
-          {/* TABS - ✅ ORDRE: Planning → Commandes → CQ → CR → Commentaires */}
+          {/* ✅ TABS - Planning → Commandes → Documents → CQ → CR → Commentaires */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 gap-2 h-auto p-2">
+            <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 gap-2 h-auto p-2">
               <TabsTrigger value="planning" className="flex items-center justify-center">
                 <ListChecks className="mr-2 h-4 w-4" /> 
                 <span className="hidden sm:inline">Planning</span>
@@ -215,6 +215,11 @@ export function ChantierDetails() {
                 <Package className="mr-2 h-4 w-4" /> 
                 <span className="hidden sm:inline">Commandes</span>
                 <span className="sm:hidden">📦</span>
+              </TabsTrigger>
+              <TabsTrigger value="documents" className="flex items-center justify-center">
+                <FolderOpen className="mr-2 h-4 w-4" /> 
+                <span className="hidden sm:inline">Documents</span>
+                <span className="sm:hidden">📁</span>
               </TabsTrigger>
               <TabsTrigger value="controle-qualite" className="flex items-center justify-center">
                 <CheckSquare className="mr-2 h-4 w-4" /> 
@@ -239,6 +244,10 @@ export function ChantierDetails() {
 
             <TabsContent value="commandes" className="mt-6">
               <Commandes isEmbedded embeddedChantierId={chantier.id} />
+            </TabsContent>
+
+            <TabsContent value="documents" className="mt-6">
+              <DocumentsTab chantierId={chantier.id} />
             </TabsContent>
 
             <TabsContent value="controle-qualite" className="mt-6">

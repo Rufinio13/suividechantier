@@ -133,7 +133,7 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
     }
   };
 
-  const handlePointResultatChange = (modeleId, categorieId, sousCategorieId, pointControleId, resultat, explicationNC, photos, plans, annotationsNC, dateReprisePrevisionnelle, repriseValidee) => {
+  const handlePointResultatChange = (modeleId, categorieId, sousCategorieId, pointControleId, resultat, explicationNC, photos, plans, dateReprisePrevisionnelle, repriseValidee, soustraitantId) => {
     setResultatsTousModeles(prev => {
       const updated = {
         ...prev,
@@ -148,15 +148,16 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
                 explicationNC,
                 photos,
                 plans,
-                annotationsNC,
                 dateReprisePrevisionnelle,
-                repriseValidee
+                repriseValidee,
+                soustraitant_id: soustraitantId
               }
             }
           }
         }
       };
       
+      // ✅ AUTO-SAVE
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
       }
@@ -337,7 +338,6 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
     }
   }, [chantierId, ajouterSousCategorieChantier, toast]);
 
-  // ✅ CORRIGÉ : Utiliser Map pour éviter les doublons
   const getCombinedPointsControle = (modele) => {
     const combinedCategories = JSON.parse(JSON.stringify(modele.categories || []));
     
@@ -372,27 +372,21 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
         }
       }
       
-      // ✅ CORRECTION : Utiliser Map pour dédupliquer les points
       cat.sousCategories.forEach(sc => {
         const spec = pointsSpecifiqueModele[cat.id]?.[sc.id] || {};
         
-        // Créer une Map avec l'ID comme clé pour éviter les doublons
         const pointsMap = new Map();
         
-        // Ajouter d'abord les points existants de la sous-catégorie
         (sc.pointsControle || []).forEach(p => {
           pointsMap.set(p.id, p);
         });
         
-        // Ajouter/écraser avec les points spécifiques (état local)
         Object.values(spec).forEach(p => {
           pointsMap.set(p.id, p);
         });
         
-        // Convertir la Map en array
         sc.pointsControle = Array.from(pointsMap.values());
         
-        // Filtrer les points supprimés
         const pointsSupprimes = controlesSupprimes.points?.[cat.id]?.[sc.id] || [];
         sc.pointsControle = sc.pointsControle.filter(p => !pointsSupprimes.includes(p.id));
       });
@@ -494,8 +488,8 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
                       resultatsDomaine={resultatsTousModeles[modele.id]?.[cat.id] || {}}
                       chantierId={chantierId}
                       modeleId={modele.id}
-                      onPointResultatChangeForDomaine={(scId, pcId, resultat, explicationNC, photos, plans, annotationsNC, dateReprisePrevisionnelle, repriseValidee) => 
-                        handlePointResultatChange(modele.id, cat.id, scId, pcId, resultat, explicationNC, photos, plans, annotationsNC, dateReprisePrevisionnelle, repriseValidee)
+                      onPointResultatChangeForDomaine={(scId, pcId, resultat, explicationNC, photos, plans, dateReprisePrevisionnelle, repriseValidee, soustraitantId) => 
+                        handlePointResultatChange(modele.id, cat.id, scId, pcId, resultat, explicationNC, photos, plans, dateReprisePrevisionnelle, repriseValidee, soustraitantId)
                       }
                       pointsControleStructure={cat.sousCategories.reduce((acc, sc) => {
                         acc[sc.id] = { pointsControle: sc.pointsControle };

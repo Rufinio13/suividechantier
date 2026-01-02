@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Calendar, HardHat, Menu, X, LogOut, Wrench } from 'lucide-react';
+import { Calendar, Building2, Menu, X, LogOut, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -13,10 +13,10 @@ export function LayoutArtisan() {
   const navigate = useNavigate();
   const { signOut } = useAuth();
 
-  // ✅ Menu simplifié pour artisan
+  // ✅ Menu artisan avec Mes Chantiers
   const navItems = [
     { name: 'Mon calendrier', href: '/artisan', icon: Calendar },
-    { name: 'Mes chantiers', href: '/artisan/chantiers', icon: HardHat },
+    { name: 'Mes chantiers', href: '/artisan/chantiers', icon: Building2 },
     { name: 'SAV', href: '/artisan/sav', icon: Wrench },
   ];
 
@@ -66,7 +66,7 @@ export function LayoutArtisan() {
           {/* Logo */}
           <div className="flex items-center justify-center h-16 px-4 border-b">
             <Link to="/artisan" className="flex items-center space-x-2">
-              <HardHat className="h-8 w-8 text-orange-500" />
+              <Building2 className="h-8 w-8 text-orange-500" />
               <span className="text-xl font-bold bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent">
                 Espace Artisan
               </span>

@@ -7,7 +7,7 @@ import { useCommentaires } from '@/context/CommentairesContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft, MessageSquare, Send, AlertTriangle, CalendarCheck, Edit2, Trash2, CheckSquare, Plus } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Send, AlertTriangle, Edit2, Trash2, CheckSquare, Plus, CheckCircle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,7 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
   const params = useParams();
   const chantierId = isEmbedded ? embeddedChantierId : params.id;
 
-  const { chantiers } = useChantier();
+  const { chantiers, sousTraitants } = useChantier();
   const { modelesCQ, controles, saveControleFromModele } = useReferentielCQ();
   const { 
     getCommentairesByChantier, 
@@ -31,7 +31,6 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
 
   const [isCommentaireModalOpen, setIsCommentaireModalOpen] = useState(false);
   const [editingCommentaire, setEditingCommentaire] = useState(null);
-  const [editingReprise, setEditingReprise] = useState(null);
 
   const chantier = useMemo(() => chantiers.find(c => c.id === chantierId), [chantiers, chantierId]);
   const commentaires = useMemo(() => getCommentairesByChantier(chantierId), [chantierId, getCommentairesByChantier]);
@@ -120,13 +119,11 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
 
     try {
       if (editingCommentaire.id) {
-        // Modification
         await updateCommentaire(editingCommentaire.id, {
           titre: editingCommentaire.titre,
           texte: editingCommentaire.texte
         });
       } else {
-        // Création
         await addCommentaire(
           chantierId, 
           editingCommentaire.titre.trim(), 
@@ -161,50 +158,36 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
   };
 
   // =========================================
-  // GESTION DES REPRISES NC
+  // ✅ VALIDATION REPRISE NC
   // =========================================
-  const handleEditReprise = (pointNC) => {
-    setEditingReprise({
-      controleId: pointNC.controleId,
-      modeleId: pointNC.modeleId,
-      categorieId: pointNC.categorieId,
-      sousCategorieId: pointNC.sousCategorieId,
-      pointControleId: pointNC.pointControleId,
-      dateReprisePrevisionnelle: pointNC.dateReprisePrevisionnelle || '',
-      repriseValidee: pointNC.repriseValidee || false,
-    });
-  };
-
-  const handleSaveReprise = async () => {
-    if (!editingReprise) return;
-
+  const handleValiderReprise = async (pointNC) => {
     try {
-      const controle = controles.find(c => c.id === editingReprise.controleId);
+      const controle = controles.find(c => c.id === pointNC.controleId);
       if (!controle) {
         alert('Contrôle non trouvé');
         return;
       }
 
       const updatedResultats = { ...controle.resultats };
-      if (updatedResultats[editingReprise.categorieId]?.[editingReprise.sousCategorieId]?.[editingReprise.pointControleId]) {
-        updatedResultats[editingReprise.categorieId][editingReprise.sousCategorieId][editingReprise.pointControleId] = {
-          ...updatedResultats[editingReprise.categorieId][editingReprise.sousCategorieId][editingReprise.pointControleId],
-          dateReprisePrevisionnelle: editingReprise.dateReprisePrevisionnelle,
-          repriseValidee: editingReprise.repriseValidee
+      if (updatedResultats[pointNC.categorieId]?.[pointNC.sousCategorieId]?.[pointNC.pointControleId]) {
+        // ✅ Passer en CONFORME + garder l'historique
+        updatedResultats[pointNC.categorieId][pointNC.sousCategorieId][pointNC.pointControleId] = {
+          ...updatedResultats[pointNC.categorieId][pointNC.sousCategorieId][pointNC.pointControleId],
+          resultat: 'C', // ✅ Passe en Conforme
+          repriseValidee: true
         };
       }
 
       await saveControleFromModele(
         chantierId, 
-        editingReprise.modeleId, 
+        pointNC.modeleId, 
         updatedResultats, 
         controle.points_specifiques || {}
       );
 
-      setEditingReprise(null);
     } catch (error) {
-      console.error('Erreur lors de la sauvegarde de la reprise:', error);
-      alert('Erreur lors de la sauvegarde de la reprise');
+      console.error('Erreur lors de la validation de la reprise:', error);
+      alert('Erreur lors de la validation de la reprise');
     }
   };
 
@@ -224,6 +207,15 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
     if (!dateString) return 'N/A';
     try { 
       return format(parseISO(dateString), 'dd MMM yyyy', { locale: fr }); 
+    } catch (error) { 
+      return 'Date invalide'; 
+    }
+  };
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    try { 
+      return format(parseISO(dateString), 'dd/MM/yyyy HH:mm', { locale: fr }); 
     } catch (error) { 
       return 'Date invalide'; 
     }
@@ -278,9 +270,11 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
           {pointsNCNonValides.length > 0 ? (
             <ul className="space-y-3">
               {pointsNCNonValides.map((pnc, idx) => (
-                <li key={`${pnc.modeleId}-${pnc.pointControleId}-${idx}`} className="p-3 border rounded-md bg-red-50 border-red-200">
+                <li key={`${pnc.modeleId}-${pnc.pointControleId}-${idx}`} className={`p-3 border rounded-md ${
+                  pnc.artisan_repris ? 'bg-yellow-50 border-yellow-300' : 'bg-red-50 border-red-200'
+                }`}>
                   <div className="flex justify-between items-start">
-                    <div>
+                    <div className="flex-1">
                       <p className="font-medium text-sm text-red-700">{pnc.libelle}</p>
                       <p className="text-xs text-slate-500">
                         {pnc.modeleTitre} &gt; {pnc.categorieNom} &gt; {pnc.sousCategorieNom}
@@ -290,16 +284,66 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
                           Explication: {pnc.explicationNC}
                         </p>
                       )}
+                      {/* Affichage sous-traitant */}
+                      {pnc.soustraitant_id && (
+                        <p className="text-xs text-orange-700 mt-1 font-medium">
+                          👷 Artisan concerné: {
+                            sousTraitants.find(st => st.id === pnc.soustraitant_id)?.nomsocieteST || 
+                            `${sousTraitants.find(st => st.id === pnc.soustraitant_id)?.PrenomST} ${sousTraitants.find(st => st.id === pnc.soustraitant_id)?.nomST}` ||
+                            'Inconnu'
+                          }
+                        </p>
+                      )}
+                      {/* Statut artisan repris */}
+                      {pnc.artisan_repris && (
+                        <p className="text-xs text-yellow-700 mt-1 font-medium bg-yellow-100 px-2 py-1 rounded inline-block">
+                          ✅ Reprise marquée par l'artisan le {formatDateTime(pnc.artisan_repris_date)}
+                        </p>
+                      )}
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => handleEditReprise(pnc)} 
-                      className="h-7 w-7 text-slate-500 hover:text-slate-700"
-                    >
-                      <Edit2 size={14} />
-                    </Button>
+                    
+                    {/* ✅ CHECKBOX VALIDATION au lieu du bouton Edit */}
+                    <div className="flex items-center space-x-2 ml-3">
+                      <Checkbox
+                        id={`valider-${pnc.modeleId}-${pnc.pointControleId}`}
+                        checked={false}
+                        onCheckedChange={() => handleValiderReprise(pnc)}
+                      />
+                      <Label 
+                        htmlFor={`valider-${pnc.modeleId}-${pnc.pointControleId}`}
+                        className="text-xs font-medium text-green-700 cursor-pointer"
+                      >
+                        Valider
+                      </Label>
+                    </div>
                   </div>
+
+                  {/* Photos reprise artisan */}
+                  {pnc.artisan_repris_photos && pnc.artisan_repris_photos.length > 0 && (
+                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                      <p className="text-xs font-medium text-green-700 mb-1">📸 Photos de reprise (artisan) :</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {pnc.artisan_repris_photos.map((photo, i) => (
+                          <img 
+                            key={i} 
+                            src={photo.url || photo} 
+                            alt={`Reprise ${i+1}`}
+                            className="h-16 w-16 object-cover rounded border cursor-pointer hover:opacity-80"
+                            onClick={() => window.open(photo.url || photo, '_blank')}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Commentaire reprise artisan */}
+                  {pnc.artisan_repris_commentaire && (
+                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
+                      <p className="text-xs font-medium text-green-700 mb-1">💬 Commentaire reprise (artisan) :</p>
+                      <p className="text-sm text-green-800">{pnc.artisan_repris_commentaire}</p>
+                    </div>
+                  )}
+
                   <div className="mt-2 pt-2 border-t border-red-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                     <div>
                       <span className="font-medium text-slate-600">Reprise Prév.: </span> 
@@ -310,11 +354,11 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
                       )}
                     </div>
                     <div>
-                      <span className="font-medium text-slate-600">Validée: </span> 
-                      {pnc.repriseValidee ? (
-                        <span className="text-green-600 font-semibold">Oui</span>
+                      <span className="font-medium text-slate-600">Statut: </span> 
+                      {pnc.artisan_repris ? (
+                        <span className="text-yellow-600 font-semibold">En attente validation</span>
                       ) : (
-                        <span className="text-red-600 font-semibold">Non</span>
+                        <span className="text-red-600 font-semibold">À reprendre</span>
                       )}
                     </div>
                   </div>
@@ -328,55 +372,6 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
           )}
         </CardContent>
       </Card>
-
-      {/* MODALE ÉDITION REPRISE */}
-      {editingReprise && (
-        <motion.div 
-          initial={{ opacity: 0 }} 
-          animate={{ opacity: 1 }} 
-          className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4" 
-          onClick={() => setEditingReprise(null)}
-        >
-          <Card className="w-full max-w-md z-50" onClick={(e) => e.stopPropagation()}>
-            <CardHeader>
-              <CardTitle>Mettre à jour la reprise</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="edit-dateReprisePrevisionnelle">Date de reprise prévisionnelle</Label>
-                <Input 
-                  id="edit-dateReprisePrevisionnelle"
-                  type="date" 
-                  value={editingReprise.dateReprisePrevisionnelle}
-                  onChange={(e) => setEditingReprise(prev => ({
-                    ...prev, 
-                    dateReprisePrevisionnelle: e.target.value
-                  }))}
-                />
-              </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="edit-repriseValidee"
-                  checked={editingReprise.repriseValidee}
-                  onCheckedChange={(checked) => setEditingReprise(prev => ({
-                    ...prev, 
-                    repriseValidee: checked
-                  }))}
-                />
-                <Label htmlFor="edit-repriseValidee">Reprise validée</Label>
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setEditingReprise(null)}>
-                  Annuler
-                </Button>
-                <Button onClick={handleSaveReprise}>
-                  <CalendarCheck className="mr-2 h-4 w-4" /> Enregistrer Reprise
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
 
       {/* SECTION COMMENTAIRES */}
       <Card className={isEmbedded ? 'shadow-none border-0 mt-4' : 'mt-6'}>

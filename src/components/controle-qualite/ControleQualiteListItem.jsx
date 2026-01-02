@@ -9,6 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CheckCircle, AlertCircle, HelpCircle, XCircle, CalendarPlus, Edit2 as EditIcon, Trash2 } from 'lucide-react';
 import { PointControleFormModal } from '@/components/controle-qualite/PointControleFormModal';
 import { ImageUploadCQ } from '@/components/controle-qualite/ImageUploadCQ';
+import { useChantier } from '@/context/ChantierContext';
+import { format, parseISO } from 'date-fns';
+import { fr } from 'date-fns/locale';
 
 const getResultatStyle = (resultat) => {
   switch (resultat) {
@@ -40,8 +43,20 @@ export function PointControleResultatItem({
     onDeletePointControle,
     documents = []
 }) {
-  const [isExpanded, setIsExpanded] = useState(resultatData?.resultat === 'NC');
+  // ✅ Afficher historique si NC OU si Conforme avec reprise validée
+  const [isExpanded, setIsExpanded] = useState(
+    resultatData?.resultat === 'NC' || 
+    (resultatData?.resultat === 'C' && resultatData?.repriseValidee)
+  );
   const [isPointFormModalOpen, setIsPointFormModalOpen] = useState(false);
+
+  const { sousTraitants, taches } = useChantier();
+
+  const sousTraitantsDuChantier = useMemo(() => {
+    const tachesChantier = taches.filter(t => t.chantierid === chantierId && t.assignetype === 'soustraitant');
+    const artisanIds = [...new Set(tachesChantier.map(t => t.assigneid))];
+    return sousTraitants.filter(st => artisanIds.includes(st.id));
+  }, [taches, sousTraitants, chantierId]);
 
   const resultatOptions = [
     { value: 'C', label: 'C' },
@@ -56,6 +71,16 @@ export function PointControleResultatItem({
     plans: [],
     dateReprisePrevisionnelle: '',
     repriseValidee: false,
+    soustraitant_id: '',
+  };
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    try { 
+      return format(parseISO(dateString), 'dd/MM/yyyy HH:mm', { locale: fr }); 
+    } catch (error) { 
+      return 'Date invalide'; 
+    }
   };
 
   const handleResultatButtonClick = (value) => {
@@ -65,12 +90,12 @@ export function PointControleResultatItem({
       currentData.explicationNC, 
       currentData.photos, 
       currentData.plans, 
-      '', 
-      '', 
       currentData.dateReprisePrevisionnelle, 
-      currentData.repriseValidee
+      currentData.repriseValidee,
+      currentData.soustraitant_id
     );
-    setIsExpanded(value === 'NC');
+    // ✅ Garder expansé si reprise validée, sinon ouvrir seulement si NC
+    setIsExpanded(value === 'NC' || (value === 'C' && currentData.repriseValidee));
   };
 
   const handleChange = (field, value) => {
@@ -81,10 +106,9 @@ export function PointControleResultatItem({
       updatedData.explicationNC,
       updatedData.photos,
       updatedData.plans,
-      '',
-      '',
       updatedData.dateReprisePrevisionnelle,
-      updatedData.repriseValidee
+      updatedData.repriseValidee,
+      updatedData.soustraitant_id
     );
   };
 
@@ -115,7 +139,6 @@ export function PointControleResultatItem({
             <Button variant="ghost" size="icon" onClick={handleOpenEditModal} className="h-6 w-6 ml-2 text-slate-500 hover:text-slate-700">
                 <EditIcon size={14} />
             </Button>
-            {/* ✅ Bouton Supprimer visible pour TOUS les points */}
             <Button 
               variant="ghost" 
               size="icon" 
@@ -150,17 +173,68 @@ export function PointControleResultatItem({
       </div>
 
       <AnimatePresence>
-        {isExpanded && currentData.resultat === 'NC' && (
+        {isExpanded && (currentData.resultat === 'NC' || (currentData.resultat === 'C' && currentData.repriseValidee)) && (
           <motion.div
             initial={{ opacity: 0, height: 0, marginTop: 0 }}
             animate={{ opacity: 1, height: 'auto', marginTop: '0.75rem' }}
             exit={{ opacity: 0, height: 0, marginTop: 0 }}
             className="space-y-4 pt-3 border-t border-slate-200"
           >
+            {/* ✅ Bandeau si reprise validée (point passé en Conforme) */}
+            {currentData.resultat === 'C' && currentData.repriseValidee && (
+              <div className="p-3 bg-green-50 border border-green-300 rounded-md">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <p className="text-sm font-semibold text-green-800">
+                    ✅ Reprise validée - Point passé en Conforme
+                  </p>
+                </div>
+                <p className="text-xs text-green-700 mt-1">
+                  L'historique de la non-conformité est conservé ci-dessous.
+                </p>
+              </div>
+            )}
+
+            {/* Info artisan repris */}
+            {currentData.artisan_repris && (
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md space-y-2">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-yellow-700" />
+                  <p className="text-xs font-semibold text-yellow-800">
+                    Reprise marquée par l'artisan le {formatDateTime(currentData.artisan_repris_date)}
+                  </p>
+                </div>
+                
+                {currentData.artisan_repris_commentaire && (
+                  <div>
+                    <p className="text-xs font-medium text-slate-700">Commentaire :</p>
+                    <p className="text-sm text-slate-800">{currentData.artisan_repris_commentaire}</p>
+                  </div>
+                )}
+                
+                {currentData.artisan_repris_photos && currentData.artisan_repris_photos.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-slate-700 mb-1">Photos de reprise :</p>
+                    <div className="flex gap-2 flex-wrap">
+                      {currentData.artisan_repris_photos.map((photo, i) => (
+                        <img 
+                          key={i} 
+                          src={photo.url || photo} 
+                          alt={`Reprise ${i+1}`}
+                          className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
+                          onClick={() => window.open(photo.url || photo, '_blank')}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Explication NC */}
             <div>
               <Label htmlFor={`explicationNC-${point.id}`} className="text-xs font-medium text-slate-700">
-                Explication (obligatoire si Non Conforme)
+                Explication NC (historique)
               </Label>
               <Textarea 
                 id={`explicationNC-${point.id}`}
@@ -169,25 +243,69 @@ export function PointControleResultatItem({
                 placeholder="Décrivez la non-conformité..."
                 rows={2}
                 className="mt-1 text-sm"
-                required
+                disabled={currentData.resultat === 'C'}
               />
+            </div>
+
+            {/* Sélecteur Sous-traitant */}
+            <div>
+              <Label htmlFor={`soustraitant-${point.id}`} className="text-xs font-medium text-slate-700">
+                Sous-traitant concerné
+              </Label>
+              <Select
+                value={currentData.soustraitant_id || ''}
+                onValueChange={(value) => handleChange('soustraitant_id', value)}
+                disabled={currentData.resultat === 'C'}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Sélectionner un artisan..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Aucun</SelectItem>
+                  {sousTraitantsDuChantier.map(st => (
+                    <SelectItem key={st.id} value={st.id}>
+                      {st.nomsocieteST || `${st.PrenomST} ${st.nomST}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             
             {/* Upload Photos */}
-            <ImageUploadCQ
-              type="photo"
-              images={currentData.photos || []}
-              chantierId={chantierId}
-              onImagesChange={(newPhotos) => handleChange('photos', newPhotos)}
-            />
+            <div>
+              <Label className="text-xs font-medium text-slate-700">Photos NC (historique)</Label>
+              {currentData.photos && currentData.photos.length > 0 && (
+                <div className="mt-2 flex gap-2 flex-wrap">
+                  {currentData.photos.map((photo, i) => (
+                    <img 
+                      key={i} 
+                      src={photo} 
+                      alt={`Photo NC ${i+1}`}
+                      className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
+                      onClick={() => window.open(photo, '_blank')}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Upload Plans annotés */}
-            <ImageUploadCQ
-              type="plan"
-              images={currentData.plans || []}
-              chantierId={chantierId}
-              onImagesChange={(newPlans) => handleChange('plans', newPlans)}
-            />
+            <div>
+              <Label className="text-xs font-medium text-slate-700">Plans annotés (historique)</Label>
+              {currentData.plans && currentData.plans.length > 0 && (
+                <div className="mt-2 flex gap-2 flex-wrap">
+                  {currentData.plans.map((plan, i) => (
+                    <img 
+                      key={i} 
+                      src={plan} 
+                      alt={`Plan ${i+1}`}
+                      className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
+                      onClick={() => window.open(plan, '_blank')}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Date reprise prévisionnelle */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -201,23 +319,47 @@ export function PointControleResultatItem({
                   value={currentData.dateReprisePrevisionnelle || ''}
                   onChange={(e) => handleChange('dateReprisePrevisionnelle', e.target.value)}
                   className="mt-1 text-sm"
+                  disabled={currentData.resultat === 'C'}
                 />
               </div>
             </div>
             
             {/* Checkbox Reprise validée */}
-            <div className="flex items-center space-x-2 mt-2">
-              <input
-                type="checkbox"
-                id={`repriseValidee-${point.id}`}
-                checked={currentData.repriseValidee || false}
-                onChange={(e) => handleChange('repriseValidee', e.target.checked)}
-                className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
-              />
-              <Label htmlFor={`repriseValidee-${point.id}`} className="text-xs font-medium text-slate-700">
-                Reprise validée
-              </Label>
-            </div>
+            {currentData.resultat === 'NC' && (
+              <div className="flex items-center space-x-2 mt-2">
+                <input
+                  type="checkbox"
+                  id={`repriseValidee-${point.id}`}
+                  checked={currentData.repriseValidee || false}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      // ✅ Passer en CONFORME + garder l'historique
+                      const updatedData = {
+                        ...currentData,
+                        resultat: 'C', // ✅ Passe en Conforme
+                        repriseValidee: true
+                      };
+                      onResultatChange(
+                        point.id, 
+                        updatedData.resultat,
+                        updatedData.explicationNC,
+                        updatedData.photos,
+                        updatedData.plans,
+                        updatedData.dateReprisePrevisionnelle,
+                        updatedData.repriseValidee,
+                        updatedData.soustraitant_id
+                      );
+                    } else {
+                      handleChange('repriseValidee', false);
+                    }
+                  }}
+                  className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary"
+                />
+                <Label htmlFor={`repriseValidee-${point.id}`} className="text-xs font-medium text-slate-700">
+                  Reprise validée (passe en Conforme)
+                </Label>
+              </div>
+            )}
 
           </motion.div>
         )}

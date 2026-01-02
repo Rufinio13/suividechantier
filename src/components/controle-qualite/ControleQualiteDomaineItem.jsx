@@ -208,8 +208,8 @@ export function ControleQualiteDomaineItem({
                       chantierId={chantierId}
                       modeleId={modeleId}
                       domaineId={domaine.id}
-                      onPointResultatChange={(pointId, res, expl, photo, planId, annotations, dateRepPrev, repValidee) => 
-                        onPointResultatChangeForDomaine(sc.id, pointId, res, expl, photo, planId, annotations, dateRepPrev, repValidee)
+                      onPointResultatChange={(pointId, res, expl, photos, plans, dateRepPrev, repValidee, soustraitantId) => 
+                       onPointResultatChangeForDomaine(sc.id, pointId, res, expl, photos, plans, dateRepPrev, repValidee, soustraitantId)
                       }
                       pointsControleStructure={pointsControleStructure?.[sc.id]?.pointsControle}
                       onAddPointControle={onAddPointControle}

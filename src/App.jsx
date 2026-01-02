@@ -1,10 +1,14 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout.jsx';
-import { LayoutArtisan } from '@/components/LayoutArtisan.jsx'; // ✅ NOUVEAU
+import { LayoutArtisan } from '@/components/LayoutArtisan.jsx';
 import { ErrorBoundary } from '@/components/ErrorBoundary.jsx';
 import { Dashboard } from '@/pages/Dashboard.jsx';
-import { DashboardArtisan } from '@/pages/DashboardArtisan.jsx'; // ✅ NOUVEAU
+import { DashboardArtisan } from '@/pages/DashboardArtisan.jsx';
+import { MesChantiersArtisan } from '@/pages/artisan/MesChantiersArtisan.jsx';
+import { ChantierDetailsArtisan } from '@/pages/artisan/ChantierDetailsArtisan.jsx';
+import { SAVArtisanList } from '@/pages/artisan/SAVArtisanList.jsx';
+import { SAVArtisanDetails } from '@/pages/artisan/SAVArtisanDetails.jsx';
 import { ChantiersList } from '@/pages/ChantiersList.jsx';
 import { ChantierDetails } from '@/pages/ChantierDetails.jsx';
 import { Planning } from '@/pages/Planning.jsx';
@@ -33,7 +37,7 @@ import { ResetPassword } from '@/pages/ResetPassword.jsx';
 import { AuthProvider } from '@/context/AuthProvider.jsx';
 import { useAuth } from '@/hooks/useAuth.jsx';
 
-// ✅ NOUVEAU : Route privée avec redirection selon user_type
+// ✅ Route privée avec redirection selon user_type
 export function PrivateRoute({ children }) {
   const { user, profile, loading } = useAuth();
   
@@ -123,8 +127,10 @@ function App() {
                                 }
                               >
                                 <Route index element={<DashboardArtisan />} />
-                                <Route path="chantiers" element={<div>Mes chantiers - À créer</div>} />
-                                <Route path="sav" element={<div>SAV Artisan - À créer</div>} />
+                                <Route path="chantiers" element={<MesChantiersArtisan />} />
+                                <Route path="chantiers/:id" element={<ChantierDetailsArtisan />} />
+                                <Route path="sav" element={<SAVArtisanList />} />
+                                <Route path="sav/:id" element={<SAVArtisanDetails />} />
                               </Route>
 
                               {/* fallback */}

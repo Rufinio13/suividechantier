@@ -1,7 +1,8 @@
-// src/components/SAVList.jsx
+// src/pages/SAVList.jsx
 import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useSAV } from "@/context/SAVContext.jsx";
+import { useChantier } from "@/context/ChantierContext.jsx";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,20 +11,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Edit, Trash2, Wrench, Search, Filter } from "lucide-react";
+import { Plus, Edit, Trash2, Wrench, Search, Filter, CheckCircle, Clock, Calendar } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 
 function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
+  const { sousTraitants } = useChantier();
+  
   const [formData, setFormData] = useState({
     nomClient: "",
     dateOuverture: "",
     description: "",
-    responsable: "",
+    soustraitant_id: "", // ✅ Remplace responsable
     datePrevisionnelle: "",
-    repriseValidee: false,
+    constructeur_valide: false,
     notes: "",
-    dateValidationReprise: null,
+    constructeur_valide_date: null,
   });
 
   useEffect(() => {
@@ -34,24 +37,24 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
           ? format(parseISO(savItem.dateOuverture), "yyyy-MM-dd")
           : format(new Date(), "yyyy-MM-dd"),
         description: savItem.description || "",
-        responsable: savItem.responsable || "",
+        soustraitant_id: savItem.soustraitant_id || "",
         datePrevisionnelle: savItem.datePrevisionnelle
           ? format(parseISO(savItem.datePrevisionnelle), "yyyy-MM-dd")
           : "",
-        repriseValidee: savItem.repriseValidee || false,
+        constructeur_valide: savItem.constructeur_valide || false,
         notes: savItem.notes || "",
-        dateValidationReprise: savItem.dateValidationReprise || null,
+        constructeur_valide_date: savItem.constructeur_valide_date || null,
       });
     } else {
       setFormData({
         nomClient: "",
         dateOuverture: format(new Date(), "yyyy-MM-dd"),
         description: "",
-        responsable: "",
+        soustraitant_id: "",
         datePrevisionnelle: "",
-        repriseValidee: false,
+        constructeur_valide: false,
         notes: "",
-        dateValidationReprise: null,
+        constructeur_valide_date: null,
       });
     }
   }, [savItem, isOpen]);
@@ -61,11 +64,11 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
     setFormData((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
   };
 
-  const handleRepriseValideeChange = (checked) => {
+  const handleConstructeurValideChange = (checked) => {
     setFormData((prev) => ({
       ...prev,
-      repriseValidee: checked,
-      dateValidationReprise: checked ? new Date().toISOString() : null,
+      constructeur_valide: checked,
+      constructeur_valide_date: checked ? new Date().toISOString() : null,
     }));
   };
 
@@ -94,10 +97,28 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
             <Label htmlFor="description">Description du SAV <span className="text-red-500">*</span></Label>
             <Textarea id="description" name="description" value={formData.description} onChange={handleChange} rows={3} required />
           </div>
+          
+          {/* ✅ NOUVEAU : Sélecteur Sous-traitant */}
           <div>
-            <Label htmlFor="responsable">Responsable du SAV</Label>
-            <Input id="responsable" name="responsable" value={formData.responsable} onChange={handleChange} />
+            <Label htmlFor="soustraitant_id">Artisan assigné</Label>
+            <Select
+              value={formData.soustraitant_id}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, soustraitant_id: value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Sélectionner un artisan..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Aucun</SelectItem>
+                {sousTraitants.map(st => (
+                  <SelectItem key={st.id} value={st.id}>
+                    {st.nomsocieteST || `${st.PrenomST} ${st.nomST}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+
           <div>
             <Label htmlFor="datePrevisionnelle">Date prévisionnelle d'intervention</Label>
             <Input id="datePrevisionnelle" name="datePrevisionnelle" type="date" value={formData.datePrevisionnelle} onChange={handleChange} />
@@ -107,12 +128,16 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
             <Textarea id="notes" name="notes" value={formData.notes} onChange={handleChange} rows={2} />
           </div>
           <div className="flex items-center space-x-2">
-            <Checkbox id="repriseValidee" name="repriseValidee" checked={formData.repriseValidee} onCheckedChange={handleRepriseValideeChange} />
-            <Label htmlFor="repriseValidee">Reprise validée</Label>
+            <Checkbox 
+              id="constructeur_valide" 
+              checked={formData.constructeur_valide} 
+              onCheckedChange={handleConstructeurValideChange} 
+            />
+            <Label htmlFor="constructeur_valide">SAV validé</Label>
           </div>
-          {formData.repriseValidee && formData.dateValidationReprise && (
+          {formData.constructeur_valide && formData.constructeur_valide_date && (
             <p className="text-xs text-muted-foreground">
-              Validée le: {format(parseISO(formData.dateValidationReprise), 'dd MMMM yyyy à HH:mm', { locale: fr })}
+              Validé le: {format(parseISO(formData.constructeur_valide_date), 'dd MMMM yyyy à HH:mm', { locale: fr })}
             </p>
           )}
           <DialogFooter className="pt-4 border-t">
@@ -127,6 +152,7 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
 
 export function SAVList() {
   const { demandesSAV, addSAV, updateSAV, deleteSAV, loading } = useSAV();
+  const { sousTraitants } = useChantier();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSAV, setEditingSAV] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -156,11 +182,11 @@ export function SAVList() {
     }
   };
 
-  const handleToggleRepriseValidee = async (savItem, checked) => {
+  const handleToggleConstructeurValide = async (savItem, checked) => {
     await updateSAV(savItem.id, {
       ...savItem,
-      repriseValidee: checked,
-      dateValidationReprise: checked ? new Date().toISOString() : null,
+      constructeur_valide: checked,
+      constructeur_valide_date: checked ? new Date().toISOString() : null,
     });
   };
 
@@ -170,15 +196,26 @@ export function SAVList() {
     catch { return "Date invalide"; }
   };
 
+  const formatDateTime = (dateString) => {
+    if (!dateString) return "N/A";
+    try { return format(parseISO(dateString), "dd/MM/yyyy HH:mm", { locale: fr }); } 
+    catch { return "Date invalide"; }
+  };
+
+  const getArtisanNom = (soustraitantId) => {
+    if (!soustraitantId) return null;
+    const st = sousTraitants.find(s => s.id === soustraitantId);
+    return st ? (st.nomsocieteST || `${st.PrenomST} ${st.nomST}`) : 'Inconnu';
+  };
+
   const filteredSAV = useMemo(() => {
     return (demandesSAV || [])
       .filter(sav => {
         const matchesSearch = sav.nomClient.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                              sav.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                              (sav.responsable && sav.responsable.toLowerCase().includes(searchTerm.toLowerCase()));
+                              sav.description.toLowerCase().includes(searchTerm.toLowerCase());
         if (filterStatut === "tous") return matchesSearch;
-        if (filterStatut === "ouvert") return matchesSearch && !sav.repriseValidee;
-        if (filterStatut === "valide") return matchesSearch && sav.repriseValidee;
+        if (filterStatut === "ouvert") return matchesSearch && !sav.constructeur_valide;
+        if (filterStatut === "valide") return matchesSearch && sav.constructeur_valide;
         return false;
       })
       .sort((a, b) => new Date(b.dateOuverture) - new Date(a.dateOuverture));
@@ -201,9 +238,8 @@ export function SAVList() {
         </Button>
       </div>
 
-      {/* ✅ AJOUTÉ : Filtres */}
+      {/* Filtres */}
       <div className="flex flex-col sm:flex-row gap-4">
-        {/* Filtre par nom de client */}
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -214,7 +250,6 @@ export function SAVList() {
           />
         </div>
 
-        {/* Filtre par statut */}
         <div className="w-full sm:w-[200px]">
           <Select value={filterStatut} onValueChange={setFilterStatut}>
             <SelectTrigger>
@@ -237,7 +272,13 @@ export function SAVList() {
         {filteredSAV.length > 0 ? (
           filteredSAV.map((sav) => (
             <motion.div key={sav.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} layout>
-              <Card className={`hover:shadow-md transition-shadow ${sav.repriseValidee ? 'bg-green-50 border-green-200' : 'bg-orange-50 border-orange-200'}`}>
+              <Card className={`hover:shadow-md transition-shadow ${
+                sav.constructeur_valide 
+                  ? 'bg-green-50 border-green-200' 
+                  : sav.artisan_termine 
+                    ? 'bg-yellow-50 border-yellow-200'
+                    : 'bg-orange-50 border-orange-200'
+              }`}>
                 <CardHeader className="pb-2 flex flex-row justify-between items-start">
                   <div>
                     <CardTitle className="text-lg">{sav.nomClient}</CardTitle>
@@ -256,24 +297,80 @@ export function SAVList() {
                 </CardHeader>
                 <CardContent className="text-sm space-y-2">
                   <p><strong>Description:</strong> {sav.description || "Aucune description"}</p>
-                  {sav.datePrevisionnelle && <p><strong>Date prévisionnelle:</strong> {formatDate(sav.datePrevisionnelle)}</p>}
-                  {sav.responsable && <p><strong>Responsable:</strong> {sav.responsable}</p>}
-                  {sav.notes && <p className="text-xs text-muted-foreground"><strong>Notes:</strong> {sav.notes}</p>}
                   
+                  {/* ✅ Artisan assigné */}
+                  {sav.soustraitant_id && (
+                    <p className="text-orange-700 font-medium">
+                      👷 <strong>Artisan:</strong> {getArtisanNom(sav.soustraitant_id)}
+                    </p>
+                  )}
+
+                  {/* ✅ Date intervention artisan */}
+                  {sav.artisan_date_intervention && (
+                    <p className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-blue-600" />
+                      <strong>Intervention prévue:</strong> {formatDate(sav.artisan_date_intervention)}
+                    </p>
+                  )}
+
+                  {/* ✅ Statut artisan terminé */}
+                  {sav.artisan_termine && (
+                    <div className="p-2 bg-yellow-100 border border-yellow-300 rounded-md">
+                      <p className="flex items-center gap-2 text-yellow-800 font-semibold text-xs">
+                        <CheckCircle className="h-4 w-4" />
+                        Intervention terminée par l'artisan le {formatDateTime(sav.artisan_termine_date)}
+                      </p>
+                      {sav.artisan_commentaire && (
+                        <p className="text-xs text-slate-700 mt-1">
+                          <strong>Commentaire:</strong> {sav.artisan_commentaire}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ✅ Photos artisan */}
+                  {sav.artisan_photos && sav.artisan_photos.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium mb-1">📸 Photos intervention :</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {sav.artisan_photos.map((photo, i) => (
+                          <img 
+                            key={i} 
+                            src={photo.url} 
+                            alt={`SAV ${i+1}`}
+                            className="h-16 w-16 object-cover rounded border cursor-pointer hover:opacity-80"
+                            onClick={() => window.open(photo.url, '_blank')}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {sav.datePrevisionnelle && (
+                    <p><strong>Date prévisionnelle:</strong> {formatDate(sav.datePrevisionnelle)}</p>
+                  )}
+                  {sav.notes && (
+                    <p className="text-xs text-muted-foreground"><strong>Notes:</strong> {sav.notes}</p>
+                  )}
+                  
+                  {/* ✅ Validation constructeur */}
                   <div className="flex items-center space-x-2 pt-2 border-t">
                     <Checkbox 
-                      id={`reprise-${sav.id}`} 
-                      checked={sav.repriseValidee} 
-                      onCheckedChange={(checked) => handleToggleRepriseValidee(sav, checked)} 
+                      id={`valide-${sav.id}`} 
+                      checked={sav.constructeur_valide} 
+                      onCheckedChange={(checked) => handleToggleConstructeurValide(sav, checked)} 
                     />
-                    <Label htmlFor={`reprise-${sav.id}`} className={`${sav.repriseValidee ? 'text-green-600' : 'text-orange-600'} font-semibold cursor-pointer`}>
-                      {sav.repriseValidee ? '✅ Reprise Validée' : '⏳ Valider la reprise'}
+                    <Label 
+                      htmlFor={`valide-${sav.id}`} 
+                      className={`${sav.constructeur_valide ? 'text-green-600' : 'text-orange-600'} font-semibold cursor-pointer`}
+                    >
+                      {sav.constructeur_valide ? '✅ SAV Validé' : '⏳ Valider le SAV'}
                     </Label>
                   </div>
                   
-                  {sav.repriseValidee && sav.dateValidationReprise && (
+                  {sav.constructeur_valide && sav.constructeur_valide_date && (
                     <p className="text-xs text-green-600">
-                      Validée le {format(parseISO(sav.dateValidationReprise), 'dd MMMM yyyy à HH:mm', { locale: fr })}
+                      Validé le {formatDateTime(sav.constructeur_valide_date)}
                     </p>
                   )}
                 </CardContent>
