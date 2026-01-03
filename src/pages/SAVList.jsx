@@ -18,6 +18,15 @@ import { fr } from "date-fns/locale";
 function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
   const { sousTraitants } = useChantier();
   
+  // ✅ Trier les artisans par ordre alphabétique
+  const sousTraitantsTriés = useMemo(() => {
+    return [...sousTraitants].sort((a, b) => {
+      const nomA = a.nomsocieteST || `${a.PrenomST} ${a.nomST}`;
+      const nomB = b.nomsocieteST || `${b.PrenomST} ${b.nomST}`;
+      return nomA.localeCompare(nomB, 'fr', { sensitivity: 'base' });
+    });
+  }, [sousTraitants]);
+  
   const [formData, setFormData] = useState({
     nomClient: "",
     dateOuverture: "",
@@ -98,7 +107,7 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
             <Textarea id="description" name="description" value={formData.description} onChange={handleChange} rows={3} required />
           </div>
           
-          {/* ✅ NOUVEAU : Sélecteur Sous-traitant */}
+          {/* ✅ Sélecteur Sous-traitant */}
           <div>
             <Label htmlFor="soustraitant_id">Artisan assigné</Label>
             <Select
@@ -108,9 +117,9 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
               <SelectTrigger>
                 <SelectValue placeholder="Sélectionner un artisan..." />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-[300px]">
                 <SelectItem value="">Aucun</SelectItem>
-                {sousTraitants.map(st => (
+                {sousTraitantsTriés.map(st => (
                   <SelectItem key={st.id} value={st.id}>
                     {st.nomsocieteST || `${st.PrenomST} ${st.nomST}`}
                   </SelectItem>
@@ -305,17 +314,22 @@ export function SAVList() {
                     </p>
                   )}
 
-                  {/* ✅ Date intervention artisan */}
+                  {/* Date prévisionnelle constructeur */}
+                  {sav.datePrevisionnelle && (
+                    <p><strong>Date prévisionnelle:</strong> {formatDate(sav.datePrevisionnelle)}</p>
+                  )}
+
+                  {/* ✅ Date intervention artisan (sous la date prévisionnelle) */}
                   {sav.artisan_date_intervention && (
-                    <p className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-blue-600" />
-                      <strong>Intervention prévue:</strong> {formatDate(sav.artisan_date_intervention)}
+                    <p className="flex items-center gap-2 text-blue-700">
+                      <Calendar className="h-4 w-4" />
+                      <strong>Intervention prévue (artisan):</strong> {formatDate(sav.artisan_date_intervention)}
                     </p>
                   )}
 
                   {/* ✅ Statut artisan terminé */}
                   {sav.artisan_termine && (
-                    <div className="p-2 bg-yellow-100 border border-yellow-300 rounded-md">
+                    <div className="p-2 bg-yellow-100 border border-yellow-300 rounded-md mt-2">
                       <p className="flex items-center gap-2 text-yellow-800 font-semibold text-xs">
                         <CheckCircle className="h-4 w-4" />
                         Intervention terminée par l'artisan le {formatDateTime(sav.artisan_termine_date)}
@@ -330,7 +344,7 @@ export function SAVList() {
 
                   {/* ✅ Photos artisan */}
                   {sav.artisan_photos && sav.artisan_photos.length > 0 && (
-                    <div>
+                    <div className="mt-2">
                       <p className="text-xs font-medium mb-1">📸 Photos intervention :</p>
                       <div className="flex gap-2 flex-wrap">
                         {sav.artisan_photos.map((photo, i) => (
@@ -344,10 +358,6 @@ export function SAVList() {
                         ))}
                       </div>
                     </div>
-                  )}
-
-                  {sav.datePrevisionnelle && (
-                    <p><strong>Date prévisionnelle:</strong> {formatDate(sav.datePrevisionnelle)}</p>
                   )}
                   {sav.notes && (
                     <p className="text-xs text-muted-foreground"><strong>Notes:</strong> {sav.notes}</p>

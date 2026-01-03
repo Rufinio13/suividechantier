@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { AlertTriangle, CheckCircle, Camera, Upload } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Camera } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabaseClient';
@@ -15,7 +15,6 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
   const { modelesCQ, controles, saveControleFromModele } = useReferentielCQ();
   const { toast } = useToast();
   
-  const [expandedNC, setExpandedNC] = useState(null);
   const [commentaireReprise, setCommentaireReprise] = useState({});
   const [photosReprise, setPhotosReprise] = useState({});
   const [uploading, setUploading] = useState({});
@@ -38,7 +37,6 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
           if (!sousCategorie) return;
 
           Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
-            // ✅ Afficher les NC assignées non validées OU en attente de validation constructeur
             if (
               resultatPoint.resultat === 'NC' && 
               resultatPoint.soustraitant_id === soustraitantId &&
@@ -102,8 +100,8 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
 
       for (const file of files) {
         const fileExt = file.name.split('.').pop();
-        const fileName = `${chantierId}_${uuidv4()}.${fileExt}`;
-        const filePath = `nc-reprise/${fileName}`;
+        const fileName = `nc_${chantierId}_${uuidv4()}.${fileExt}`;
+        const filePath = fileName;
 
         const { data, error } = await supabase.storage
           .from('photos-reprises')
@@ -176,7 +174,6 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
       // Reset
       setCommentaireReprise(prev => ({ ...prev, [ncKey]: '' }));
       setPhotosReprise(prev => ({ ...prev, [ncKey]: [] }));
-      setExpandedNC(null);
 
     } catch (error) {
       console.error('Erreur marquage reprise:', error);
@@ -189,62 +186,67 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl flex items-center">
-          <AlertTriangle className="mr-2 h-5 w-5 text-red-500" /> 
-          Mes Non-Conformités
-        </CardTitle>
-        <CardDescription>
-          Liste des non-conformités qui vous sont assignées et en attente de reprise
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {mesNC.length > 0 ? (
-          <ul className="space-y-3">
-            {mesNC.map((pnc, idx) => {
-              const ncKey = getNCKey(pnc);
-              const isExpanded = expandedNC === ncKey;
+    <div className="space-y-4">
+      {mesNC.length > 0 ? (
+        mesNC.map((pnc, idx) => {
+          const ncKey = getNCKey(pnc);
 
-              return (
-                <li key={ncKey} className={`p-3 border rounded-md ${
-                  pnc.artisan_repris 
-                    ? 'bg-yellow-50 border-yellow-300' 
-                    : 'bg-red-50 border-red-200'
-                }`}>
-                  <div>
-                    <p className="font-medium text-sm text-red-700">{pnc.libelle}</p>
-                    <p className="text-xs text-slate-500">
-                      {pnc.modeleTitre} &gt; {pnc.categorieNom} &gt; {pnc.sousCategorieNom}
-                    </p>
-                    {pnc.explicationNC && (
-                      <p className="text-xs text-slate-600 mt-1">
-                        <span className="font-medium">Explication :</span> {pnc.explicationNC}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* ✅ STATUT ARTISAN REPRIS */}
+          return (
+            <Card 
+              key={ncKey} 
+              className={`${
+                pnc.artisan_repris 
+                  ? 'bg-yellow-50 border-yellow-300' 
+                  : 'bg-orange-50 border-orange-200'
+              }`}
+            >
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center justify-between">
+                  <span>{pnc.libelle}</span>
                   {pnc.artisan_repris && (
-                    <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded-md flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4 text-yellow-700" />
-                      <span className="text-xs font-semibold text-yellow-800">
-                        ✅ Marquée reprise le {formatDateTime(pnc.artisan_repris_date)} - En attente validation constructeur
+                    <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded-full font-normal">
+                      <CheckCircle className="inline h-3 w-3 mr-1" />
+                      En attente validation
+                    </span>
+                  )}
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  {pnc.modeleTitre} &gt; {pnc.categorieNom} &gt; {pnc.sousCategorieNom}
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                {/* ✅ INFORMATIONS NC */}
+                <div className="p-3 bg-white rounded-md border space-y-2 text-sm">
+                  <div className="font-medium text-slate-900">Informations</div>
+                  
+                  {pnc.explicationNC && (
+                    <div>
+                      <span className="text-xs font-medium text-slate-600">Explication NC :</span>
+                      <p className="text-sm text-slate-700 mt-1">{pnc.explicationNC}</p>
+                    </div>
+                  )}
+
+                  {pnc.dateReprisePrevisionnelle && (
+                    <div>
+                      <span className="text-xs font-medium text-slate-600">Date reprise prévisionnelle :</span>
+                      <span className="text-sm text-orange-700 font-medium ml-2">
+                        {formatDateOnly(pnc.dateReprisePrevisionnelle)}
                       </span>
                     </div>
                   )}
 
                   {/* Photos NC originales */}
                   {pnc.photos && pnc.photos.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-xs font-medium text-slate-600 mb-1">Photos NC :</p>
-                      <div className="flex gap-2 flex-wrap">
+                    <div>
+                      <span className="text-xs font-medium text-slate-600">Photos NC :</span>
+                      <div className="mt-2 grid grid-cols-4 gap-2">
                         {pnc.photos.map((photo, i) => (
                           <img 
                             key={i} 
                             src={photo} 
-                            alt={`Photo ${i+1}`}
-                            className="h-16 w-16 object-cover rounded border cursor-pointer hover:opacity-80"
+                            alt={`Photo NC ${i+1}`}
+                            className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
                             onClick={() => window.open(photo, '_blank')}
                           />
                         ))}
@@ -254,161 +256,142 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
 
                   {/* Plans NC originaux */}
                   {pnc.plans && pnc.plans.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-xs font-medium text-slate-600 mb-1">Plans annotés :</p>
-                      <div className="flex gap-2 flex-wrap">
+                    <div>
+                      <span className="text-xs font-medium text-slate-600">Plans annotés :</span>
+                      <div className="mt-2 grid grid-cols-4 gap-2">
                         {pnc.plans.map((plan, i) => (
                           <img 
                             key={i} 
                             src={plan} 
                             alt={`Plan ${i+1}`}
-                            className="h-16 w-16 object-cover rounded border cursor-pointer hover:opacity-80"
+                            className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
                             onClick={() => window.open(plan, '_blank')}
                           />
                         ))}
                       </div>
                     </div>
                   )}
+                </div>
 
-                  {/* Photos reprise artisan */}
-                  {pnc.artisan_repris_photos && pnc.artisan_repris_photos.length > 0 && (
-                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
-                      <p className="text-xs font-medium text-green-700 mb-1">📸 Photos de reprise :</p>
-                      <div className="flex gap-2 flex-wrap">
-                        {pnc.artisan_repris_photos.map((photo, i) => (
-                          <img 
-                            key={i} 
-                            src={photo.url || photo} 
-                            alt={`Reprise ${i+1}`}
-                            className="h-16 w-16 object-cover rounded border cursor-pointer hover:opacity-80"
-                            onClick={() => window.open(photo.url || photo, '_blank')}
-                          />
-                        ))}
+                {/* ✅ REPRISE MARQUÉE */}
+                {pnc.artisan_repris && (
+                  <div className="p-3 bg-yellow-100 border border-yellow-300 rounded-md">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle className="h-4 w-4 text-yellow-700" />
+                      <span className="text-sm font-semibold text-yellow-800">
+                        Reprise marquée le {formatDateTime(pnc.artisan_repris_date)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-yellow-700">
+                      En attente de validation par le constructeur
+                    </p>
+
+                    {/* Commentaire reprise */}
+                    {pnc.artisan_repris_commentaire && (
+                      <div className="mt-3 p-2 bg-white/50 rounded">
+                        <p className="text-xs font-medium text-slate-700">💬 Commentaire :</p>
+                        <p className="text-sm text-slate-800 mt-1">{pnc.artisan_repris_commentaire}</p>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Commentaire reprise artisan */}
-                  {pnc.artisan_repris_commentaire && (
-                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
-                      <p className="text-xs font-medium text-green-700 mb-1">💬 Commentaire de reprise :</p>
-                      <p className="text-sm text-green-800">{pnc.artisan_repris_commentaire}</p>
-                    </div>
-                  )}
+                    {/* Photos reprise */}
+                    {pnc.artisan_repris_photos && pnc.artisan_repris_photos.length > 0 && (
+                      <div className="mt-3">
+                        <p className="text-xs font-medium text-slate-700 mb-2">📸 Photos de reprise :</p>
+                        <div className="grid grid-cols-4 gap-2">
+                          {pnc.artisan_repris_photos.map((photo, i) => (
+                            <img 
+                              key={i} 
+                              src={photo.url || photo} 
+                              alt={`Reprise ${i+1}`}
+                              className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
+                              onClick={() => window.open(photo.url || photo, '_blank')}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                  <div className="mt-2 pt-2 border-t border-red-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="font-medium text-slate-600">Date reprise prév. : </span> 
-                      {pnc.dateReprisePrevisionnelle ? (
-                        <span className="text-orange-700 font-medium">
-                          {formatDateOnly(pnc.dateReprisePrevisionnelle)}
-                        </span>
-                      ) : (
-                        <span className="italic text-slate-400">Non définie</span>
-                      )}
+                {/* ✅ MARQUER REPRISE - TOUJOURS VISIBLE */}
+                {!pnc.artisan_repris && (
+                  <div className="p-3 bg-white rounded-md border">
+                    <div className="font-medium text-sm text-slate-900 mb-3 flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      Marquer la reprise
                     </div>
-                    <div>
-                      <span className="font-medium text-slate-600">Statut : </span> 
-                      {pnc.artisan_repris ? (
-                        <span className="text-yellow-600 font-semibold">En attente validation</span>
-                      ) : (
-                        <span className="text-red-600 font-semibold">À reprendre</span>
-                      )}
+
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor={`commentaire-${ncKey}`} className="text-xs">
+                          Commentaire (optionnel)
+                        </Label>
+                        <Textarea 
+                          id={`commentaire-${ncKey}`}
+                          placeholder="Décrivez la reprise effectuée..."
+                          rows={3}
+                          value={commentaireReprise[ncKey] || ''}
+                          onChange={(e) => setCommentaireReprise(prev => ({
+                            ...prev,
+                            [ncKey]: e.target.value
+                          }))}
+                          className="mt-2"
+                        />
+                      </div>
+
+                      <div>
+                        <Label className="text-xs flex items-center gap-2">
+                          <Camera className="h-3 w-3" />
+                          Photos de reprise (optionnel)
+                        </Label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={(e) => handlePhotoUpload(ncKey, Array.from(e.target.files))}
+                          className="mt-2 text-sm"
+                          disabled={uploading[ncKey]}
+                        />
+                        {photosReprise[ncKey] && photosReprise[ncKey].length > 0 && (
+                          <div className="mt-3 grid grid-cols-4 gap-2">
+                            {photosReprise[ncKey].map((photo, i) => (
+                              <img 
+                                key={i} 
+                                src={photo.url} 
+                                alt={`Upload ${i+1}`}
+                                className="h-20 w-20 object-cover rounded border"
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <Button 
+                        onClick={() => handleMarquerReprise(pnc)}
+                        className="w-full bg-green-600 hover:bg-green-700"
+                        disabled={uploading[ncKey]}
+                      >
+                        <CheckCircle className="mr-2 h-4 w-4" />
+                        Marquer comme reprise
+                      </Button>
                     </div>
                   </div>
-
-                  {/* ✅ BOUTON MARQUER REPRISE */}
-                  {!pnc.artisan_repris && (
-                    <div className="mt-3 pt-3 border-t border-red-200">
-                      {!isExpanded ? (
-                        <Button 
-                          size="sm" 
-                          onClick={() => setExpandedNC(ncKey)}
-                          className="w-full bg-green-600 hover:bg-green-700"
-                        >
-                          <CheckCircle className="mr-2 h-4 w-4" />
-                          Marquer comme reprise
-                        </Button>
-                      ) : (
-                        <div className="space-y-3">
-                          <div>
-                            <Label className="text-xs">Commentaire (optionnel)</Label>
-                            <Textarea 
-                              placeholder="Décrivez la reprise effectuée..."
-                              rows={2}
-                              value={commentaireReprise[ncKey] || ''}
-                              onChange={(e) => setCommentaireReprise(prev => ({
-                                ...prev,
-                                [ncKey]: e.target.value
-                              }))}
-                              className="mt-1 text-sm"
-                            />
-                          </div>
-
-                          <div>
-                            <Label className="text-xs flex items-center gap-2">
-                              <Camera className="h-3 w-3" />
-                              Photos de reprise (optionnel)
-                            </Label>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              multiple
-                              onChange={(e) => handlePhotoUpload(ncKey, Array.from(e.target.files))}
-                              className="mt-1 text-sm"
-                              disabled={uploading[ncKey]}
-                            />
-                            {photosReprise[ncKey] && photosReprise[ncKey].length > 0 && (
-                              <div className="mt-2 flex gap-2 flex-wrap">
-                                {photosReprise[ncKey].map((photo, i) => (
-                                  <img 
-                                    key={i} 
-                                    src={photo.url} 
-                                    alt={`Upload ${i+1}`}
-                                    className="h-16 w-16 object-cover rounded border"
-                                  />
-                                ))}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="flex gap-2">
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => {
-                                setExpandedNC(null);
-                                setCommentaireReprise(prev => ({ ...prev, [ncKey]: '' }));
-                                setPhotosReprise(prev => ({ ...prev, [ncKey]: [] }));
-                              }}
-                              className="flex-1"
-                            >
-                              Annuler
-                            </Button>
-                            <Button 
-                              size="sm"
-                              onClick={() => handleMarquerReprise(pnc)}
-                              className="flex-1 bg-green-600 hover:bg-green-700"
-                              disabled={uploading[ncKey]}
-                            >
-                              <CheckCircle className="mr-2 h-4 w-4" />
-                              Confirmer la reprise
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="text-muted-foreground text-center py-4">
-            Aucune non-conformité assignée pour le moment. Bravo ! 🎉
-          </p>
-        )}
-      </CardContent>
-    </Card>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })
+      ) : (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <p className="text-muted-foreground">
+              Aucune non-conformité assignée pour le moment. Bravo ! 🎉
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
