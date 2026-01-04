@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Upload, X } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Upload, X, FileSignature } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,6 +17,7 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
   const [file, setFile] = useState(null);
   const [partageType, setPartageType] = useState('tous');
   const [artisanId, setArtisanId] = useState('');
+  const [necessiteSignature, setNecessiteSignature] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   // Artisans qui ont au moins 1 tâche sur ce chantier
@@ -45,6 +47,18 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
       return;
     }
 
+    // ✅ Si signature requise, vérifier qu'un artisan spécifique est sélectionné
+    if (necessiteSignature) {
+      if (partageType !== 'specifique' || !artisanId) {
+        toast({ 
+          title: 'Erreur', 
+          description: 'Pour demander une signature, vous devez sélectionner un artisan spécifique', 
+          variant: 'destructive' 
+        });
+        return;
+      }
+    }
+
     setUploading(true);
 
     try {
@@ -71,18 +85,23 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
           chantier_id: chantierId,
           nom_fichier: file.name,
           url_fichier: urlData.publicUrl,
+          storage_path: filePath,
           type_fichier: fileExt,
           taille_fichier: file.size,
           partage_type: partageType,
           artisan_id: partageType === 'specifique' ? artisanId : null,
           uploaded_by: user.id,
+          // ✅ Signature : utilise artisanId si artisan spécifique + signature requise
+          necessite_signature: necessiteSignature,
+          artisan_assigne_signature: (necessiteSignature && partageType === 'specifique') ? artisanId : null,
+          signature_statut: necessiteSignature ? 'en_attente' : 'non_requis',
         });
 
       if (dbError) throw dbError;
 
       toast({
         title: 'Document ajouté ✅',
-        description: `${file.name} a été partagé avec ${partageType === 'tous' ? 'tous les artisans' : 'l\'artisan sélectionné'}`,
+        description: `${file.name} a été partagé${necessiteSignature ? ' et attend signature' : ''}`,
       });
 
       onSuccess?.();
@@ -92,6 +111,7 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
       setFile(null);
       setPartageType('tous');
       setArtisanId('');
+      setNecessiteSignature(false);
 
     } catch (error) {
       console.error('Erreur upload:', error);
@@ -107,7 +127,7 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Ajouter un document</DialogTitle>
         </DialogHeader>
@@ -210,7 +230,40 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
             </div>
           )}
 
-          <DialogFooter>
+          {/* ✅ SIGNATURE ÉLECTRONIQUE */}
+          <div className="pt-4 border-t space-y-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="necessite_signature"
+                checked={necessiteSignature}
+                onCheckedChange={setNecessiteSignature}
+                disabled={partageType === 'tous'}
+              />
+              <Label 
+                htmlFor="necessite_signature" 
+                className="text-sm font-medium cursor-pointer flex items-center gap-2"
+              >
+                <FileSignature className="h-4 w-4 text-orange-600" />
+                Ce document nécessite une signature électronique
+              </Label>
+            </div>
+
+            {necessiteSignature && (
+              <div className="ml-6 p-3 bg-orange-50 border border-orange-200 rounded-md text-sm">
+                <p className="text-orange-800">
+                  📝 L'artisan <strong>{artisansDuChantier.find(st => st.id === artisanId)?.nomsocieteST || 'sélectionné'}</strong> devra signer électroniquement ce document.
+                </p>
+              </div>
+            )}
+
+            {partageType === 'tous' && necessiteSignature && (
+              <p className="text-xs text-red-600 ml-6">
+                ⚠️ Pour demander une signature, vous devez sélectionner un artisan spécifique.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter className="pt-4">
             <Button type="button" variant="outline" onClick={onClose} disabled={uploading}>
               Annuler
             </Button>

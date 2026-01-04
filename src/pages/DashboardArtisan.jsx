@@ -5,7 +5,7 @@ import { useSousTraitant } from '@/context/SousTraitantContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CalendrierView } from '@/components/planning/CalendrierView';
 import { TacheDetailModalArtisan } from '@/components/TacheDetailModalArtisan';
-import { Calendar, HardHat, Clock } from 'lucide-react';
+import { Calendar, HardHat } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export function DashboardArtisan() {
@@ -49,11 +49,6 @@ export function DashboardArtisan() {
     console.log('🏗️ Mes chantiers:', filtered.length);
     return filtered;
   }, [mesTaches, chantiers]);
-
-  // 4️⃣ Tâches non terminées
-  const tachesEnCours = useMemo(() => {
-    return mesTaches.filter(t => !t.artisan_termine && !t.constructeur_valide);
-  }, [mesTaches]);
 
   // 5️⃣ Générer une couleur par chantier pour le calendrier
   const chantierColors = useMemo(() => {
@@ -124,49 +119,6 @@ export function DashboardArtisan() {
           Bienvenue, {profile?.prenom} {profile?.nom}
         </p>
       </div>
-
-      {/* Stats */}
-      <motion.div 
-        className="grid gap-4 md:grid-cols-3"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center">
-              <HardHat className="mr-2 h-5 w-5" />
-              Mes chantiers
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <span className="text-3xl font-bold">{mesChantiers.length}</span>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center">
-              <Clock className="mr-2 h-5 w-5" />
-              Tâches en cours
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <span className="text-3xl font-bold">{tachesEnCours.length}</span>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center">
-              <Calendar className="mr-2 h-5 w-5" />
-              Total tâches
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <span className="text-3xl font-bold">{mesTaches.length}</span>
-          </CardContent>
-        </Card>
-      </motion.div>
 
       {/* Légende couleurs */}
       {mesChantiers.length > 0 && (
