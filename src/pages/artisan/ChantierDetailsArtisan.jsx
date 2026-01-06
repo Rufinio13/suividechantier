@@ -4,9 +4,11 @@ import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
 import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
+import { useReferentielCQ } from '@/context/ReferentielCQContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, ListChecks, FolderOpen, AlertTriangle, User, MapPin } from 'lucide-react';
 import { TachesArtisanTab } from '@/components/artisan/TachesArtisanTab';
 import { DocumentsArtisanTab } from '@/components/artisan/DocumentsArtisanTab';
@@ -17,6 +19,7 @@ export function ChantierDetailsArtisan() {
   const { profile } = useAuth();
   const { chantiers, taches, loading } = useChantier();
   const { sousTraitants } = useSousTraitant();
+  const { controles } = useReferentielCQ();
   
   const [activeTab, setActiveTab] = useState('taches');
 
@@ -41,6 +44,35 @@ export function ChantierDetailsArtisan() {
       t.assigneid === monSousTraitantId
     );
   }, [taches, id, monSousTraitantId]);
+
+  // ✅ Compter les NC non validées pour CE chantier
+  const ncCount = useMemo(() => {
+    if (!monSousTraitantId || !id || !controles) return 0;
+
+    let count = 0;
+
+    controles.forEach(ctrl => {
+      if (ctrl.chantier_id !== id) return;
+      if (!ctrl.resultats) return;
+
+      Object.values(ctrl.resultats).forEach(categorie => {
+        Object.values(categorie).forEach(sousCategorie => {
+          Object.values(sousCategorie).forEach(point => {
+            // NC assignée à cet artisan ET non validée
+            if (
+              point.resultat === 'NC' &&
+              point.soustraitant_id === monSousTraitantId &&
+              !point.repriseValidee
+            ) {
+              count++;
+            }
+          });
+        });
+      });
+    });
+
+    return count;
+  }, [monSousTraitantId, id, controles]);
 
   if (loading) {
     return (
@@ -126,9 +158,18 @@ export function ChantierDetailsArtisan() {
             <FolderOpen className="mr-2 h-4 w-4" /> 
             Documents
           </TabsTrigger>
-          <TabsTrigger value="nc" className="flex items-center justify-center">
+          <TabsTrigger value="nc" className="flex items-center justify-center relative">
             <AlertTriangle className="mr-2 h-4 w-4" /> 
             Non-Conformités
+            {/* ✅ Badge NC sur l'onglet */}
+            {ncCount > 0 && (
+              <Badge 
+                variant="destructive" 
+                className="ml-2 h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs"
+              >
+                {ncCount}
+              </Badge>
+            )}
           </TabsTrigger>
         </TabsList>
 

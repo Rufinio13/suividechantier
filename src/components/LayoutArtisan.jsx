@@ -1,23 +1,125 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Calendar, Building2, Menu, X, LogOut, Wrench } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { useChantier } from '@/context/ChantierContext';
+import { useSousTraitant } from '@/context/SousTraitantContext';
+import { useReferentielCQ } from '@/context/ReferentielCQContext';
+import { supabase } from '@/lib/supabaseClient';
 
 export function LayoutArtisan() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [savCount, setSavCount] = useState(0);
+  const [ncCount, setNcCount] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { signOut, profile } = useAuth();
+  const { sousTraitants } = useSousTraitant();
+  const { controles } = useReferentielCQ();
+  const { taches } = useChantier();
 
-  // ✅ Menu artisan avec Mes Chantiers
+  // Trouver l'ID du sous-traitant
+  const monSousTraitantId = useMemo(() => {
+    if (!profile?.id || !sousTraitants?.length) return null;
+    const myST = sousTraitants.find(st => st.user_id === profile.id);
+    return myST?.id || null;
+  }, [profile, sousTraitants]);
+
+  // ✅ Compter les NC non validées de l'artisan
+  useEffect(() => {
+    const loadNcCount = () => {
+      if (!monSousTraitantId || !controles || !taches) return;
+
+      try {
+        // Récupérer les chantiers de l'artisan
+        const mesChantierIds = [...new Set(
+          taches
+            .filter(t => t.assignetype === 'soustraitant' && t.assigneid === monSousTraitantId)
+            .map(t => t.chantierid)
+        )];
+
+        let totalNC = 0;
+
+        // Parcourir les contrôles des chantiers de l'artisan
+        controles.forEach(ctrl => {
+          if (!mesChantierIds.includes(ctrl.chantier_id)) return;
+          if (!ctrl.resultats) return;
+
+          Object.values(ctrl.resultats).forEach(categorie => {
+            Object.values(categorie).forEach(sousCategorie => {
+              Object.values(sousCategorie).forEach(point => {
+                // NC assignée à cet artisan ET non validée
+                if (
+                  point.resultat === 'NC' &&
+                  point.soustraitant_id === monSousTraitantId &&
+                  !point.repriseValidee
+                ) {
+                  totalNC++;
+                }
+              });
+            });
+          });
+        });
+
+        console.log('📊 NC non validées pour artisan:', totalNC);
+        setNcCount(totalNC);
+      } catch (error) {
+        console.error('Erreur comptage NC:', error);
+      }
+    };
+
+    loadNcCount();
+
+    // Recharger toutes les 30 secondes
+    const interval = setInterval(loadNcCount, 30000);
+
+    return () => clearInterval(interval);
+  }, [monSousTraitantId, controles, taches]);
+
+  // Charger le nombre de SAV
+  useEffect(() => {
+    const loadSavCount = async () => {
+      if (!monSousTraitantId) return;
+
+      try {
+        console.log('🔍 Chargement SAV pour artisan:', monSousTraitantId);
+        
+        const { count, error } = await supabase
+          .from('sav')
+          .select('*', { count: 'exact', head: true })
+          .eq('soustraitant_id', monSousTraitantId)
+          .eq('constructeur_valide', false);
+
+        if (error) {
+          console.error('❌ Erreur chargement SAV:', error);
+          throw error;
+        }
+
+        console.log('📊 Nombre de SAV non validés:', count);
+        setSavCount(count || 0);
+      } catch (error) {
+        console.error('Erreur chargement SAV:', error);
+      }
+    };
+
+    loadSavCount();
+
+    // Recharger toutes les 30 secondes
+    const interval = setInterval(loadSavCount, 30000);
+
+    return () => clearInterval(interval);
+  }, [monSousTraitantId]);
+
+  // ✅ Menu artisan avec badge SAV et NC
   const navItems = [
     { name: 'Mon calendrier', href: '/artisan', icon: Calendar },
-    { name: 'Mes chantiers', href: '/artisan/chantiers', icon: Building2 },
-    { name: 'SAV', href: '/artisan/sav', icon: Wrench },
+    { name: 'Mes chantiers', href: '/artisan/chantiers', icon: Building2, badge: ncCount },
+    { name: 'SAV', href: '/artisan/sav', icon: Wrench, badge: savCount },
   ];
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
@@ -87,15 +189,27 @@ export function LayoutArtisan() {
                   key={item.name}
                   to={item.href}
                   className={cn(
-                    "flex items-center px-4 py-3 text-sm font-medium rounded-md transition-all",
+                    "flex items-center justify-between px-4 py-3 text-sm font-medium rounded-md transition-all",
                     isActive 
                       ? "bg-orange-500 text-white" 
                       : "text-gray-700 hover:bg-gray-100"
                   )}
                   onClick={() => setSidebarOpen(false)}
                 >
-                  <Icon className={cn("mr-3 h-5 w-5", isActive ? "text-white" : "text-gray-500")} />
-                  {item.name}
+                  <div className="flex items-center">
+                    <Icon className={cn("mr-3 h-5 w-5", isActive ? "text-white" : "text-gray-500")} />
+                    {item.name}
+                  </div>
+                  
+                  {/* ✅ Badge SAV ou NC */}
+                  {item.badge > 0 && (
+                    <Badge 
+                      variant="destructive" 
+                      className="ml-auto h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs"
+                    >
+                      {item.badge}
+                    </Badge>
+                  )}
                 </Link>
               );
             })}

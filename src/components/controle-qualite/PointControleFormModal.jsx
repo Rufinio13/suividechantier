@@ -17,7 +17,7 @@ export function PointControleFormModal({
 }) {
   const [libelle, setLibelle] = useState('');
   const [description, setDescription] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false); // ✅ NOUVEAU : Protection double soumission
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (point) {
@@ -27,13 +27,12 @@ export function PointControleFormModal({
       setLibelle('');
       setDescription('');
     }
-    setIsSubmitting(false); // ✅ Reset à l'ouverture
+    setIsSubmitting(false);
   }, [point, isOpen]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // ✅ Protection contre double soumission
     if (isSubmitting) {
       console.log('⚠️ Formulaire déjà en cours de soumission, ignoré');
       return;
@@ -52,18 +51,14 @@ export function PointControleFormModal({
       description: description.trim(),
     });
     
-    // Fermer le modal après un court délai pour éviter les doubles clics
-    setTimeout(() => {
-      onClose();
-      setIsSubmitting(false);
-    }, 100);
+    // ✅ Le parent fermera le modal après la sauvegarde réussie
+    setIsSubmitting(false);
   };
 
   return (
     <Dialog 
       open={isOpen} 
       onOpenChange={(open) => {
-        // Empêcher la fermeture pendant la soumission
         if (!open && !isSubmitting) {
           onClose();
         }
@@ -108,7 +103,7 @@ export function PointControleFormModal({
             </DialogClose>
             <Button type="submit" disabled={isSubmitting}>
               <Save className="mr-2 h-4 w-4" /> 
-              {isSubmitting ? 'Ajout en cours...' : (point ? 'Sauvegarder' : 'Ajouter')}
+              {isSubmitting ? 'Sauvegarde...' : (point ? 'Sauvegarder' : 'Ajouter')}
             </Button>
           </DialogFooter>
         </form>

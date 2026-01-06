@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { AlertTriangle, CheckCircle, Camera } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { AlertTriangle, CheckCircle, Camera, Calendar } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabaseClient';
@@ -15,9 +16,11 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
   const { modelesCQ, controles, saveControleFromModele } = useReferentielCQ();
   const { toast } = useToast();
   
+  const [dateIntervention, setDateIntervention] = useState({});
   const [commentaireReprise, setCommentaireReprise] = useState({});
   const [photosReprise, setPhotosReprise] = useState({});
   const [uploading, setUploading] = useState({});
+  const [saving, setSaving] = useState({});
 
   // Récupérer uniquement les NC assignées à cet artisan
   const mesNC = useMemo(() => {
@@ -70,6 +73,19 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
     });
   }, [controles, modelesCQ, chantierId, soustraitantId]);
 
+  // Fonction pour télécharger une image
+  const handleDownloadImage = (imageUrl, fileName = 'photo.jpg') => {
+    // Si l'image est déjà visible, créer un lien de téléchargement direct
+    const a = document.createElement('a');
+    a.href = imageUrl;
+    a.download = fileName;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const formatDateOnly = (dateString) => {
     if (!dateString) return 'N/A';
     try { 
@@ -89,6 +105,61 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
   };
 
   const getNCKey = (nc) => `${nc.modeleId}-${nc.categorieId}-${nc.sousCategorieId}-${nc.pointControleId}`;
+
+  // ✅ Planifier l'intervention
+  const handlePlanifier = async (nc) => {
+    const ncKey = getNCKey(nc);
+    const date = dateIntervention[ncKey];
+
+    if (!date) {
+      toast({
+        title: 'Date requise',
+        description: 'Veuillez sélectionner une date d\'intervention',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSaving(prev => ({ ...prev, [ncKey]: true }));
+
+    try {
+      const controle = controles.find(c => c.id === nc.controleId);
+      if (!controle) throw new Error('Contrôle non trouvé');
+
+      const updatedResultats = { ...controle.resultats };
+      
+      if (updatedResultats[nc.categorieId]?.[nc.sousCategorieId]?.[nc.pointControleId]) {
+        updatedResultats[nc.categorieId][nc.sousCategorieId][nc.pointControleId] = {
+          ...updatedResultats[nc.categorieId][nc.sousCategorieId][nc.pointControleId],
+          date_intervention_artisan: date,
+        };
+      }
+
+      await saveControleFromModele(
+        chantierId, 
+        nc.modeleId, 
+        updatedResultats, 
+        controle.points_specifiques || {}
+      );
+
+      toast({
+        title: 'Intervention planifiée',
+        description: `Date : ${formatDateOnly(date)}`,
+      });
+
+      setDateIntervention(prev => ({ ...prev, [ncKey]: '' }));
+
+    } catch (error) {
+      console.error('Erreur planification:', error);
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de planifier l\'intervention',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(prev => ({ ...prev, [ncKey]: false }));
+    }
+  };
 
   const handlePhotoUpload = async (ncKey, files) => {
     if (!files || files.length === 0) return;
@@ -140,6 +211,8 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
   const handleMarquerReprise = async (nc) => {
     const ncKey = getNCKey(nc);
     
+    setSaving(prev => ({ ...prev, [ncKey]: true }));
+
     try {
       const controle = controles.find(c => c.id === nc.controleId);
       if (!controle) {
@@ -182,6 +255,8 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
         description: 'Impossible de marquer la reprise',
         variant: 'destructive',
       });
+    } finally {
+      setSaving(prev => ({ ...prev, [ncKey]: false }));
     }
   };
 
@@ -190,6 +265,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
       {mesNC.length > 0 ? (
         mesNC.map((pnc, idx) => {
           const ncKey = getNCKey(pnc);
+          const estPlanifie = !!pnc.date_intervention_artisan;
 
           return (
             <Card 
@@ -197,16 +273,28 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
               className={`${
                 pnc.artisan_repris 
                   ? 'bg-yellow-50 border-yellow-300' 
+                  : estPlanifie
+                  ? 'bg-blue-50 border-blue-200'
                   : 'bg-orange-50 border-orange-200'
               }`}
             >
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg flex items-center justify-between">
                   <span>{pnc.libelle}</span>
-                  {pnc.artisan_repris && (
+                  {pnc.artisan_repris ? (
                     <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded-full font-normal">
                       <CheckCircle className="inline h-3 w-3 mr-1" />
                       En attente validation
+                    </span>
+                  ) : estPlanifie ? (
+                    <span className="text-xs bg-blue-500 text-white px-2 py-1 rounded-full font-normal">
+                      <Calendar className="inline h-3 w-3 mr-1" />
+                      Planifiée
+                    </span>
+                  ) : (
+                    <span className="text-xs bg-orange-500 text-white px-2 py-1 rounded-full font-normal">
+                      <AlertTriangle className="inline h-3 w-3 mr-1" />
+                      À planifier
                     </span>
                   )}
                 </CardTitle>
@@ -229,9 +317,19 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
 
                   {pnc.dateReprisePrevisionnelle && (
                     <div>
-                      <span className="text-xs font-medium text-slate-600">Date reprise prévisionnelle :</span>
+                      <span className="text-xs font-medium text-slate-600">Date reprise prévisionnelle (constructeur) :</span>
                       <span className="text-sm text-orange-700 font-medium ml-2">
                         {formatDateOnly(pnc.dateReprisePrevisionnelle)}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* ✅ Date intervention artisan */}
+                  {pnc.date_intervention_artisan && (
+                    <div>
+                      <span className="text-xs font-medium text-slate-600">Date intervention prévue :</span>
+                      <span className="text-sm text-blue-700 font-medium ml-2">
+                        {formatDateOnly(pnc.date_intervention_artisan)}
                       </span>
                     </div>
                   )}
@@ -241,15 +339,20 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                     <div>
                       <span className="text-xs font-medium text-slate-600">Photos NC :</span>
                       <div className="mt-2 grid grid-cols-4 gap-2">
-                        {pnc.photos.map((photo, i) => (
-                          <img 
-                            key={i} 
-                            src={photo} 
-                            alt={`Photo NC ${i+1}`}
-                            className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
-                            onClick={() => window.open(photo, '_blank')}
-                          />
-                        ))}
+                        {pnc.photos.map((photo, i) => {
+                          // ✅ Gérer photo = string OU photo = {url: "..."}
+                          const photoUrl = typeof photo === 'string' ? photo : photo?.url || photo;
+                          return (
+                            <img 
+                              key={i} 
+                              src={photoUrl} 
+                              alt={`Photo NC ${i+1}`}
+                              className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
+                              onClick={() => handleDownloadImage(photoUrl, `photo_nc_${i+1}.jpg`)}
+                              title="Cliquer pour télécharger"
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -259,19 +362,61 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                     <div>
                       <span className="text-xs font-medium text-slate-600">Plans annotés :</span>
                       <div className="mt-2 grid grid-cols-4 gap-2">
-                        {pnc.plans.map((plan, i) => (
-                          <img 
-                            key={i} 
-                            src={plan} 
-                            alt={`Plan ${i+1}`}
-                            className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
-                            onClick={() => window.open(plan, '_blank')}
-                          />
-                        ))}
+                        {pnc.plans.map((plan, i) => {
+                          // ✅ Gérer plan = string OU plan = {url: "..."}
+                          const planUrl = typeof plan === 'string' ? plan : plan?.url || plan;
+                          return (
+                            <img 
+                              key={i} 
+                              src={planUrl} 
+                              alt={`Plan ${i+1}`}
+                              className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
+                              onClick={() => handleDownloadImage(planUrl, `plan_nc_${i+1}.jpg`)}
+                              title="Cliquer pour télécharger"
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   )}
                 </div>
+
+                {/* ✅ PLANIFIER L'INTERVENTION */}
+                {!pnc.date_intervention_artisan && !pnc.artisan_repris && (
+                  <div className="p-3 bg-white rounded-md border">
+                    <div className="font-medium text-sm text-slate-900 mb-3 flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-blue-600" />
+                      Planifier l'intervention
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <Label htmlFor={`date-${ncKey}`} className="text-xs">
+                          Date d'intervention prévue *
+                        </Label>
+                        <Input
+                          id={`date-${ncKey}`}
+                          type="date"
+                          value={dateIntervention[ncKey] || ''}
+                          onChange={(e) => setDateIntervention(prev => ({
+                            ...prev,
+                            [ncKey]: e.target.value
+                          }))}
+                          className="mt-2"
+                        />
+                      </div>
+
+                      <Button 
+                        onClick={() => handlePlanifier(pnc)}
+                        className="w-full bg-blue-600 hover:bg-blue-700"
+                        disabled={!dateIntervention[ncKey] || saving[ncKey]}
+                      >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {saving[ncKey] ? 'Enregistrement...' : 'Enregistrer'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 {/* ✅ REPRISE MARQUÉE */}
                 {pnc.artisan_repris && (
@@ -305,7 +450,8 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                               src={photo.url || photo} 
                               alt={`Reprise ${i+1}`}
                               className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
-                              onClick={() => window.open(photo.url || photo, '_blank')}
+                              onClick={() => handleDownloadImage(photo.url || photo, `reprise_${i+1}.jpg`)}
+                              title="Cliquer pour télécharger"
                             />
                           ))}
                         </div>
@@ -314,22 +460,22 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                   </div>
                 )}
 
-                {/* ✅ MARQUER REPRISE - TOUJOURS VISIBLE */}
-                {!pnc.artisan_repris && (
+                {/* ✅ TERMINER L'INTERVENTION */}
+                {pnc.date_intervention_artisan && !pnc.artisan_repris && (
                   <div className="p-3 bg-white rounded-md border">
                     <div className="font-medium text-sm text-slate-900 mb-3 flex items-center gap-2">
                       <CheckCircle className="h-4 w-4 text-green-600" />
-                      Marquer la reprise
+                      Terminer l'intervention
                     </div>
 
                     <div className="space-y-4">
                       <div>
                         <Label htmlFor={`commentaire-${ncKey}`} className="text-xs">
-                          Commentaire (optionnel)
+                          Commentaire (obligatoire)
                         </Label>
                         <Textarea 
                           id={`commentaire-${ncKey}`}
-                          placeholder="Décrivez la reprise effectuée..."
+                          placeholder="Décrivez l'intervention effectuée..."
                           rows={3}
                           value={commentaireReprise[ncKey] || ''}
                           onChange={(e) => setCommentaireReprise(prev => ({
@@ -370,10 +516,10 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                       <Button 
                         onClick={() => handleMarquerReprise(pnc)}
                         className="w-full bg-green-600 hover:bg-green-700"
-                        disabled={uploading[ncKey]}
+                        disabled={!commentaireReprise[ncKey] || uploading[ncKey] || saving[ncKey]}
                       >
                         <CheckCircle className="mr-2 h-4 w-4" />
-                        Marquer comme reprise
+                        {saving[ncKey] ? 'Enregistrement...' : 'Marquer comme terminée'}
                       </Button>
                     </div>
                   </div>

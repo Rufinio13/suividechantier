@@ -229,23 +229,84 @@ export function ControlQualite({ isEmbedded = false, embeddedChantierId = null }
   }, [chantierId, addPointControleChantierSpecific, toast]);
 
   const handleUpdatePointControle = useCallback(async (modeleId, categorieId, sousCategorieId, pointId, updates) => {
-    setPointsSpecifiquesChantier(prev => {
-      const next = { ...(prev[modeleId] || {}) };
-      const scKey = sousCategorieId || '_global';
-      if (next[categorieId]?.[scKey]?.[pointId]) {
-        next[categorieId][scKey][pointId] = { ...next[categorieId][scKey][pointId], ...updates };
+    console.log('🔄 Mise à jour point:', { modeleId, categorieId, sousCategorieId, pointId, updates });
+    
+    // Vérifier si le point existe déjà dans les points spécifiques
+    const scKey = sousCategorieId || '_global';
+    const isSpecific = pointsSpecifiquesChantier[modeleId]?.[categorieId]?.[scKey]?.[pointId];
+    
+    if (!isSpecific) {
+      console.log('📝 Point du modèle de base → Création copie dans points spécifiques');
+      
+      // Trouver le point original dans le modèle
+      const modele = modelesCQ.find(m => m.id === modeleId);
+      const categorie = modele?.categories?.find(c => c.id === categorieId);
+      const sousCategorie = categorie?.sousCategories?.find(sc => sc.id === sousCategorieId);
+      const pointOriginal = sousCategorie?.pointsControle?.find(p => p.id === pointId);
+      
+      if (!pointOriginal) {
+        console.error('❌ Point original non trouvé');
+        toast({ title: "Erreur", description: "Point non trouvé.", variant: "destructive" });
+        return;
       }
-      return { ...prev, [modeleId]: next };
-    });
+      
+      // Créer une copie avec les modifications
+      const newPoint = { 
+        ...pointOriginal, 
+        ...updates,
+        isChantierSpecific: true 
+      };
+      
+      // Ajouter aux points spécifiques
+      setPointsSpecifiquesChantier(prev => {
+        const next = { ...(prev[modeleId] || {}) };
+        if (!next[categorieId]) next[categorieId] = {};
+        if (!next[categorieId][scKey]) next[categorieId][scKey] = {};
+        next[categorieId][scKey][pointId] = newPoint;
+        return { ...prev, [modeleId]: next };
+      });
+      
+      // Sauvegarder en BDD
+      try {
+        await addPointControleChantierSpecific(chantierId, modeleId, categorieId, sousCategorieId, newPoint);
+        console.log('✅ Point copié et sauvegardé');
+        toast({ title: "Point mis à jour", description: `Point "${newPoint.libelle}" mis à jour pour ce chantier.` });
+      } catch (err) {
+        console.error("❌ Erreur addPointControleChantierSpecific:", err);
+        toast({ title: "Erreur", description: "Impossible de mettre à jour le point.", variant: "destructive" });
+        
+        // Rollback en cas d'erreur
+        setPointsSpecifiquesChantier(prev => {
+          const next = { ...(prev[modeleId] || {}) };
+          if (next[categorieId]?.[scKey]?.[pointId]) {
+            delete next[categorieId][scKey][pointId];
+          }
+          return { ...prev, [modeleId]: next };
+        });
+      }
+      
+    } else {
+      console.log('📝 Point spécifique → Mise à jour directe');
+      
+      // Point déjà spécifique, mise à jour normale
+      setPointsSpecifiquesChantier(prev => {
+        const next = { ...(prev[modeleId] || {}) };
+        if (next[categorieId]?.[scKey]?.[pointId]) {
+          next[categorieId][scKey][pointId] = { ...next[categorieId][scKey][pointId], ...updates };
+        }
+        return { ...prev, [modeleId]: next };
+      });
 
-    try {
-      await updatePointControleChantierSpecific(chantierId, modeleId, categorieId, sousCategorieId, pointId, updates);
-      toast({ title: "Point mis à jour", description: `Point mis à jour et sauvegardé.` });
-    } catch (err) {
-      console.error("Erreur updatePointControleChantierSpecific:", err);
-      toast({ title: "Erreur", description: "Impossible de mettre à jour le point.", variant: "destructive" });
+      try {
+        await updatePointControleChantierSpecific(chantierId, modeleId, categorieId, sousCategorieId, pointId, updates);
+        console.log('✅ Point mis à jour');
+        toast({ title: "Point mis à jour", description: `Point mis à jour et sauvegardé.` });
+      } catch (err) {
+        console.error("Erreur updatePointControleChantierSpecific:", err);
+        toast({ title: "Erreur", description: "Impossible de mettre à jour le point.", variant: "destructive" });
+      }
     }
-  }, [chantierId, updatePointControleChantierSpecific, toast]);
+  }, [chantierId, modelesCQ, pointsSpecifiquesChantier, addPointControleChantierSpecific, updatePointControleChantierSpecific, toast]);
 
   const handleDeletePointControle = useCallback(async (modeleId, categorieId, sousCategorieId, pointId) => {
     setPointsSpecifiquesChantier(prev => {

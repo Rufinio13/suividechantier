@@ -83,6 +83,15 @@ export function PointControleResultatItem({
     }
   };
 
+  const formatDateOnly = (dateString) => {
+    if (!dateString) return 'N/A';
+    try { 
+      return format(parseISO(dateString), 'dd MMM yyyy', { locale: fr }); 
+    } catch (error) { 
+      return 'Date invalide'; 
+    }
+  };
+
   const handleResultatButtonClick = (value) => {
     onResultatChange(
       point.id, 
@@ -231,10 +240,10 @@ export function PointControleResultatItem({
               </div>
             )}
 
-            {/* Explication NC */}
+            {/* 1. Explication NC */}
             <div>
               <Label htmlFor={`explicationNC-${point.id}`} className="text-xs font-medium text-slate-700">
-                Explication NC (historique)
+                Explication NC
               </Label>
               <Textarea 
                 id={`explicationNC-${point.id}`}
@@ -247,7 +256,45 @@ export function PointControleResultatItem({
               />
             </div>
 
-            {/* Sélecteur Sous-traitant */}
+            {/* 2. Photos NC */}
+            <div>
+              <Label className="text-xs font-medium text-slate-700">Photos NC</Label>
+              <ImageUploadCQ
+                images={currentData.photos || []}
+                onImagesChange={(newPhotos) => handleChange('photos', newPhotos)}
+                chantierId={chantierId}
+                disabled={currentData.resultat === 'C'}
+              />
+            </div>
+
+            {/* 3. Plans annotés */}
+            <div>
+              <Label className="text-xs font-medium text-slate-700">Plans annotés</Label>
+              <ImageUploadCQ
+                images={currentData.plans || []}
+                onImagesChange={(newPlans) => handleChange('plans', newPlans)}
+                chantierId={chantierId}
+                label="plan"
+                disabled={currentData.resultat === 'C'}
+              />
+            </div>
+
+            {/* 4. Date Reprise au plus tard */}
+            <div>
+              <Label htmlFor={`dateReprisePrevisionnelle-${point.id}`} className="text-xs font-medium text-slate-700 flex items-center">
+                <CalendarPlus size={12} className="mr-1.5 text-slate-500" /> Date Reprise au plus tard
+              </Label>
+              <Input 
+                id={`dateReprisePrevisionnelle-${point.id}`}
+                type="date"
+                value={currentData.dateReprisePrevisionnelle || ''}
+                onChange={(e) => handleChange('dateReprisePrevisionnelle', e.target.value)}
+                className="mt-1 text-sm"
+                disabled={currentData.resultat === 'C'}
+              />
+            </div>
+
+            {/* 5. Sous-traitant concerné */}
             <div>
               <Label htmlFor={`soustraitant-${point.id}`} className="text-xs font-medium text-slate-700">
                 Sous-traitant concerné
@@ -270,61 +317,17 @@ export function PointControleResultatItem({
                 </SelectContent>
               </Select>
             </div>
-            
-            {/* Upload Photos */}
-            <div>
-              <Label className="text-xs font-medium text-slate-700">Photos NC (historique)</Label>
-              {currentData.photos && currentData.photos.length > 0 && (
-                <div className="mt-2 flex gap-2 flex-wrap">
-                  {currentData.photos.map((photo, i) => (
-                    <img 
-                      key={i} 
-                      src={photo} 
-                      alt={`Photo NC ${i+1}`}
-                      className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
-                      onClick={() => window.open(photo, '_blank')}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
 
-            {/* Upload Plans annotés */}
-            <div>
-              <Label className="text-xs font-medium text-slate-700">Plans annotés (historique)</Label>
-              {currentData.plans && currentData.plans.length > 0 && (
-                <div className="mt-2 flex gap-2 flex-wrap">
-                  {currentData.plans.map((plan, i) => (
-                    <img 
-                      key={i} 
-                      src={plan} 
-                      alt={`Plan ${i+1}`}
-                      className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
-                      onClick={() => window.open(plan, '_blank')}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Date reprise prévisionnelle */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor={`dateReprisePrevisionnelle-${point.id}`} className="text-xs font-medium text-slate-700 flex items-center">
-                  <CalendarPlus size={12} className="mr-1.5 text-slate-500" /> Date Reprise Prév.
-                </Label>
-                <Input 
-                  id={`dateReprisePrevisionnelle-${point.id}`}
-                  type="date"
-                  value={currentData.dateReprisePrevisionnelle || ''}
-                  onChange={(e) => handleChange('dateReprisePrevisionnelle', e.target.value)}
-                  className="mt-1 text-sm"
-                  disabled={currentData.resultat === 'C'}
-                />
+            {/* 6. Intervention prévue le */}
+            {currentData.date_intervention_artisan && (
+              <div className="p-2 bg-blue-50 border border-blue-200 rounded-md">
+                <p className="text-xs text-blue-700">
+                  📅 <strong>Intervention prévue le :</strong> {formatDateOnly(currentData.date_intervention_artisan)}
+                </p>
               </div>
-            </div>
+            )}
             
-            {/* Checkbox Reprise validée */}
+            {/* 7. Checkbox Reprise validée */}
             {currentData.resultat === 'NC' && (
               <div className="flex items-center space-x-2 mt-2">
                 <input
@@ -374,7 +377,16 @@ export function PointControleResultatItem({
             domaineId={domaineId}
             sousCategorieId={sousCategorieId}
             onSave={(data) => {
+                console.log('📝 Sauvegarde modifications point:', {
+                  modeleId,
+                  domaineId,
+                  sousCategorieId,
+                  pointId: point.id,
+                  data
+                });
                 onUpdatePointControle(modeleId, domaineId, sousCategorieId, point.id, data);
+                console.log('✅ onUpdatePointControle appelé');
+                setIsPointFormModalOpen(false);
             }}
         />
       )}

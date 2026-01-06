@@ -284,16 +284,6 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
                           Explication: {pnc.explicationNC}
                         </p>
                       )}
-                      {/* Affichage sous-traitant */}
-                      {pnc.soustraitant_id && (
-                        <p className="text-xs text-orange-700 mt-1 font-medium">
-                          👷 Artisan concerné: {
-                            sousTraitants.find(st => st.id === pnc.soustraitant_id)?.nomsocieteST || 
-                            `${sousTraitants.find(st => st.id === pnc.soustraitant_id)?.PrenomST} ${sousTraitants.find(st => st.id === pnc.soustraitant_id)?.nomST}` ||
-                            'Inconnu'
-                          }
-                        </p>
-                      )}
                       {/* Statut artisan repris */}
                       {pnc.artisan_repris && (
                         <p className="text-xs text-yellow-700 mt-1 font-medium bg-yellow-100 px-2 py-1 rounded inline-block">
@@ -344,23 +334,45 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
                     </div>
                   )}
 
-                  <div className="mt-2 pt-2 border-t border-red-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="font-medium text-slate-600">Reprise Prév.: </span> 
-                      {pnc.dateReprisePrevisionnelle ? (
-                        formatDateOnly(pnc.dateReprisePrevisionnelle)
-                      ) : (
-                        <span className="italic text-slate-400">Non déf.</span>
-                      )}
+                  <div className="mt-2 pt-2 border-t border-red-100 space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="font-medium text-slate-600">Reprise au plus tard: </span> 
+                        {pnc.dateReprisePrevisionnelle ? (
+                          formatDateOnly(pnc.dateReprisePrevisionnelle)
+                        ) : (
+                          <span className="italic text-slate-400">Non déf.</span>
+                        )}
+                      </div>
+                      <div>
+                        <span className="font-medium text-slate-600">Statut: </span> 
+                        {pnc.artisan_repris ? (
+                          <span className="text-yellow-600 font-semibold">En attente validation</span>
+                        ) : (
+                          <span className="text-red-600 font-semibold">À reprendre</span>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <span className="font-medium text-slate-600">Statut: </span> 
-                      {pnc.artisan_repris ? (
-                        <span className="text-yellow-600 font-semibold">En attente validation</span>
-                      ) : (
-                        <span className="text-red-600 font-semibold">À reprendre</span>
-                      )}
-                    </div>
+                    
+                    {/* Artisan concerné */}
+                    {pnc.soustraitant_id && (
+                      <div className="text-xs">
+                        <span className="font-medium text-slate-600">Artisan concerné: </span>
+                        <span className="text-orange-700 font-medium">
+                          {sousTraitants.find(st => st.id === pnc.soustraitant_id)?.nomsocieteST || 
+                          `${sousTraitants.find(st => st.id === pnc.soustraitant_id)?.PrenomST} ${sousTraitants.find(st => st.id === pnc.soustraitant_id)?.nomST}` ||
+                          'Inconnu'}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Date intervention artisan */}
+                    {pnc.date_intervention_artisan && (
+                      <div className="text-xs">
+                        <span className="font-medium text-slate-600">Intervention prévue le: </span>
+                        <span className="text-blue-700 font-medium">{formatDateOnly(pnc.date_intervention_artisan)}</span>
+                      </div>
+                    )}
                   </div>
                 </li>
               ))}
