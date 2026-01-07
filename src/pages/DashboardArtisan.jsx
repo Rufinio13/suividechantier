@@ -17,7 +17,7 @@ export function DashboardArtisan() {
   const [selectedTache, setSelectedTache] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // 1️⃣ Trouver l'ID du sous-traitant correspondant à l'artisan connecté
+  // 1️⃣ Trouver l'ID du sous-traitant
   const monSousTraitantId = useMemo(() => {
     if (!profile?.id || !sousTraitants?.length) return null;
     
@@ -39,7 +39,7 @@ export function DashboardArtisan() {
     return filtered;
   }, [taches, monSousTraitantId]);
 
-  // 3️⃣ Mes chantiers (chantiers où j'ai au moins une tâche)
+  // 3️⃣ Mes chantiers
   const mesChantiers = useMemo(() => {
     if (!mesTaches.length) return [];
     
@@ -50,7 +50,16 @@ export function DashboardArtisan() {
     return filtered;
   }, [mesTaches, chantiers]);
 
-  // 5️⃣ Générer une couleur par chantier pour le calendrier
+  // 4️⃣ Map chantier ID → nom pour l'affichage
+  const chantierNoms = useMemo(() => {
+    const map = {};
+    mesChantiers.forEach(chantier => {
+      map[chantier.id] = chantier.nomchantier;
+    });
+    return map;
+  }, [mesChantiers]);
+
+  // 5️⃣ Générer une couleur par chantier
   const chantierColors = useMemo(() => {
     const colors = [
       '#3b82f6', // blue
@@ -120,27 +129,7 @@ export function DashboardArtisan() {
         </p>
       </div>
 
-      {/* Légende couleurs */}
-      {mesChantiers.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Légende des chantiers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-3">
-              {mesChantiers.map(chantier => (
-                <div key={chantier.id} className="flex items-center gap-2">
-                  <div 
-                    className="w-4 h-4 rounded"
-                    style={{ backgroundColor: chantierColors[chantier.id] }}
-                  />
-                  <span className="text-sm">{chantier.nomchantier}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* ❌ LÉGENDE SUPPRIMÉE */}
 
       {/* Calendrier */}
       <motion.div
@@ -164,7 +153,9 @@ export function DashboardArtisan() {
                 onEditTache={handleTacheClick}
                 onAddTache={() => {}}
                 chantierColors={chantierColors}
+                chantierNoms={chantierNoms} // ✅ Passer les noms des chantiers
                 readOnly={true}
+                isArtisanView={true} // ✅ Mode artisan pour badges
               />
             ) : (
               <div className="text-center py-12 text-muted-foreground">

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
@@ -6,23 +6,25 @@ import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
 import { useReferentielCQ } from '@/context/ReferentielCQContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Building2, MapPin, AlertTriangle } from 'lucide-react';
+import { Building2, MapPin, AlertTriangle, FileSignature, FileText } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/lib/supabaseClient';
 
 export function MesChantiersArtisan() {
   const { profile } = useAuth();
   const { chantiers, taches, loading } = useChantier();
   const { sousTraitants } = useSousTraitant();
   const { modelesCQ, controles } = useReferentielCQ();
+  const [documentsData, setDocumentsData] = useState({});
 
-  // Trouver l'ID du sous-traitant correspondant à l'artisan connecté
+  // Trouver l'ID du sous-traitant
   const monSousTraitantId = useMemo(() => {
     if (!profile?.id || !sousTraitants?.length) return null;
     const myST = sousTraitants.find(st => st.user_id === profile.id);
     return myST?.id || null;
   }, [profile, sousTraitants]);
 
-  // Mes chantiers (où j'ai au moins une tâche)
+  // Mes chantiers
   const mesChantiers = useMemo(() => {
     if (!monSousTraitantId) return [];
     
@@ -35,6 +37,54 @@ export function MesChantiersArtisan() {
     return chantiers.filter(c => chantierIds.includes(c.id));
   }, [taches, chantiers, monSousTraitantId]);
 
+  // Charger les documents pour tous les chantiers
+  useEffect(() => {
+    const loadDocuments = async () => {
+      if (!monSousTraitantId || mesChantiers.length === 0) return;
+
+      try {
+        const chantierIds = mesChantiers.map(c => c.id);
+        
+        const { data, error } = await supabase
+          .from('documents_chantier')
+          .select('chantier_id, necessite_signature, signature_statut, artisan_assigne_signature, artisans_vus')
+          .in('chantier_id', chantierIds);
+
+        if (error) throw error;
+
+        // Grouper par chantier
+        const grouped = {};
+        data.forEach(doc => {
+          if (!grouped[doc.chantier_id]) {
+            grouped[doc.chantier_id] = { aSignerCount: 0, nouveauxCount: 0 };
+          }
+
+          // À signer
+          if (
+            doc.necessite_signature &&
+            doc.artisan_assigne_signature === monSousTraitantId &&
+            doc.signature_statut === 'en_attente'
+          ) {
+            grouped[doc.chantier_id].aSignerCount++;
+          }
+          // Nouveaux (pas à signer et pas vus)
+          else if (
+            !doc.necessite_signature &&
+            (!doc.artisans_vus || !doc.artisans_vus.includes(monSousTraitantId))
+          ) {
+            grouped[doc.chantier_id].nouveauxCount++;
+          }
+        });
+
+        setDocumentsData(grouped);
+      } catch (error) {
+        console.error('Erreur chargement documents:', error);
+      }
+    };
+
+    loadDocuments();
+  }, [monSousTraitantId, mesChantiers]);
+
   // Compter les tâches par chantier
   const countTaches = (chantierId) => {
     return taches.filter(t => 
@@ -44,7 +94,7 @@ export function MesChantiersArtisan() {
     ).length;
   };
 
-  // ✅ NOUVEAU : Compter les NC assignées non validées par chantier
+  // Compter les NC par chantier
   const countNC = (chantierId) => {
     if (!monSousTraitantId) return 0;
     
@@ -52,16 +102,15 @@ export function MesChantiersArtisan() {
     const controlesChantier = controles.filter(c => c.chantier_id === chantierId);
 
     controlesChantier.forEach(ctrl => {
-      const modele = modelesCQ.find(m => m.id === ctrl.modele_cq_id);
-      if (!modele || !ctrl.resultats) return;
+      if (!ctrl.resultats) return;
 
-      Object.entries(ctrl.resultats).forEach(([categorieId, resultatsCategorie]) => {
-        Object.entries(resultatsCategorie).forEach(([sousCategorieId, resultatsSousCategorie]) => {
-          Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
+      Object.values(ctrl.resultats).forEach(categorie => {
+        Object.values(categorie).forEach(sousCategorie => {
+          Object.values(sousCategorie).forEach(point => {
             if (
-              resultatPoint.resultat === 'NC' && 
-              resultatPoint.soustraitant_id === monSousTraitantId &&
-              !resultatPoint.repriseValidee
+              point.resultat === 'NC' && 
+              point.soustraitant_id === monSousTraitantId &&
+              !point.repriseValidee
             ) {
               count++;
             }
@@ -115,6 +164,8 @@ export function MesChantiersArtisan() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {mesChantiers.map((chantier, index) => {
             const nbNC = countNC(chantier.id);
+            const docsData = documentsData[chantier.id] || { aSignerCount: 0, nouveauxCount: 0 };
+            const hasAlerts = nbNC > 0 || docsData.aSignerCount > 0 || docsData.nouveauxCount > 0;
             
             return (
               <motion.div
@@ -130,16 +181,7 @@ export function MesChantiersArtisan() {
                     <CardHeader>
                       <CardTitle className="flex items-start justify-between">
                         <span className="line-clamp-2">{chantier.nomchantier}</span>
-                        <div className="flex flex-col items-end gap-1 ml-2">
-                          <Building2 className="h-5 w-5 text-orange-500 flex-shrink-0" />
-                          {/* ✅ Badge NC */}
-                          {nbNC > 0 && (
-                            <Badge variant="destructive" className="flex items-center gap-1">
-                              <AlertTriangle className="h-3 w-3" />
-                              {nbNC} NC
-                            </Badge>
-                          )}
-                        </div>
+                        <Building2 className="h-5 w-5 text-orange-500 flex-shrink-0 ml-2" />
                       </CardTitle>
                       <CardDescription className="space-y-1">
                         <span className="flex items-center gap-2 text-sm">
@@ -151,25 +193,61 @@ export function MesChantiersArtisan() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Client</span>
-                          <span className="font-medium">
-                            {chantier.client_prenom} {chantier.client_nom}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Mes tâches</span>
-                          <span className="font-semibold text-orange-600">
-                            {countTaches(chantier.id)}
-                          </span>
-                        </div>
-                        {nbNC > 0 && (
-                          <div className="flex items-center justify-between pt-2 border-t border-red-100">
-                            <span className="text-red-700 font-medium text-xs">⚠️ Non-conformités</span>
-                            <span className="font-semibold text-red-600">
-                              {nbNC}
+                      <div className="space-y-3">
+                        {/* Infos générales */}
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Client</span>
+                            <span className="font-medium">
+                              {chantier.client_prenom} {chantier.client_nom}
                             </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Mes tâches</span>
+                            <span className="font-semibold text-orange-600">
+                              {countTaches(chantier.id)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* ✅ Badges d'alertes */}
+                        {hasAlerts && (
+                          <div className="pt-3 border-t space-y-2">
+                            {/* NC */}
+                            {nbNC > 0 && (
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="destructive" className="h-6 w-6 rounded-full p-0 flex items-center justify-center">
+                                    {nbNC}
+                                  </Badge>
+                                  <span className="text-xs font-medium text-red-700">Non-conformités</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Documents à signer */}
+                            {docsData.aSignerCount > 0 && (
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Badge className="h-6 w-6 rounded-full p-0 flex items-center justify-center bg-orange-500 hover:bg-orange-600">
+                                    {docsData.aSignerCount}
+                                  </Badge>
+                                  <span className="text-xs font-medium text-orange-700">Documents à signer</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Nouveaux documents */}
+                            {docsData.nouveauxCount > 0 && (
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Badge className="h-6 w-6 rounded-full p-0 flex items-center justify-center bg-blue-500 hover:bg-blue-600">
+                                    {docsData.nouveauxCount}
+                                  </Badge>
+                                  <span className="text-xs font-medium text-blue-700">Nouveaux documents</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

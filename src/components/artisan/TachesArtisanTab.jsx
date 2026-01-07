@@ -68,7 +68,7 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
       for (const file of files) {
         const fileExt = file.name.split('.').pop();
         const fileName = `${tacheId}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const filePath = `taches/${fileName}`; // ✅ Même chemin que modal
+        const filePath = `taches/${fileName}`;
 
         const { data, error } = await supabase.storage
           .from('photos-taches')
@@ -176,31 +176,46 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
         const lot = lots.find(l => l.id === tache.lotid);
         const isDejaTermine = tache.artisan_termine || tache.constructeur_valide;
 
+        // ✅ LOGIQUE CODE COULEUR
+        const maintenant = new Date();
+        const dateFinPassee = tache.datefin && new Date(tache.datefin) < maintenant;
+        
+        let cardClass = 'bg-white border-slate-200'; // 4. Par défaut (aucune couleur)
+        let badgeColor = null;
+        let badgeText = '';
+        let badgeIcon = null;
+        
+        if (tache.constructeur_valide) {
+          // 3. Validée par constructeur → BLEU
+          cardClass = 'bg-blue-50 border-blue-300';
+          badgeColor = 'bg-blue-500';
+          badgeText = 'Validée';
+          badgeIcon = <CheckCircle className="inline h-3 w-3 mr-1" />;
+        } else if (tache.artisan_termine) {
+          // 2. Terminée par artisan → JAUNE
+          cardClass = 'bg-yellow-50 border-yellow-300';
+          badgeColor = 'bg-yellow-500';
+          badgeText = 'En attente validation';
+          badgeIcon = <CheckCircle className="inline h-3 w-3 mr-1" />;
+        } else if (dateFinPassee) {
+          // 1. En retard → ROUGE
+          cardClass = 'bg-red-50 border-red-300';
+        }
+
         return (
           <Card 
             key={tacheId} 
-            className={`${
-              tache.constructeur_valide
-                ? 'bg-green-50 border-green-300'
-                : tache.artisan_termine 
-                  ? 'bg-yellow-50 border-yellow-300' 
-                  : 'bg-blue-50 border-blue-200'
-            }`}
+            className={cardClass}
           >
             <CardHeader className="pb-3">
               <CardTitle className="text-lg flex items-center justify-between">
                 <span>{tache.nom}</span>
-                {tache.constructeur_valide ? (
-                  <span className="text-xs bg-green-500 text-white px-2 py-1 rounded-full font-normal">
-                    <CheckCircle className="inline h-3 w-3 mr-1" />
-                    Validée
+                {badgeColor && (
+                  <span className={`text-xs ${badgeColor} text-white px-2 py-1 rounded-full font-normal`}>
+                    {badgeIcon}
+                    {badgeText}
                   </span>
-                ) : tache.artisan_termine ? (
-                  <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded-full font-normal">
-                    <CheckCircle className="inline h-3 w-3 mr-1" />
-                    En attente validation
-                  </span>
-                ) : null}
+                )}
               </CardTitle>
               {lot && (
                 <CardDescription className="text-xs">
@@ -239,12 +254,12 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
               {isDejaTermine && (
                 <div className={`p-3 rounded-md ${
                   tache.constructeur_valide 
-                    ? 'bg-green-100 border border-green-300' 
+                    ? 'bg-blue-100 border border-blue-300' 
                     : 'bg-yellow-100 border border-yellow-300'
                 }`}>
                   <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className={`h-4 w-4 ${tache.constructeur_valide ? 'text-green-700' : 'text-yellow-700'}`} />
-                    <span className={`text-sm font-semibold ${tache.constructeur_valide ? 'text-green-800' : 'text-yellow-800'}`}>
+                    <CheckCircle className={`h-4 w-4 ${tache.constructeur_valide ? 'text-blue-700' : 'text-yellow-700'}`} />
+                    <span className={`text-sm font-semibold ${tache.constructeur_valide ? 'text-blue-800' : 'text-yellow-800'}`}>
                       {tache.constructeur_valide 
                         ? `Validée par le constructeur le ${formatDate(tache.constructeur_valide_date)}`
                         : `Marquée terminée le ${formatDate(tache.artisan_termine_date)}`

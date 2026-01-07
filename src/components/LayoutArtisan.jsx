@@ -16,6 +16,10 @@ export function LayoutArtisan() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [savCount, setSavCount] = useState(0);
   const [ncCount, setNcCount] = useState(0);
+  const [docsASignerCount, setDocsASignerCount] = useState(0);
+  const [nouveauxDocsCount, setNouveauxDocsCount] = useState(0);
+  const [tachesEnRetardCount, setTachesEnRetardCount] = useState(0);
+  
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut, profile } = useAuth();
@@ -30,22 +34,57 @@ export function LayoutArtisan() {
     return myST?.id || null;
   }, [profile, sousTraitants]);
 
-  // ✅ Compter les NC non validées de l'artisan
+  // Récupérer les chantiers de l'artisan
+  const mesChantierIds = useMemo(() => {
+    if (!monSousTraitantId || !taches) return [];
+    return [...new Set(
+      taches
+        .filter(t => t.assignetype === 'soustraitant' && t.assigneid === monSousTraitantId)
+        .map(t => t.chantierid)
+    )];
+  }, [monSousTraitantId, taches]);
+
+  // ✅ Compter les tâches en retard
   useEffect(() => {
-    const loadNcCount = () => {
-      if (!monSousTraitantId || !controles || !taches) return;
+    const loadTachesEnRetard = () => {
+      if (!monSousTraitantId || !taches) return;
 
       try {
-        // Récupérer les chantiers de l'artisan
-        const mesChantierIds = [...new Set(
-          taches
-            .filter(t => t.assignetype === 'soustraitant' && t.assigneid === monSousTraitantId)
-            .map(t => t.chantierid)
-        )];
+        const maintenant = new Date();
+        
+        const enRetard = taches.filter(t => {
+          // Tâche assignée à cet artisan
+          const estMonTache = t.assignetype === 'soustraitant' && t.assigneid === monSousTraitantId;
+          
+          // ✅ NON terminée par l'artisan ET NON validée par le constructeur
+          const nonTerminee = !t.artisan_termine && !t.constructeur_valide;
+          
+          // Date de fin passée
+          const dateFinPassee = t.datefin && new Date(t.datefin) < maintenant;
+          
+          return estMonTache && nonTerminee && dateFinPassee;
+        });
 
+        console.log('📊 Tâches en retard:', enRetard.length);
+        setTachesEnRetardCount(enRetard.length);
+      } catch (error) {
+        console.error('Erreur comptage tâches en retard:', error);
+      }
+    };
+
+    loadTachesEnRetard();
+    const interval = setInterval(loadTachesEnRetard, 30000);
+    return () => clearInterval(interval);
+  }, [monSousTraitantId, taches]);
+
+  // ✅ Compter les NC non validées
+  useEffect(() => {
+    const loadNcCount = () => {
+      if (!monSousTraitantId || !controles || mesChantierIds.length === 0) return;
+
+      try {
         let totalNC = 0;
 
-        // Parcourir les contrôles des chantiers de l'artisan
         controles.forEach(ctrl => {
           if (!mesChantierIds.includes(ctrl.chantier_id)) return;
           if (!ctrl.resultats) return;
@@ -53,7 +92,6 @@ export function LayoutArtisan() {
           Object.values(ctrl.resultats).forEach(categorie => {
             Object.values(categorie).forEach(sousCategorie => {
               Object.values(sousCategorie).forEach(point => {
-                // NC assignée à cet artisan ET non validée
                 if (
                   point.resultat === 'NC' &&
                   point.soustraitant_id === monSousTraitantId &&
@@ -66,7 +104,7 @@ export function LayoutArtisan() {
           });
         });
 
-        console.log('📊 NC non validées pour artisan:', totalNC);
+        console.log('📊 NC non validées:', totalNC);
         setNcCount(totalNC);
       } catch (error) {
         console.error('Erreur comptage NC:', error);
@@ -74,12 +112,58 @@ export function LayoutArtisan() {
     };
 
     loadNcCount();
-
-    // Recharger toutes les 30 secondes
     const interval = setInterval(loadNcCount, 30000);
-
     return () => clearInterval(interval);
-  }, [monSousTraitantId, controles, taches]);
+  }, [monSousTraitantId, controles, mesChantierIds]);
+
+  // ✅ Compter les documents à signer + nouveaux
+  useEffect(() => {
+    const loadDocsCount = async () => {
+      if (!monSousTraitantId || mesChantierIds.length === 0) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('documents_chantier')
+          .select('necessite_signature, signature_statut, artisan_assigne_signature, artisans_vus, chantier_id')
+          .in('chantier_id', mesChantierIds);
+
+        if (error) throw error;
+
+        let aSignerCount = 0;
+        let nouveauxCount = 0;
+
+        data.forEach(doc => {
+          // Documents à signer
+          if (
+            doc.necessite_signature &&
+            doc.artisan_assigne_signature === monSousTraitantId &&
+            doc.signature_statut === 'en_attente'
+          ) {
+            aSignerCount++;
+          }
+          // Nouveaux documents (normaux, non vus, et pas à signer)
+          else if (
+            !doc.necessite_signature &&
+            (!doc.artisans_vus || !doc.artisans_vus.includes(monSousTraitantId))
+          ) {
+            nouveauxCount++;
+          }
+        });
+
+        console.log('📊 Documents à signer:', aSignerCount);
+        console.log('📊 Nouveaux documents:', nouveauxCount);
+        
+        setDocsASignerCount(aSignerCount);
+        setNouveauxDocsCount(nouveauxCount);
+      } catch (error) {
+        console.error('Erreur comptage documents:', error);
+      }
+    };
+
+    loadDocsCount();
+    const interval = setInterval(loadDocsCount, 30000);
+    return () => clearInterval(interval);
+  }, [monSousTraitantId, mesChantierIds]);
 
   // Charger le nombre de SAV
   useEffect(() => {
@@ -87,20 +171,15 @@ export function LayoutArtisan() {
       if (!monSousTraitantId) return;
 
       try {
-        console.log('🔍 Chargement SAV pour artisan:', monSousTraitantId);
-        
         const { count, error } = await supabase
           .from('sav')
           .select('*', { count: 'exact', head: true })
           .eq('soustraitant_id', monSousTraitantId)
           .eq('constructeur_valide', false);
 
-        if (error) {
-          console.error('❌ Erreur chargement SAV:', error);
-          throw error;
-        }
+        if (error) throw error;
 
-        console.log('📊 Nombre de SAV non validés:', count);
+        console.log('📊 SAV non validés:', count);
         setSavCount(count || 0);
       } catch (error) {
         console.error('Erreur chargement SAV:', error);
@@ -108,17 +187,28 @@ export function LayoutArtisan() {
     };
 
     loadSavCount();
-
-    // Recharger toutes les 30 secondes
     const interval = setInterval(loadSavCount, 30000);
-
     return () => clearInterval(interval);
   }, [monSousTraitantId]);
 
-  // ✅ Menu artisan avec badge SAV et NC
+  // ✅ Menu artisan avec tous les badges
   const navItems = [
-    { name: 'Mon calendrier', href: '/artisan', icon: Calendar },
-    { name: 'Mes chantiers', href: '/artisan/chantiers', icon: Building2, badge: ncCount },
+    { 
+      name: 'Mon calendrier', 
+      href: '/artisan', 
+      icon: Calendar,
+      badge: tachesEnRetardCount // ✅ Badge rouge pour tâches en retard
+    },
+    { 
+      name: 'Mes chantiers', 
+      href: '/artisan/chantiers', 
+      icon: Building2, 
+      badges: [
+        { count: ncCount, variant: 'destructive', label: 'NC' },
+        { count: docsASignerCount, variant: 'warning', label: 'À signer' },
+        { count: nouveauxDocsCount, variant: 'info', label: 'Nouveaux' }
+      ]
+    },
     { name: 'SAV', href: '/artisan/sav', icon: Wrench, badge: savCount },
   ];
 
@@ -201,7 +291,28 @@ export function LayoutArtisan() {
                     {item.name}
                   </div>
                   
-                  {/* ✅ Badge SAV ou NC */}
+                  {/* ✅ Badges multiples pour chantiers */}
+                  {item.badges && (
+                    <div className="flex gap-1">
+                      {item.badges.map((badge, idx) => 
+                        badge.count > 0 && (
+                          <Badge 
+                            key={idx}
+                            className={cn(
+                              "h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs",
+                              badge.variant === 'destructive' && "bg-red-500 hover:bg-red-600",
+                              badge.variant === 'warning' && "bg-orange-500 hover:bg-orange-600",
+                              badge.variant === 'info' && "bg-blue-500 hover:bg-blue-600"
+                            )}
+                          >
+                            {badge.count}
+                          </Badge>
+                        )
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* ✅ Badge unique pour SAV et Calendrier (tâches en retard) */}
                   {item.badge > 0 && (
                     <Badge 
                       variant="destructive" 

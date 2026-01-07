@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
@@ -13,6 +13,7 @@ import { ArrowLeft, ListChecks, FolderOpen, AlertTriangle, User, MapPin } from '
 import { TachesArtisanTab } from '@/components/artisan/TachesArtisanTab';
 import { DocumentsArtisanTab } from '@/components/artisan/DocumentsArtisanTab';
 import { NonConformitesArtisanTab } from '@/components/artisan/NonConformitesArtisanTab';
+import { supabase } from '@/lib/supabaseClient';
 
 export function ChantierDetailsArtisan() {
   const { id } = useParams();
@@ -22,6 +23,8 @@ export function ChantierDetailsArtisan() {
   const { controles } = useReferentielCQ();
   
   const [activeTab, setActiveTab] = useState('taches');
+  const [docsASignerCount, setDocsASignerCount] = useState(0);
+  const [nouveauxDocsCount, setNouveauxDocsCount] = useState(0);
 
   // Trouver l'ID du sous-traitant
   const monSousTraitantId = useMemo(() => {
@@ -35,7 +38,7 @@ export function ChantierDetailsArtisan() {
     [chantiers, id]
   );
 
-  // Vérifier que l'artisan a bien des tâches sur ce chantier
+  // Vérifier accès chantier
   const hasAccessToChantier = useMemo(() => {
     if (!monSousTraitantId || !id) return false;
     return taches.some(t => 
@@ -45,7 +48,7 @@ export function ChantierDetailsArtisan() {
     );
   }, [taches, id, monSousTraitantId]);
 
-  // ✅ Compter les NC non validées pour CE chantier
+  // Compter les NC
   const ncCount = useMemo(() => {
     if (!monSousTraitantId || !id || !controles) return 0;
 
@@ -58,7 +61,6 @@ export function ChantierDetailsArtisan() {
       Object.values(ctrl.resultats).forEach(categorie => {
         Object.values(categorie).forEach(sousCategorie => {
           Object.values(sousCategorie).forEach(point => {
-            // NC assignée à cet artisan ET non validée
             if (
               point.resultat === 'NC' &&
               point.soustraitant_id === monSousTraitantId &&
@@ -73,6 +75,54 @@ export function ChantierDetailsArtisan() {
 
     return count;
   }, [monSousTraitantId, id, controles]);
+
+  // ✅ Compter les documents
+  useEffect(() => {
+    const loadDocsCount = async () => {
+      if (!monSousTraitantId || !id) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('documents_chantier')
+          .select('necessite_signature, signature_statut, artisan_assigne_signature, artisans_vus')
+          .eq('chantier_id', id);
+
+        if (error) throw error;
+
+        let aSignerCount = 0;
+        let nouveauxCount = 0;
+
+        data.forEach(doc => {
+          // À signer
+          if (
+            doc.necessite_signature &&
+            doc.artisan_assigne_signature === monSousTraitantId &&
+            doc.signature_statut === 'en_attente'
+          ) {
+            aSignerCount++;
+          }
+          // Nouveaux (pas à signer et pas vus)
+          else if (
+            !doc.necessite_signature &&
+            (!doc.artisans_vus || !doc.artisans_vus.includes(monSousTraitantId))
+          ) {
+            nouveauxCount++;
+          }
+        });
+
+        setDocsASignerCount(aSignerCount);
+        setNouveauxDocsCount(nouveauxCount);
+      } catch (error) {
+        console.error('Erreur comptage documents:', error);
+      }
+    };
+
+    loadDocsCount();
+
+    // Recharger quand on revient sur l'onglet Documents
+    const interval = setInterval(loadDocsCount, 10000);
+    return () => clearInterval(interval);
+  }, [monSousTraitantId, id, activeTab]);
 
   if (loading) {
     return (
@@ -154,14 +204,31 @@ export function ChantierDetailsArtisan() {
             <ListChecks className="mr-2 h-4 w-4" /> 
             Mes Tâches
           </TabsTrigger>
-          <TabsTrigger value="documents" className="flex items-center justify-center">
+          
+          {/* ✅ Onglet Documents avec badges */}
+          <TabsTrigger value="documents" className="flex items-center justify-center relative">
             <FolderOpen className="mr-2 h-4 w-4" /> 
             Documents
+            {(docsASignerCount > 0 || nouveauxDocsCount > 0) && (
+              <div className="flex gap-1 ml-2">
+                {docsASignerCount > 0 && (
+                  <Badge className="h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs bg-orange-500 hover:bg-orange-600">
+                    {docsASignerCount}
+                  </Badge>
+                )}
+                {nouveauxDocsCount > 0 && (
+                  <Badge className="h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs bg-blue-500 hover:bg-blue-600">
+                    {nouveauxDocsCount}
+                  </Badge>
+                )}
+              </div>
+            )}
           </TabsTrigger>
+          
+          {/* ✅ Onglet NC avec badge */}
           <TabsTrigger value="nc" className="flex items-center justify-center relative">
             <AlertTriangle className="mr-2 h-4 w-4" /> 
             Non-Conformités
-            {/* ✅ Badge NC sur l'onglet */}
             {ncCount > 0 && (
               <Badge 
                 variant="destructive" 
@@ -178,7 +245,16 @@ export function ChantierDetailsArtisan() {
         </TabsContent>
 
         <TabsContent value="documents" className="mt-6">
-          <DocumentsArtisanTab chantierId={id} soustraitantId={monSousTraitantId} />
+          <DocumentsArtisanTab 
+            chantierId={id} 
+            soustraitantId={monSousTraitantId}
+            onDocumentView={() => {
+              // Recharger les compteurs après visualisation d'un document
+              setTimeout(() => {
+                setActiveTab('documents'); // Trigger reload
+              }, 500);
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="nc" className="mt-6">
