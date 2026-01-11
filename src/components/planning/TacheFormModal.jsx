@@ -9,7 +9,7 @@ import { calculateDateFinLogic, calculateDureeOuvree } from "@/context/chantierC
 import { useSousTraitant } from "@/context/SousTraitantContext";
 import { useFournisseur } from "@/context/FournisseurContext";
 import { useChantier } from "@/context/ChantierContext";
-import { AlertTriangle, CheckCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle, Trash2 } from "lucide-react";
 
 export function TacheFormModal({
   isOpen,
@@ -19,6 +19,7 @@ export function TacheFormModal({
   lots: globalLots,
   addTache,
   updateTache,
+  deleteTache,  // ✅ NOUVEAU : Fonction de suppression
   conflictsByChantier = {},
   prefilledDate = null
 }) {
@@ -244,6 +245,21 @@ export function TacheFormModal({
     }
   };
 
+  // ✅ NOUVEAU : Fonction de suppression
+  const handleDelete = async () => {
+    if (!tache || !deleteTache) return;
+    
+    if (window.confirm(`Êtes-vous sûr de vouloir supprimer la tâche "${tache.nom}" ?`)) {
+      try {
+        await deleteTache(tache.id);
+        onClose();
+      } catch (err) {
+        console.error("❌ Erreur suppression tâche:", err);
+        alert(`Erreur lors de la suppression de la tâche: ${err.message}`);
+      }
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
@@ -419,9 +435,25 @@ export function TacheFormModal({
             </div>
           )}
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
-            <Button type="submit">{tache ? "Mettre à jour" : "Ajouter"}</Button>
+          <DialogFooter className="flex justify-between">
+            <div>
+              {/* ✅ Bouton supprimer à gauche */}
+              {tache && deleteTache && (
+                <Button 
+                  type="button" 
+                  variant="destructive"
+                  onClick={handleDelete}
+                  className="gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Supprimer
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
+              <Button type="submit">{tache ? "Mettre à jour" : "Ajouter"}</Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>

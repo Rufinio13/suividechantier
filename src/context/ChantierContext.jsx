@@ -302,6 +302,27 @@ export function ChantierProvider({ children }) {
         }
 
         console.log('✅ Tâche insérée en BDD:', data);
+        
+        // ✅ NOUVEAU : Créer notification si tâche assignée à un artisan
+        if (data.assigneid && data.assignetype === 'soustraitant') {
+          console.log('📬 Création notification nouvelle tâche pour artisan:', data.assigneid);
+          
+          const { error: notifError } = await supabase
+            .from('notifications_taches_artisan')
+            .insert({
+              tache_id: data.id,
+              soustraitant_id: data.assigneid,
+              type: 'nouvelle_tache',
+              vu: false
+            });
+          
+          if (notifError) {
+            console.error('⚠️ Erreur création notification (non bloquant):', notifError);
+          } else {
+            console.log('✅ Notification créée');
+          }
+        }
+        
         setTaches(prev => {
           const newTaches = [data, ...prev];
           console.log('✅ Tâches mises à jour dans le state, total:', newTaches.length);
@@ -327,7 +348,7 @@ export function ChantierProvider({ children }) {
     }
   };
 
-  // ✅ CORRIGÉ : Ne jamais toucher aux colonnes artisan
+  // ✅ CORRIGÉ : Ne jamais toucher aux colonnes artisan + Notifications dates modifiées
   const updateTache = async (id, updates) => {
     if (updates.lotid && typeof updates.lotid !== "string") {
       throw new Error("lotid doit être un UUID valide.");
@@ -336,6 +357,14 @@ export function ChantierProvider({ children }) {
     // ✅ NE JAMAIS envoyer artisan_termine/artisan_termine_date/artisan_photos/artisan_commentaire
     // Ces colonnes sont gérées UNIQUEMENT par l'artisan
     const { artisan_termine, artisan_termine_date, artisan_photos, artisan_commentaire, ...safeUpdates } = updates;
+    
+    // ✅ NOUVEAU : Vérifier si dates modifiées
+    const ancienneTache = taches.find(t => t.id === id);
+    const dateDebutChangee = ancienneTache && ancienneTache.datedebut !== safeUpdates.datedebut;
+    const dateFinChangee = ancienneTache && ancienneTache.datefin !== safeUpdates.datefin;
+    const datesModifiees = (dateDebutChangee || dateFinChangee) && 
+                           ancienneTache.assigneid && 
+                           ancienneTache.assignetype === 'soustraitant';
     
     const { data, error } = await supabase
       .from("taches")
@@ -358,6 +387,34 @@ export function ChantierProvider({ children }) {
       .single();
       
     if (error) throw error;
+    
+    // ✅ NOUVEAU : Créer notification si dates modifiées
+    if (datesModifiees) {
+      console.log('📬 Création notification dates modifiées pour artisan:', ancienneTache.assigneid);
+      
+      // Supprimer ancienne notification "date_modifiee" pour cette tâche (si existe)
+      await supabase
+        .from('notifications_taches_artisan')
+        .delete()
+        .eq('tache_id', id)
+        .eq('type', 'date_modifiee');
+      
+      // Créer nouvelle notification
+      const { error: notifError } = await supabase
+        .from('notifications_taches_artisan')
+        .insert({
+          tache_id: id,
+          soustraitant_id: ancienneTache.assigneid,
+          type: 'date_modifiee',
+          vu: false
+        });
+      
+      if (notifError) {
+        console.error('⚠️ Erreur création notification (non bloquant):', notifError);
+      } else {
+        console.log('✅ Notification dates modifiées créée');
+      }
+    }
     
     setTaches(prev => prev.map(t => t.id === id ? data : t));
     return data;

@@ -93,9 +93,12 @@ export function PointControleResultatItem({
   };
 
   const handleResultatButtonClick = (value) => {
+    // ✅ Si on reclique sur le même bouton, on désélectionne (remet à vide)
+    const newValue = currentData.resultat === value ? '' : value;
+    
     onResultatChange(
       point.id, 
-      value, 
+      newValue, 
       currentData.explicationNC, 
       currentData.photos, 
       currentData.plans, 
@@ -103,8 +106,9 @@ export function PointControleResultatItem({
       currentData.repriseValidee,
       currentData.soustraitant_id
     );
+    
     // ✅ Garder expansé si reprise validée, sinon ouvrir seulement si NC
-    setIsExpanded(value === 'NC' || (value === 'C' && currentData.repriseValidee));
+    setIsExpanded(newValue === 'NC' || (newValue === 'C' && currentData.repriseValidee));
   };
 
   const handleChange = (field, value) => {

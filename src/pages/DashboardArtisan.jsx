@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
@@ -7,6 +7,7 @@ import { CalendrierView } from '@/components/planning/CalendrierView';
 import { TacheDetailModalArtisan } from '@/components/TacheDetailModalArtisan';
 import { Calendar, HardHat } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { supabase } from '@/lib/supabaseClient';
 
 export function DashboardArtisan() {
   const { profile } = useAuth();
@@ -16,6 +17,9 @@ export function DashboardArtisan() {
   // États pour modal
   const [selectedTache, setSelectedTache] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // ✅ NOUVEAU : Notifications
+  const [notifications, setNotifications] = useState([]);
 
   // 1️⃣ Trouver l'ID du sous-traitant
   const monSousTraitantId = useMemo(() => {
@@ -25,6 +29,34 @@ export function DashboardArtisan() {
     console.log('👤 Mon sous-traitant:', myST);
     return myST?.id || null;
   }, [profile, sousTraitants]);
+  
+  // ✅ NOUVEAU : Charger notifications
+  useEffect(() => {
+    const loadNotifications = async () => {
+      if (!monSousTraitantId) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('notifications_taches_artisan')
+          .select('*')
+          .eq('soustraitant_id', monSousTraitantId)
+          .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        console.log('📬 Notifications chargées:', data?.length);
+        setNotifications(data || []);
+      } catch (error) {
+        console.error('Erreur chargement notifications:', error);
+      }
+    };
+    
+    loadNotifications();
+    
+    // Recharger toutes les 30 secondes
+    const interval = setInterval(loadNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [monSousTraitantId]);
 
   // 2️⃣ Filtrer MES tâches uniquement
   const mesTaches = useMemo(() => {
@@ -81,8 +113,38 @@ export function DashboardArtisan() {
   }, [mesChantiers]);
 
   // Handler clic sur tâche
-  const handleTacheClick = (tache) => {
+  const handleTacheClick = async (tache) => {
     console.log('📋 Clic sur tâche:', tache);
+    
+    // ✅ NOUVEAU : Marquer notifications comme vues pour cette tâche
+    const notifsAMarquer = notifications.filter(
+      n => n.tache_id === tache.id && !n.vu
+    );
+    
+    if (notifsAMarquer.length > 0) {
+      try {
+        const { error } = await supabase
+          .from('notifications_taches_artisan')
+          .update({ vu: true })
+          .in('id', notifsAMarquer.map(n => n.id));
+        
+        if (error) throw error;
+        
+        console.log('✅ Notifications marquées comme vues');
+        
+        // Mettre à jour state local
+        setNotifications(prev => 
+          prev.map(n => 
+            notifsAMarquer.some(nm => nm.id === n.id) 
+              ? { ...n, vu: true } 
+              : n
+          )
+        );
+      } catch (error) {
+        console.error('Erreur marquage notifications:', error);
+      }
+    }
+    
     setSelectedTache(tache);
     setIsModalOpen(true);
   };
@@ -153,9 +215,10 @@ export function DashboardArtisan() {
                 onEditTache={handleTacheClick}
                 onAddTache={() => {}}
                 chantierColors={chantierColors}
-                chantierNoms={chantierNoms} // ✅ Passer les noms des chantiers
+                chantierNoms={chantierNoms}
                 readOnly={true}
-                isArtisanView={true} // ✅ Mode artisan pour badges
+                isArtisanView={true}
+                notifications={notifications} // ✅ NOUVEAU
               />
             ) : (
               <div className="text-center py-12 text-muted-foreground">

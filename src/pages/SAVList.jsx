@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Plus, Edit, Trash2, Wrench, Search, Filter, CheckCircle, Clock, Calendar } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -31,7 +31,7 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
     nomClient: "",
     dateOuverture: "",
     description: "",
-    soustraitant_id: "", // ✅ Remplace responsable
+    soustraitant_id: "",
     datePrevisionnelle: "",
     constructeur_valide: false,
     notes: "",
@@ -92,6 +92,9 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{savItem ? "Modifier la demande SAV" : "Nouvelle demande SAV"}</DialogTitle>
+          <DialogDescription>
+            {savItem ? "Modifiez les informations de la demande SAV" : "Créez une nouvelle demande de service après-vente"}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
           <div>
@@ -107,25 +110,23 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
             <Textarea id="description" name="description" value={formData.description} onChange={handleChange} rows={3} required />
           </div>
           
-          {/* ✅ Sélecteur Sous-traitant */}
+          {/* ✅ Sélecteur Sous-traitant - SELECT HTML NATIF */}
           <div>
             <Label htmlFor="soustraitant_id">Artisan assigné</Label>
-            <Select
+            <select
+              id="soustraitant_id"
+              name="soustraitant_id"
               value={formData.soustraitant_id}
-              onValueChange={(value) => setFormData(prev => ({ ...prev, soustraitant_id: value }))}
+              onChange={(e) => setFormData(prev => ({ ...prev, soustraitant_id: e.target.value }))}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Sélectionner un artisan..." />
-              </SelectTrigger>
-              <SelectContent className="max-h-[300px]">
-                <SelectItem value="">Aucun</SelectItem>
-                {sousTraitantsTriés.map(st => (
-                  <SelectItem key={st.id} value={st.id}>
-                    {st.nomsocieteST || `${st.PrenomST} ${st.nomST}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <option value="">Aucun</option>
+              {sousTraitantsTriés.map(st => (
+                <option key={st.id} value={st.id}>
+                  {st.nomsocieteST || `${st.PrenomST} ${st.nomST}`}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -178,10 +179,16 @@ export function SAVList() {
   };
 
   const handleSubmitSAV = async (data) => {
+    // ✅ Convertir les chaînes vides en null pour les UUIDs
+    const cleanedData = {
+      ...data,
+      soustraitant_id: data.soustraitant_id || null,
+    };
+    
     if (editingSAV?.id) {
-      await updateSAV(editingSAV.id, data);
+      await updateSAV(editingSAV.id, cleanedData);
     } else {
-      await addSAV(data);
+      await addSAV(cleanedData);
     }
   };
 

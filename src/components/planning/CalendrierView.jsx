@@ -20,9 +20,10 @@ export function CalendrierView({
   onEditTache, 
   onAddTache,
   chantierColors = null,   // ✅ Couleurs par chantier pour artisan
-  chantierNoms = null,     // ✅ NOUVEAU : Map { chantierId: "Nom chantier" }
+  chantierNoms = null,     // ✅ Map { chantierId: "Nom chantier" }
   readOnly = false,        // ✅ Mode lecture seule
-  isArtisanView = false    // ✅ NOUVEAU : Mode artisan pour badges
+  isArtisanView = false,   // ✅ Mode artisan pour badges
+  notifications = []       // ✅ NOUVEAU : Notifications tâches
 }) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -144,8 +145,18 @@ export function CalendrierView({
                                      tache.artisan_termine && 
                                      !tache.constructeur_valide;
       
-      // ✅ 3. Badge BLEU : Validée par constructeur
+      // ✅ 3. Badge BLEU (clair) : Validée par constructeur
       const isValidee = isArtisanView && tache.constructeur_valide;
+      
+      // ✅ 4. Badge BLEU (foncé) : Nouvelle tâche (notification non vue)
+      const isNouvelleTache = isArtisanView && notifications.some(
+        n => n.tache_id === tache.id && n.type === 'nouvelle_tache' && !n.vu
+      );
+      
+      // ✅ 5. Badge VERT : Date modifiée (notification non vue)
+      const isDateModifiee = isArtisanView && notifications.some(
+        n => n.tache_id === tache.id && n.type === 'date_modifiee' && !n.vu
+      );
       
       // ✅ Utiliser couleur par chantier si disponible
       const tacheStyle = chantierColors 
@@ -158,12 +169,14 @@ export function CalendrierView({
         displayName,              // ✅ Nom à afficher
         isEnRetard,               // ✅ Badge rouge 🔴
         isEnAttenteValidation,    // ✅ Badge jaune 🟡
-        isValidee,                // ✅ Badge bleu 🔵
+        isValidee,                // ✅ Badge bleu clair 🔵
+        isNouvelleTache,          // ✅ Badge bleu foncé 🔵 (nouvelle)
+        isDateModifiee,           // ✅ Badge vert 🟢 (date modifiée)
         tacheColor: typeof tacheStyle === 'string' ? tacheStyle : null,
         tacheStyle: typeof tacheStyle === 'object' ? tacheStyle : null
       };
     });
-  }, [taches, lots, conflictsByChantier, chantierColors, chantierNoms, isArtisanView]);
+  }, [taches, lots, conflictsByChantier, chantierColors, chantierNoms, isArtisanView, notifications]);
 
   const getTachesForDay = (day) => {
     if (isWeekend(day)) return [];
@@ -277,19 +290,29 @@ export function CalendrierView({
                       >
                         {/* ✅ Affichage avec badges artisan */}
                         <div className="font-medium flex items-center gap-0.5">
-                          {/* ✅ 1. Badge BLEU : Validée par constructeur */}
+                          {/* ✅ 1. Badge BLEU FONCÉ : Nouvelle tâche */}
+                          {isArtisanView && tache.isNouvelleTache && (
+                            <span className="text-xs" title="Nouvelle tâche">🆕</span>
+                          )}
+                          
+                          {/* ✅ 2. Badge VERT : Date modifiée */}
+                          {isArtisanView && tache.isDateModifiee && (
+                            <span className="text-xs" title="Date modifiée">📅</span>
+                          )}
+                          
+                          {/* ✅ 3. Badge BLEU CLAIR : Validée par constructeur */}
                           {isArtisanView && tache.isValidee && (
-                            <span className="text-xs">🔵</span>
+                            <span className="text-xs" title="Validée">🔵</span>
                           )}
                           
-                          {/* ✅ 2. Badge JAUNE : Terminée par artisan (en attente validation) */}
+                          {/* ✅ 4. Badge JAUNE : Terminée par artisan (en attente validation) */}
                           {isArtisanView && tache.isEnAttenteValidation && (
-                            <span className="text-xs">🟡</span>
+                            <span className="text-xs" title="En attente validation">🟡</span>
                           )}
                           
-                          {/* ✅ 3. Badge ROUGE : En retard (non terminée + date passée) */}
+                          {/* ✅ 5. Badge ROUGE : En retard (non terminée + date passée) */}
                           {isArtisanView && tache.isEnRetard && (
-                            <span className="text-xs">🔴</span>
+                            <span className="text-xs" title="En retard">🔴</span>
                           )}
                           
                           {/* Nom (chantier ou tâche) */}

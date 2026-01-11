@@ -270,6 +270,7 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
           lots={globalLots}
           addTache={addTache}
           updateTache={updateTache}
+          deleteTache={deleteTache} // ✅ AJOUT DE LA PROP deleteTache
           conflictsByChantier={conflictsByChantier}
           prefilledDate={prefilledDate}
         />

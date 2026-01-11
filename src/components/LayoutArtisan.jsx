@@ -19,6 +19,8 @@ export function LayoutArtisan() {
   const [docsASignerCount, setDocsASignerCount] = useState(0);
   const [nouveauxDocsCount, setNouveauxDocsCount] = useState(0);
   const [tachesEnRetardCount, setTachesEnRetardCount] = useState(0);
+  const [nouvellesTachesCount, setNouvellesTachesCount] = useState(0);
+  const [tachesModifieesCount, setTachesModifieesCount] = useState(0);
   
   const location = useLocation();
   const navigate = useNavigate();
@@ -76,6 +78,38 @@ export function LayoutArtisan() {
     const interval = setInterval(loadTachesEnRetard, 30000);
     return () => clearInterval(interval);
   }, [monSousTraitantId, taches]);
+  
+  // ✅ NOUVEAU : Compter les notifications
+  useEffect(() => {
+    const loadNotificationsCount = async () => {
+      if (!monSousTraitantId) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('notifications_taches_artisan')
+          .select('type, vu')
+          .eq('soustraitant_id', monSousTraitantId)
+          .eq('vu', false);
+        
+        if (error) throw error;
+        
+        const nouvelles = data.filter(n => n.type === 'nouvelle_tache').length;
+        const modifiees = data.filter(n => n.type === 'date_modifiee').length;
+        
+        console.log('📊 Nouvelles tâches:', nouvelles);
+        console.log('📊 Tâches modifiées:', modifiees);
+        
+        setNouvellesTachesCount(nouvelles);
+        setTachesModifieesCount(modifiees);
+      } catch (error) {
+        console.error('Erreur comptage notifications:', error);
+      }
+    };
+    
+    loadNotificationsCount();
+    const interval = setInterval(loadNotificationsCount, 30000);
+    return () => clearInterval(interval);
+  }, [monSousTraitantId]);
 
   // ✅ Compter les NC non validées
   useEffect(() => {
@@ -197,7 +231,11 @@ export function LayoutArtisan() {
       name: 'Mon calendrier', 
       href: '/artisan', 
       icon: Calendar,
-      badge: tachesEnRetardCount // ✅ Badge rouge pour tâches en retard
+      badges: [
+        { count: tachesEnRetardCount, variant: 'destructive', label: 'En retard' },
+        { count: nouvellesTachesCount, variant: 'info', label: 'Nouvelles' },
+        { count: tachesModifieesCount, variant: 'success', label: 'Modifiées' }
+      ]
     },
     { 
       name: 'Mes chantiers', 
@@ -302,7 +340,8 @@ export function LayoutArtisan() {
                               "h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs",
                               badge.variant === 'destructive' && "bg-red-500 hover:bg-red-600",
                               badge.variant === 'warning' && "bg-orange-500 hover:bg-orange-600",
-                              badge.variant === 'info' && "bg-blue-500 hover:bg-blue-600"
+                              badge.variant === 'info' && "bg-blue-500 hover:bg-blue-600",
+                              badge.variant === 'success' && "bg-green-500 hover:bg-green-600"
                             )}
                           >
                             {badge.count}
