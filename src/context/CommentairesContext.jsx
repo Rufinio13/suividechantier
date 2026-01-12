@@ -63,11 +63,27 @@ export function CommentairesProvider({ children }) {
   // =========================================
   const addCommentaire = async (chantierId, titre, texte) => {
     try {
+      // ✅ NOUVEAU : Récupérer le nomsociete du chantier
+      const { data: chantier, error: chantierError } = await supabase
+        .from('chantiers')
+        .select('nomsociete')
+        .eq('id', chantierId)
+        .single();
+      
+      if (chantierError) {
+        console.error('❌ Erreur récupération chantier:', chantierError);
+        throw chantierError;
+      }
+      
+      if (!chantier?.nomsociete) {
+        throw new Error('Impossible de récupérer le nomsociete du chantier');
+      }
+
       const { data, error } = await supabase
         .from('commentaires_chantier')
         .insert([{
           chantier_id: chantierId,
-          nomsociete, // ✅ On passe nomsociete pour l'insertion
+          nomsociete: chantier.nomsociete, // ✅ Utiliser le nomsociete du chantier
           titre,
           texte,
           auteur,
@@ -77,12 +93,15 @@ export function CommentairesProvider({ children }) {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erreur détaillée Supabase:', error);
+        throw error;
+      }
 
       setCommentaires(prev => [data, ...prev]);
       return { success: true, data };
     } catch (error) {
-      console.error('Erreur addCommentaire:', error);
+      console.error('❌ Erreur addCommentaire:', error);
       throw error;
     }
   };
