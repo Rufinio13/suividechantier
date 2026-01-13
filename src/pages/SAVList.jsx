@@ -234,7 +234,19 @@ export function SAVList() {
         if (filterStatut === "valide") return matchesSearch && sav.constructeur_valide;
         return false;
       })
-      .sort((a, b) => new Date(b.dateOuverture) - new Date(a.dateOuverture));
+      .sort((a, b) => {
+        // ✅ Tri par date prévisionnelle (du plus proche au plus lointain)
+        // Si pas de date prévisionnelle, mettre à la fin
+        if (!a.datePrevisionnelle && !b.datePrevisionnelle) {
+          // Si aucun n'a de date prévisionnelle, trier par date d'ouverture (le plus récent d'abord)
+          return new Date(b.dateOuverture) - new Date(a.dateOuverture);
+        }
+        if (!a.datePrevisionnelle) return 1; // a va à la fin
+        if (!b.datePrevisionnelle) return -1; // b va à la fin
+        
+        // Les deux ont une date prévisionnelle, trier du plus proche au plus lointain
+        return new Date(a.datePrevisionnelle) - new Date(b.datePrevisionnelle);
+      });
   }, [demandesSAV, searchTerm, filterStatut]);
 
   if (loading) {
