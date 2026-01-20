@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus } from "lucide-react";
+import { Plus, UserPlus } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useSousTraitant } from "@/context/SousTraitantContext";
 import { useLots } from "@/context/LotsContext";
@@ -51,11 +51,13 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess, onArt
       // ✅ Vérifier si cet artisan a un compte
       if (initialData.user_id) {
         checkIfHasAuthAccount(initialData.user_id);
+      } else {
+        setHasAuthAccount(false);
       }
     }
   }, [initialData]);
 
-  // ✅ Vérifier si le user_id existe dans profiles
+  // ✅ Vérifier si le user_id existe dans auth.users ET profiles
   const checkIfHasAuthAccount = async (userId) => {
     if (!userId) {
       setHasAuthAccount(false);
@@ -63,15 +65,16 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess, onArt
     }
 
     try {
+      // Vérifier dans profiles
       const { data, error } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, role')
         .eq('id', userId)
         .maybeSingle();
 
-      const hasAccount = !!data && !error;
+      const hasAccount = !!data && !error && data.role === 'artisan';
       setHasAuthAccount(hasAccount);
-      console.log(`✅ Artisan ${userId} a un compte dans profiles:`, hasAccount);
+      console.log(`✅ Artisan ${userId} a un compte:`, hasAccount);
     } catch (err) {
       console.error('❌ Erreur vérification compte:', err);
       setHasAuthAccount(false);
@@ -213,36 +216,38 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess, onArt
             </div>
           </div>
 
-          {/* ✅ Si artisan a déjà un compte (lecture seule) */}
-          {initialData && hasAuthAccount && (
-            <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-              <p className="text-sm text-blue-800">
-                ✅ Cet artisan possède déjà un compte
-              </p>
-            </div>
-          )}
-
-          {/* ✅ Si artisan SANS compte → Bouton pour créer compte */}
-          {initialData && !hasAuthAccount && (
-            <div className="bg-slate-50 border rounded-md p-3">
-              <p className="text-sm text-muted-foreground mb-2">
-                Cet artisan n'a pas encore de compte.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  // ✅ Appeler le callback avec l'artisan actuel
-                  if (onArtisanCreated) {
-                    onArtisanCreated(initialData);
-                  }
-                  onClose(); // Fermer le formulaire
-                }}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Créer un compte
-              </Button>
+          {/* ✅ NOUVEAU : Section compte artisan */}
+          {initialData && (
+            <div className="pt-2 border-t">
+              <Label className="text-sm font-medium mb-2 block">Compte Artisan</Label>
+              
+              {hasAuthAccount ? (
+                <div className="bg-green-50 border border-green-200 rounded-md p-3">
+                  <p className="text-sm text-green-800 font-medium">
+                    ✅ Cet artisan possède déjà un compte
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-slate-50 border rounded-md p-3 space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Cet artisan n'a pas encore de compte.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (onArtisanCreated) {
+                        onArtisanCreated(initialData);
+                      }
+                      onClose();
+                    }}
+                  >
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Créer un compte
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 

@@ -9,10 +9,12 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
-import { ArrowLeft, Edit, Trash2, Briefcase, Plus, ListChecks } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Briefcase, Plus, ListChecks, UserPlus, UserCheck } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/supabaseClient';
+import { CreateArtisanAccountModal } from '@/components/artisan/CreateArtisanAccountModal';
 
 export function SousTraitantDetails() {
   const { id } = useParams();
@@ -29,6 +31,8 @@ export function SousTraitantDetails() {
 
   const [isAssignLotsOpen, setIsAssignLotsOpen] = useState(false);
   const [isEditInfoOpen, setIsEditInfoOpen] = useState(false);
+  const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
+  const [hasAccount, setHasAccount] = useState(false);
   
   // ✅ Protection anti-double-submit
   const isSavingRef = useRef(false);
@@ -41,6 +45,32 @@ export function SousTraitantDetails() {
     telephone: '',
   });
   const [selectedLotNames, setSelectedLotNames] = useState([]);
+
+  // ✅ Vérifier si le sous-traitant a un compte
+  useEffect(() => {
+    if (sousTraitant?.user_id) {
+      checkIfHasAccount(sousTraitant.user_id);
+    } else {
+      setHasAccount(false);
+    }
+  }, [sousTraitant]);
+
+  const checkIfHasAccount = async (userId) => {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', userId)
+        .maybeSingle();
+      
+      const accountExists = !!data && data.role === 'artisan';
+      setHasAccount(accountExists);
+      console.log('✅ Compte artisan existant:', accountExists);
+    } catch (err) {
+      console.error('❌ Erreur vérification compte:', err);
+      setHasAccount(false);
+    }
+  };
 
   useEffect(() => {
     if (sousTraitant) {
@@ -70,7 +100,6 @@ export function SousTraitantDetails() {
   const saveAssignLots = async () => {
     if (!sousTraitant) return;
     
-    // ✅ Vérifier si déjà en cours
     if (isSavingRef.current) {
       console.log('⚠️ Sauvegarde déjà en cours, ignoré');
       return;
@@ -89,7 +118,6 @@ export function SousTraitantDetails() {
       console.error('❌ Erreur saveAssignLots:', error);
       toast({ title: "Erreur", description: "Impossible d'assigner les lots", variant: "destructive" });
     } finally {
-      // ✅ Débloquer après un délai
       setTimeout(() => {
         isSavingRef.current = false;
       }, 1000);
@@ -101,7 +129,6 @@ export function SousTraitantDetails() {
     e.preventDefault();
     if (!sousTraitant) return;
     
-    // ✅ Vérifier si déjà en cours
     if (isSavingRef.current) {
       console.log('⚠️ Sauvegarde déjà en cours, ignoré');
       return;
@@ -124,7 +151,6 @@ export function SousTraitantDetails() {
       console.error('❌ Erreur saveEditInfo:', error);
       toast({ title: "Erreur", description: "Impossible de mettre à jour", variant: "destructive" });
     } finally {
-      // ✅ Débloquer après un délai
       setTimeout(() => {
         isSavingRef.current = false;
       }, 1000);
@@ -199,6 +225,40 @@ export function SousTraitantDetails() {
         </CardContent>
       </Card>
 
+      {/* ✅ NOUVEAU : COMPTE ARTISAN */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Compte Artisan</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {hasAccount ? (
+            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-md">
+              <UserCheck className="h-6 w-6 text-green-600 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-green-800">Compte créé ✅</p>
+                <p className="text-sm text-green-700">Cet artisan peut se connecter à l'application</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="p-3 bg-slate-50 border rounded-md">
+                <p className="text-sm text-muted-foreground">
+                  Cet artisan n'a pas encore de compte pour accéder à l'application.
+                </p>
+              </div>
+              <Button 
+                onClick={() => setIsCreateAccountOpen(true)}
+                variant="outline"
+                className="w-full"
+              >
+                <UserPlus className="mr-2 h-4 w-4" />
+                Créer un compte artisan
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* MODAL EDIT INFOS */}
       <Dialog open={isEditInfoOpen} onOpenChange={setIsEditInfoOpen}>
         <DialogContent>
@@ -264,6 +324,20 @@ export function SousTraitantDetails() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ✅ MODAL CRÉATION COMPTE */}
+      <CreateArtisanAccountModal
+        isOpen={isCreateAccountOpen}
+        onClose={() => setIsCreateAccountOpen(false)}
+        sousTraitant={sousTraitant}
+        onSuccess={() => {
+          // Recharger pour vérifier le nouveau compte
+          if (sousTraitant?.user_id) {
+            checkIfHasAccount(sousTraitant.user_id);
+          }
+          toast({ title: "Compte créé ✅", description: "L'artisan peut maintenant se connecter" });
+        }}
+      />
     </div>
   );
 }
