@@ -1,6 +1,6 @@
 // src/context/AuthProvider.jsx
 import { createContext, useEffect, useState, useRef } from "react";
-import { supabase, setSupabaseRLSContext } from "@/lib/supabaseClient";
+import { supabase, setSupabaseRLSContext, ensureValidSession } from "@/lib/supabaseClient";
 
 export const AuthContext = createContext();
 
@@ -12,6 +12,7 @@ export function AuthProvider({ children }) {
   // ✅ Refs pour éviter doubles appels
   const isLoadingProfile = useRef(false);
   const isMounted = useRef(true);
+  const refreshIntervalRef = useRef(null);
 
   // Charger le profil via le client Supabase authentifié
   const loadProfile = async (userId) => {
@@ -73,9 +74,58 @@ export function AuthProvider({ children }) {
 
   const signOut = async () => {
     console.log('👋 Déconnexion...');
+    
+    // ✅ Arrêter l'intervalle de rafraîchissement
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+      refreshIntervalRef.current = null;
+    }
+    
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
+  };
+
+  // ✅ NOUVEAU : Démarrer le rafraîchissement automatique
+  const startAutoRefresh = () => {
+    // Nettoyer l'ancien intervalle si existant
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+    }
+    
+    // Vérifier et rafraîchir la session toutes les 15 minutes
+    refreshIntervalRef.current = setInterval(async () => {
+      console.log('⏰ Vérification périodique de la session...');
+      
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error || !session) {
+        console.warn('⚠️ Session invalide ou expirée');
+        clearInterval(refreshIntervalRef.current);
+        return;
+      }
+      
+      const expiresAt = session.expires_at * 1000;
+      const now = Date.now();
+      const timeUntilExpiry = expiresAt - now;
+      const minutesLeft = Math.round(timeUntilExpiry / 1000 / 60);
+      
+      console.log(`⏰ Session expire dans ${minutesLeft} minutes`);
+      
+      // Si expire dans moins de 10 minutes, rafraîchir
+      if (timeUntilExpiry < 10 * 60 * 1000) {
+        console.log('🔄 Rafraîchissement préventif de la session...');
+        const { error: refreshError } = await supabase.auth.refreshSession();
+        
+        if (refreshError) {
+          console.error('❌ Erreur rafraîchissement:', refreshError);
+        } else {
+          console.log('✅ Session rafraîchie avec succès');
+        }
+      }
+    }, 15 * 60 * 1000); // Toutes les 15 minutes
+    
+    console.log('✅ Auto-refresh activé (toutes les 15 minutes)');
   };
 
   useEffect(() => {
@@ -116,6 +166,9 @@ export function AuthProvider({ children }) {
           console.log('👤 User trouvé:', data.session.user.id);
           setUser(data.session.user);
           await loadProfile(data.session.user.id);
+          
+          // ✅ Démarrer le rafraîchissement automatique
+          startAutoRefresh();
         } else {
           console.log('❌ Pas de session');
           setLoading(false);
@@ -151,16 +204,34 @@ export function AuthProvider({ children }) {
           if (user?.id !== session.user.id) {
             setUser(session.user);
             await loadProfile(session.user.id);
+            
+            // ✅ Démarrer le rafraîchissement automatique
+            startAutoRefresh();
           } else {
             console.log('ℹ️ User déjà chargé, ignoré');
           }
         }
 
+        if (event === "TOKEN_REFRESHED") {
+          console.log('✅ TOKEN_REFRESHED - Session rafraîchie automatiquement');
+        }
+
         if (event === "SIGNED_OUT") {
           console.log('👋 SIGNED_OUT');
+          
+          // ✅ Arrêter le rafraîchissement
+          if (refreshIntervalRef.current) {
+            clearInterval(refreshIntervalRef.current);
+            refreshIntervalRef.current = null;
+          }
+          
           setUser(null);
           setProfile(null);
           setLoading(false);
+        }
+        
+        if (event === "USER_UPDATED") {
+          console.log('👤 USER_UPDATED');
         }
       }
     );
@@ -168,12 +239,27 @@ export function AuthProvider({ children }) {
     return () => {
       console.log('🧹 AuthProvider cleanup');
       isMounted.current = false;
+      
+      // ✅ Nettoyer l'intervalle
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
+      
       authListener?.subscription?.unsubscribe();
     };
   }, []); // ✅ Dépendances vides pour éviter re-déclenchements
 
-  const signIn = (email, password) =>
-    supabase.auth.signInWithPassword({ email, password });
+  const signIn = async (email, password) => {
+    const result = await supabase.auth.signInWithPassword({ email, password });
+    
+    // ✅ Si connexion réussie, démarrer l'auto-refresh
+    if (result.data?.session) {
+      startAutoRefresh();
+    }
+    
+    return result;
+  };
 
   console.log('📊 AuthProvider render - user:', !!user, 'profile:', !!profile, 'loading:', loading);
 

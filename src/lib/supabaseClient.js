@@ -4,15 +4,27 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
-// ✅ Crée le client Supabase avec sessionStorage
-// La session sera effacée à la fermeture du navigateur/onglet
+// ✅ Crée le client Supabase avec configuration optimale
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    storage: window.sessionStorage, // ✅ Utilise sessionStorage au lieu de localStorage
-    autoRefreshToken: true,
-    persistSession: true, // Persiste pendant la session seulement
-    detectSessionInUrl: true
-  }
+    storage: window.localStorage,        // ✅ Utilise localStorage pour persister même après fermeture
+    autoRefreshToken: true,              // ✅ Rafraîchir automatiquement le token
+    persistSession: true,                // ✅ Persister la session
+    detectSessionInUrl: true,            // ✅ Détecter la session dans l'URL
+    flowType: 'pkce',                    // ✅ Utiliser PKCE pour plus de sécurité
+    storageKey: 'supabase.auth.token',   // ✅ Clé de stockage
+    debug: false,                        // ✅ Mettre à true pour debug
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'suivi-chantier-app',
+    },
+  },
 });
 
 /**
@@ -39,5 +51,46 @@ export async function setSupabaseRLSContext(nomsociete) {
     }
   } catch (err) {
     console.error('❌ Exception setSupabaseRLSContext:', err);
+  }
+}
+
+/**
+ * ✅ NOUVEAU : Vérifier et rafraîchir la session si nécessaire
+ */
+export async function ensureValidSession() {
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      console.error('❌ Erreur getSession:', error);
+      return false;
+    }
+    
+    if (!session) {
+      console.warn('⚠️ Pas de session active');
+      return false;
+    }
+    
+    // Vérifier si le token expire bientôt (dans moins de 5 minutes)
+    const expiresAt = session.expires_at * 1000; // Convertir en millisecondes
+    const now = Date.now();
+    const timeUntilExpiry = expiresAt - now;
+    
+    if (timeUntilExpiry < 5 * 60 * 1000) {
+      console.log('🔄 Token expire bientôt, rafraîchissement...');
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      
+      if (refreshError) {
+        console.error('❌ Erreur rafraîchissement:', refreshError);
+        return false;
+      }
+      
+      console.log('✅ Session rafraîchie');
+    }
+    
+    return true;
+  } catch (err) {
+    console.error('❌ Exception ensureValidSession:', err);
+    return false;
   }
 }
