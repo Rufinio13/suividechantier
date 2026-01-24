@@ -11,42 +11,42 @@ export function AuthProvider({ children }) {
   
   const refreshIntervalRef = useRef(null);
 
-  // ✅ Charger le profil avec TIMEOUT
+  // ✅ Charger le profil SANS abort (Supabase ne le supporte pas)
   const loadProfile = async (userId) => {
-    console.log('🔍 loadProfile pour userId:', userId);
+    console.log('🔍 loadProfile START pour userId:', userId);
     
     try {
-      // ✅ TIMEOUT de 10 secondes
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .abortSignal(controller.signal)
         .single();
       
-      clearTimeout(timeoutId);
-      
-      console.log('📡 Réponse profiles:', { 
+      console.log('📡 loadProfile RESPONSE:', { 
         hasData: !!data, 
         errorCode: error?.code,
-        errorMessage: error?.message 
+        errorMessage: error?.message,
+        data: data
       });
       
       if (error) {
-        console.error('❌ Erreur profile:', error);
+        console.error('❌ Erreur loadProfile:', error);
         
         // Si erreur RLS/JWT, forcer déconnexion
-        if (error.code === 'PGRST301' || error.message?.includes('JWT')) {
+        if (error.code === 'PGRST301' || error.code === 'PGRST116' || error.message?.includes('JWT')) {
           console.warn('⚠️ Erreur authentification, déconnexion forcée');
-          localStorage.removeItem('supabase.auth.token');
+          localStorage.clear();
           await supabase.auth.signOut();
           setUser(null);
           setProfile(null);
           setLoading(false);
           return;
+        }
+        
+        // Si pas de données trouvées (PGRST116)
+        if (error.code === 'PGRST116') {
+          console.error('❌ AUCUN PROFIL TROUVÉ pour cet utilisateur !');
+          alert(`Erreur : Aucun profil trouvé pour l'utilisateur ${userId}. Veuillez contacter l'administrateur.`);
         }
         
         setProfile(null);
@@ -55,13 +55,13 @@ export function AuthProvider({ children }) {
       }
       
       if (!data) {
-        console.error('❌ Pas de profile trouvé');
+        console.error('❌ Pas de profile dans la réponse');
         setProfile(null);
         setLoading(false);
         return;
       }
       
-      console.log('✅ Profile chargé:', data.nomsociete);
+      console.log('✅ Profile chargé avec succès:', data.nomsociete);
       setProfile(data);
       setLoading(false);
       
@@ -70,14 +70,7 @@ export function AuthProvider({ children }) {
       }
       
     } catch (err) {
-      console.error("❌ Exception loadProfile:", err);
-      
-      // Si timeout
-      if (err.name === 'AbortError') {
-        console.error('⏱️ TIMEOUT - Requête profile trop longue');
-        alert('Erreur de chargement du profil. Veuillez vider le cache et réessayer.');
-      }
-      
+      console.error("❌ EXCEPTION loadProfile:", err);
       setProfile(null);
       setLoading(false);
     }
@@ -142,7 +135,7 @@ export function AuthProvider({ children }) {
           
           if (error.message?.includes('JWT') || error.message?.includes('Invalid') || error.message?.includes('expired')) {
             console.warn('⚠️ Token invalide, nettoyage');
-            localStorage.removeItem('supabase.auth.token');
+            localStorage.clear();
             await supabase.auth.signOut();
           }
           
@@ -172,8 +165,11 @@ export function AuthProvider({ children }) {
           setUser(session.user);
         }
         
-        // ✅ Charger le profil (avec timeout intégré)
+        // Charger le profil
+        console.log('📞 Appel loadProfile...');
         await loadProfile(session.user.id);
+        
+        console.log('✅ loadProfile terminé');
         
         startAutoRefresh();
 
@@ -199,7 +195,9 @@ export function AuthProvider({ children }) {
         if (event === "SIGNED_IN" && session?.user) {
           console.log('✅ SIGNED_IN:', session.user.id);
           setUser(session.user);
+          console.log('📞 Appel loadProfile depuis SIGNED_IN...');
           await loadProfile(session.user.id);
+          console.log('✅ loadProfile terminé depuis SIGNED_IN');
           startAutoRefresh();
         }
 
@@ -230,7 +228,7 @@ export function AuthProvider({ children }) {
 
   // Connexion
   const signIn = async (email, password) => {
-    console.log('🔐 SignIn:', email);
+    console.log('🔐 SignIn START:', email);
     
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ 
@@ -243,7 +241,7 @@ export function AuthProvider({ children }) {
         return { data: null, error };
       }
       
-      console.log('✅ SignIn OK');
+      console.log('✅ SignIn SUCCESS');
       return { data, error: null };
       
     } catch (error) {
