@@ -11,33 +11,59 @@ export function AuthProvider({ children }) {
   
   const refreshIntervalRef = useRef(null);
 
-  // Charger le profil
+  // ✅ Charger le profil avec TIMEOUT
   const loadProfile = async (userId) => {
     console.log('🔍 loadProfile pour userId:', userId);
     
     try {
+      // ✅ TIMEOUT de 10 secondes
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
+        .abortSignal(controller.signal)
         .single();
       
-      console.log('📡 Réponse profiles:', { hasData: !!data, error: error?.message });
+      clearTimeout(timeoutId);
+      
+      console.log('📡 Réponse profiles:', { 
+        hasData: !!data, 
+        errorCode: error?.code,
+        errorMessage: error?.message 
+      });
       
       if (error) {
         console.error('❌ Erreur profile:', error);
+        
+        // Si erreur RLS/JWT, forcer déconnexion
+        if (error.code === 'PGRST301' || error.message?.includes('JWT')) {
+          console.warn('⚠️ Erreur authentification, déconnexion forcée');
+          localStorage.removeItem('supabase.auth.token');
+          await supabase.auth.signOut();
+          setUser(null);
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
+        
         setProfile(null);
+        setLoading(false);
         return;
       }
       
       if (!data) {
-        console.error('❌ Pas de profile');
+        console.error('❌ Pas de profile trouvé');
         setProfile(null);
+        setLoading(false);
         return;
       }
       
       console.log('✅ Profile chargé:', data.nomsociete);
       setProfile(data);
+      setLoading(false);
       
       if (data?.nomsociete) {
         await setSupabaseRLSContext(data.nomsociete);
@@ -45,7 +71,15 @@ export function AuthProvider({ children }) {
       
     } catch (err) {
       console.error("❌ Exception loadProfile:", err);
+      
+      // Si timeout
+      if (err.name === 'AbortError') {
+        console.error('⏱️ TIMEOUT - Requête profile trop longue');
+        alert('Erreur de chargement du profil. Veuillez vider le cache et réessayer.');
+      }
+      
       setProfile(null);
+      setLoading(false);
     }
   };
 
@@ -60,6 +94,8 @@ export function AuthProvider({ children }) {
     
     setUser(null);
     setProfile(null);
+    setLoading(false);
+    
     await supabase.auth.signOut();
   };
 
@@ -104,8 +140,7 @@ export function AuthProvider({ children }) {
         if (error) {
           console.error('❌ Erreur session:', error);
           
-          // Nettoyer si token invalide
-          if (error.message?.includes('JWT') || error.message?.includes('Invalid')) {
+          if (error.message?.includes('JWT') || error.message?.includes('Invalid') || error.message?.includes('expired')) {
             console.warn('⚠️ Token invalide, nettoyage');
             localStorage.removeItem('supabase.auth.token');
             await supabase.auth.signOut();
@@ -137,11 +172,8 @@ export function AuthProvider({ children }) {
           setUser(session.user);
         }
         
+        // ✅ Charger le profil (avec timeout intégré)
         await loadProfile(session.user.id);
-        
-        if (isMounted) {
-          setLoading(false);
-        }
         
         startAutoRefresh();
 
@@ -160,15 +192,14 @@ export function AuthProvider({ children }) {
     // Listener auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('🔔 Auth event:', event, session?.user?.id);
+        console.log('🔔 Auth event:', event);
         
         if (!isMounted) return;
 
         if (event === "SIGNED_IN" && session?.user) {
-          console.log('✅ SIGNED_IN');
+          console.log('✅ SIGNED_IN:', session.user.id);
           setUser(session.user);
           await loadProfile(session.user.id);
-          setLoading(false);
           startAutoRefresh();
         }
 
