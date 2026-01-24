@@ -38,15 +38,21 @@ export function AuthProvider({ children }) {
       
       if (error) {
         console.error('❌ Erreur Supabase:', error);
-        setProfile(null);
-        setLoading(false);
+        
+        if (isMounted.current) {
+          setProfile(null);
+          setLoading(false);
+        }
         return;
       }
       
       if (!data) {
         console.error('❌ Aucun profile trouvé');
-        setProfile(null);
-        setLoading(false);
+        
+        if (isMounted.current) {
+          setProfile(null);
+          setLoading(false);
+        }
         return;
       }
       
@@ -250,15 +256,33 @@ export function AuthProvider({ children }) {
     };
   }, []); // ✅ Dépendances vides pour éviter re-déclenchements
 
+  // ✅ CORRIGÉ : signIn doit retourner la promesse ET gérer l'auto-refresh
   const signIn = async (email, password) => {
-    const result = await supabase.auth.signInWithPassword({ email, password });
-    
-    // ✅ Si connexion réussie, démarrer l'auto-refresh
-    if (result.data?.session) {
-      startAutoRefresh();
+    try {
+      console.log('🔐 Tentative de connexion pour:', email);
+      
+      const { data, error } = await supabase.auth.signInWithPassword({ 
+        email, 
+        password 
+      });
+      
+      if (error) {
+        console.error('❌ Erreur signIn:', error);
+        throw error;
+      }
+      
+      console.log('✅ Connexion réussie');
+      
+      // ✅ Si connexion réussie, démarrer l'auto-refresh
+      if (data?.session) {
+        startAutoRefresh();
+      }
+      
+      return { data, error: null };
+    } catch (error) {
+      console.error('❌ Exception signIn:', error);
+      return { data: null, error };
     }
-    
-    return result;
   };
 
   console.log('📊 AuthProvider render - user:', !!user, 'profile:', !!profile, 'loading:', loading);
