@@ -1,6 +1,6 @@
 // src/context/AuthProvider.jsx
 import { createContext, useEffect, useState, useRef } from "react";
-import { supabase, setSupabaseRLSContext, ensureValidSession } from "@/lib/supabaseClient";
+import { supabase, setSupabaseRLSContext } from "@/lib/supabaseClient";
 
 export const AuthContext = createContext();
 
@@ -9,14 +9,12 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  // ✅ Refs pour éviter doubles appels
   const isLoadingProfile = useRef(false);
   const isMounted = useRef(true);
   const refreshIntervalRef = useRef(null);
+  const sessionCheckAttempts = useRef(0);
 
-  // Charger le profil via le client Supabase authentifié
   const loadProfile = async (userId) => {
-    // ✅ Éviter doubles appels
     if (isLoadingProfile.current) {
       console.log('⚠️ loadProfile déjà en cours, ignoré');
       return;
@@ -26,18 +24,23 @@ export function AuthProvider({ children }) {
     console.log('🔍 loadProfile pour userId:', userId);
     
     try {
-      console.log('📡 Appel Supabase client...');
-      
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
       
-      console.log('📡 Réponse Supabase:', { hasData: !!data, error });
+      console.log('📡 Réponse Supabase profiles:', { hasData: !!data, error });
       
       if (error) {
-        console.error('❌ Erreur Supabase:', error);
+        console.error('❌ Erreur chargement profile:', error);
+        
+        // Si erreur JWT, nettoyer la session
+        if (error.message?.includes('JWT') || error.code === 'PGRST301') {
+          console.warn('⚠️ Token JWT invalide, déconnexion...');
+          await forceLogout();
+          return;
+        }
         
         if (isMounted.current) {
           setProfile(null);
@@ -48,7 +51,6 @@ export function AuthProvider({ children }) {
       
       if (!data) {
         console.error('❌ Aucun profile trouvé');
-        
         if (isMounted.current) {
           setProfile(null);
           setLoading(false);
@@ -78,28 +80,43 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const signOut = async () => {
-    console.log('👋 Déconnexion...');
+  // ✅ NOUVEAU : Forcer la déconnexion propre
+  const forceLogout = async () => {
+    console.log('🧹 Force logout - Nettoyage complet');
     
-    // ✅ Arrêter l'intervalle de rafraîchissement
+    // Arrêter l'intervalle
     if (refreshIntervalRef.current) {
       clearInterval(refreshIntervalRef.current);
       refreshIntervalRef.current = null;
     }
     
-    await supabase.auth.signOut();
+    // Nettoyer le state
     setUser(null);
     setProfile(null);
+    setLoading(false);
+    
+    // Nettoyer les storages
+    try {
+      localStorage.removeItem('supabase.auth.token');
+      sessionStorage.clear();
+    } catch (e) {
+      console.error('Erreur nettoyage storage:', e);
+    }
+    
+    // Déconnecter de Supabase
+    await supabase.auth.signOut();
   };
 
-  // ✅ NOUVEAU : Démarrer le rafraîchissement automatique
+  const signOut = async () => {
+    console.log('👋 Déconnexion...');
+    await forceLogout();
+  };
+
   const startAutoRefresh = () => {
-    // Nettoyer l'ancien intervalle si existant
     if (refreshIntervalRef.current) {
       clearInterval(refreshIntervalRef.current);
     }
     
-    // Vérifier et rafraîchir la session toutes les 15 minutes
     refreshIntervalRef.current = setInterval(async () => {
       console.log('⏰ Vérification périodique de la session...');
       
@@ -118,7 +135,6 @@ export function AuthProvider({ children }) {
       
       console.log(`⏰ Session expire dans ${minutesLeft} minutes`);
       
-      // Si expire dans moins de 10 minutes, rafraîchir
       if (timeUntilExpiry < 10 * 60 * 1000) {
         console.log('🔄 Rafraîchissement préventif de la session...');
         const { error: refreshError } = await supabase.auth.refreshSession();
@@ -129,7 +145,7 @@ export function AuthProvider({ children }) {
           console.log('✅ Session rafraîchie avec succès');
         }
       }
-    }, 15 * 60 * 1000); // Toutes les 15 minutes
+    }, 15 * 60 * 1000);
     
     console.log('✅ Auto-refresh activé (toutes les 15 minutes)');
   };
@@ -137,29 +153,28 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     console.log('🚀 AuthProvider useEffect DÉMARRE');
     isMounted.current = true;
+    sessionCheckAttempts.current = 0;
 
-    // ✅ NETTOYER LES TOKENS INVALIDES AU DÉMARRAGE
-    const cleanInvalidTokens = async () => {
+    const initAuth = async () => {
       try {
+        console.log('🔍 Vérification session existante...');
+        
+        // ✅ Tentative 1 : getSession normale
         const { data, error } = await supabase.auth.getSession();
         
         if (error) {
           console.error('❌ Erreur getSession:', error);
           
-          // Si erreur de refresh token, nettoyer TOUT
-          if (error.message?.includes('Refresh Token') || error.message?.includes('Invalid')) {
-            console.warn('⚠️ Token invalide détecté, nettoyage complet...');
-            
-            // Nettoyer localStorage
-            localStorage.clear();
-            
-            // Nettoyer sessionStorage
-            sessionStorage.clear();
-            
-            // Déconnecter proprement
-            await supabase.auth.signOut();
-            
-            console.log('✅ Nettoyage complet effectué');
+          // Si token invalide ou expiré, nettoyer
+          if (
+            error.message?.includes('Refresh Token') || 
+            error.message?.includes('Invalid') ||
+            error.message?.includes('JWT') ||
+            error.message?.includes('expired')
+          ) {
+            console.warn('⚠️ Session corrompue détectée, nettoyage...');
+            await forceLogout();
+            return;
           }
           
           setUser(null);
@@ -168,72 +183,80 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        if (data?.session?.user) {
-          console.log('👤 User trouvé:', data.session.user.id);
-          setUser(data.session.user);
-          await loadProfile(data.session.user.id);
-          
-          // ✅ Démarrer le rafraîchissement automatique
-          startAutoRefresh();
-        } else {
-          console.log('❌ Pas de session');
+        // ✅ Pas de session = pas connecté (normal)
+        if (!data?.session) {
+          console.log('ℹ️ Pas de session active (utilisateur non connecté)');
+          setUser(null);
+          setProfile(null);
           setLoading(false);
+          return;
         }
+
+        // ✅ Session existe, vérifier si elle est valide
+        const session = data.session;
+        const expiresAt = session.expires_at * 1000;
+        const now = Date.now();
+        
+        console.log('📅 Session expire à:', new Date(expiresAt).toLocaleString());
+        console.log('🕐 Maintenant:', new Date(now).toLocaleString());
+        
+        // Si session expirée
+        if (expiresAt < now) {
+          console.warn('⚠️ Session expirée, tentative de refresh...');
+          
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+          
+          if (refreshError || !refreshData.session) {
+            console.error('❌ Impossible de rafraîchir, déconnexion');
+            await forceLogout();
+            return;
+          }
+          
+          console.log('✅ Session rafraîchie avec succès');
+          setUser(refreshData.session.user);
+          await loadProfile(refreshData.session.user.id);
+          startAutoRefresh();
+          return;
+        }
+
+        // ✅ Session valide
+        console.log('✅ Session valide, userId:', session.user.id);
+        setUser(session.user);
+        await loadProfile(session.user.id);
+        startAutoRefresh();
+
       } catch (err) {
-        console.error('❌ Exception critique getSession:', err);
-        
-        // Nettoyage d'urgence
-        localStorage.clear();
-        sessionStorage.clear();
-        await supabase.auth.signOut();
-        
-        setUser(null);
-        setProfile(null);
-        setLoading(false);
+        console.error('❌ Exception critique initAuth:', err);
+        await forceLogout();
       }
     };
 
-    // ✅ VÉRIFIER LA SESSION INITIALE
-    cleanInvalidTokens();
+    initAuth();
 
     // ✅ ÉCOUTER LES CHANGEMENTS D'AUTH
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('🔔 onAuthStateChange:', event);
+        console.log('🔔 onAuthStateChange:', event, session?.user?.id);
         
         if (!isMounted.current) return;
 
         if (event === "SIGNED_IN" && session?.user) {
           console.log('✅ SIGNED_IN - userId:', session.user.id);
           
-          // ✅ Ne charger le profile QUE si on n'a pas déjà un user avec le même ID
           if (user?.id !== session.user.id) {
             setUser(session.user);
             await loadProfile(session.user.id);
-            
-            // ✅ Démarrer le rafraîchissement automatique
             startAutoRefresh();
-          } else {
-            console.log('ℹ️ User déjà chargé, ignoré');
           }
         }
 
         if (event === "TOKEN_REFRESHED") {
-          console.log('✅ TOKEN_REFRESHED - Session rafraîchie automatiquement');
+          console.log('✅ TOKEN_REFRESHED');
         }
 
         if (event === "SIGNED_OUT") {
           console.log('👋 SIGNED_OUT');
-          
-          // ✅ Arrêter le rafraîchissement
-          if (refreshIntervalRef.current) {
-            clearInterval(refreshIntervalRef.current);
-            refreshIntervalRef.current = null;
-          }
-          
-          setUser(null);
-          setProfile(null);
-          setLoading(false);
+          await forceLogout();
         }
         
         if (event === "USER_UPDATED") {
@@ -246,7 +269,6 @@ export function AuthProvider({ children }) {
       console.log('🧹 AuthProvider cleanup');
       isMounted.current = false;
       
-      // ✅ Nettoyer l'intervalle
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
         refreshIntervalRef.current = null;
@@ -254,12 +276,14 @@ export function AuthProvider({ children }) {
       
       authListener?.subscription?.unsubscribe();
     };
-  }, []); // ✅ Dépendances vides pour éviter re-déclenchements
+  }, []);
 
-  // ✅ CORRIGÉ : signIn doit retourner la promesse ET gérer l'auto-refresh
   const signIn = async (email, password) => {
     try {
       console.log('🔐 Tentative de connexion pour:', email);
+      
+      // ✅ Nettoyer d'abord toute session existante
+      await supabase.auth.signOut();
       
       const { data, error } = await supabase.auth.signInWithPassword({ 
         email, 
@@ -273,7 +297,6 @@ export function AuthProvider({ children }) {
       
       console.log('✅ Connexion réussie');
       
-      // ✅ Si connexion réussie, démarrer l'auto-refresh
       if (data?.session) {
         startAutoRefresh();
       }
