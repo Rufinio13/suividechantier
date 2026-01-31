@@ -26,7 +26,7 @@ export function AuthProvider({ children }) {
     try {
       // Timeout Promise
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout')), 10000);
+        setTimeout(() => reject(new Error('Timeout')), 100000);
       });
       
       // Requête Supabase
