@@ -12,7 +12,7 @@ export function AuthProvider({ children }) {
   const refreshIntervalRef = useRef(null);
   const isLoadingProfileRef = useRef(false);
 
-  // ✅ Charger le profil avec protection contre les appels multiples
+  // ✅ Charger le profil SANS déconnexion automatique
   const loadProfile = async (userId) => {
     // Éviter les appels simultanés
     if (isLoadingProfileRef.current) {
@@ -24,9 +24,9 @@ export function AuthProvider({ children }) {
     console.log('🔍 loadProfile START pour userId:', userId);
     
     try {
-      // Timeout Promise
+      // ✅ Timeout de 20 secondes (plus généreux)
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout')), 100000);
+        setTimeout(() => reject(new Error('Timeout')), 20000);
       });
       
       // Requête Supabase
@@ -49,25 +49,10 @@ export function AuthProvider({ children }) {
       if (error) {
         console.error('❌ Erreur loadProfile:', error);
         
-        // Erreurs qui nécessitent une déconnexion
-        const shouldSignOut = 
-          error.code === 'PGRST301' || 
-          error.code === 'PGRST116' || 
-          error.message?.includes('JWT') ||
-          error.message?.includes('expired');
-        
-        if (shouldSignOut) {
-          console.warn('⚠️ Déconnexion requise');
-          localStorage.clear();
-          await supabase.auth.signOut();
-          setUser(null);
-          setProfile(null);
-          // ✅ RESET du contexte RLS
-          await setSupabaseRLSContext(null);
-        } else {
-          setProfile(null);
-        }
-        
+        // ✅ NE JAMAIS déconnecter automatiquement
+        // Juste signaler l'erreur
+        console.warn('⚠️ Impossible de charger le profil, mais session conservée');
+        setProfile(null);
         setLoading(false);
         isLoadingProfileRef.current = false;
         return;
@@ -83,7 +68,7 @@ export function AuthProvider({ children }) {
       
       console.log('✅ Profil chargé:', data.nomsociete);
       
-      // ✅ TOUJOURS définir le contexte RLS AVANT de set le profile
+      // ✅ Définir le contexte RLS
       if (data?.nomsociete) {
         console.log('🔐 Définition du contexte RLS:', data.nomsociete);
         await setSupabaseRLSContext(data.nomsociete);
@@ -95,16 +80,8 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.error("❌ EXCEPTION loadProfile:", err);
       
-      // Si timeout ou erreur réseau, déconnecter
-      if (err.message === 'Timeout' || err.message?.includes('network')) {
-        console.warn('⚠️ Timeout/Network error - déconnexion');
-        localStorage.clear();
-        await supabase.auth.signOut();
-        setUser(null);
-        // ✅ RESET du contexte RLS
-        await setSupabaseRLSContext(null);
-      }
-      
+      // ✅ NE JAMAIS déconnecter automatiquement, quelle que soit l'erreur
+      console.warn('⚠️ Erreur chargement profil, mais session conservée');
       setProfile(null);
       setLoading(false);
       
@@ -113,9 +90,9 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // ✅ Déconnexion avec RESET du contexte RLS
+  // ✅ Déconnexion MANUELLE uniquement
   const signOut = async () => {
-    console.log('👋 Déconnexion');
+    console.log('👋 Déconnexion manuelle');
     
     if (refreshIntervalRef.current) {
       clearInterval(refreshIntervalRef.current);
@@ -127,14 +104,14 @@ export function AuthProvider({ children }) {
     setProfile(null);
     setLoading(false);
     
-    // ✅ RESET du contexte RLS AVANT de sign out
+    // Reset du contexte RLS
     await setSupabaseRLSContext(null);
     await supabase.auth.signOut();
     
-    console.log('✅ Contexte RLS réinitialisé');
+    console.log('✅ Déconnexion terminée');
   };
 
-  // Auto-refresh session
+  // ✅ Auto-refresh session (sans déconnexion)
   const startAutoRefresh = () => {
     if (refreshIntervalRef.current) {
       clearInterval(refreshIntervalRef.current);
@@ -155,16 +132,20 @@ export function AuthProvider({ children }) {
         
         // Rafraîchir 10 minutes avant expiration
         if (timeUntilExpiry < 10 * 60 * 1000 && timeUntilExpiry > 0) {
-          console.log('🔄 Rafraîchissement session');
+          console.log('🔄 Rafraîchissement automatique de la session');
           const { error } = await supabase.auth.refreshSession();
           
           if (error) {
             console.error('❌ Erreur refresh session:', error);
-            await signOut();
+            // ✅ NE PAS déconnecter, juste logger
+            console.warn('⚠️ Impossible de rafraîchir la session, mais on continue');
+          } else {
+            console.log('✅ Session rafraîchie avec succès');
           }
         }
       } catch (err) {
         console.error('❌ Erreur auto-refresh:', err);
+        // ✅ NE PAS déconnecter
       }
     }, 5 * 60 * 1000); // Vérifier toutes les 5 minutes
   };
@@ -185,13 +166,9 @@ export function AuthProvider({ children }) {
           userId: data?.session?.user?.id
         });
         
-        // Erreur de session
+        // ✅ Erreur de session : juste logger, ne pas bloquer
         if (error) {
           console.error('❌ Erreur session:', error);
-          localStorage.clear();
-          // ✅ RESET du contexte RLS
-          await setSupabaseRLSContext(null);
-          await supabase.auth.signOut();
           
           if (isMounted) {
             setUser(null);
@@ -204,9 +181,6 @@ export function AuthProvider({ children }) {
         // Pas de session
         if (!data?.session) {
           console.log('ℹ️ Pas de session');
-          // ✅ RESET du contexte RLS
-          await setSupabaseRLSContext(null);
-          
           if (isMounted) {
             setUser(null);
             setProfile(null);
@@ -215,22 +189,32 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        // Session expirée
+        // ✅ Session expirée : essayer de rafraîchir au lieu de déconnecter
         const session = data.session;
         const expiresAt = session.expires_at * 1000;
         const now = Date.now();
         
         if (now >= expiresAt) {
-          console.warn('⚠️ Session expirée');
-          localStorage.clear();
-          // ✅ RESET du contexte RLS
-          await setSupabaseRLSContext(null);
-          await supabase.auth.signOut();
+          console.warn('⚠️ Session expirée, tentative de rafraîchissement...');
           
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+          
+          if (refreshError || !refreshData.session) {
+            console.error('❌ Impossible de rafraîchir la session');
+            if (isMounted) {
+              setUser(null);
+              setProfile(null);
+              setLoading(false);
+            }
+            return;
+          }
+          
+          console.log('✅ Session rafraîchie avec succès');
+          // Utiliser la nouvelle session
           if (isMounted) {
-            setUser(null);
-            setProfile(null);
-            setLoading(false);
+            setUser(refreshData.session.user);
+            await loadProfile(refreshData.session.user.id);
+            startAutoRefresh();
           }
           return;
         }
@@ -268,7 +252,6 @@ export function AuthProvider({ children }) {
             if (session?.user) {
               console.log('✅ SIGNED_IN:', session.user.id);
               setUser(session.user);
-              // ✅ Charger le profil (qui mettra à jour le contexte RLS)
               await loadProfile(session.user.id);
               startAutoRefresh();
             }
@@ -281,7 +264,6 @@ export function AuthProvider({ children }) {
               refreshIntervalRef.current = null;
             }
             isLoadingProfileRef.current = false;
-            // ✅ RESET du contexte RLS
             await setSupabaseRLSContext(null);
             setUser(null);
             setProfile(null);
@@ -290,7 +272,7 @@ export function AuthProvider({ children }) {
 
           case "TOKEN_REFRESHED":
             console.log('🔄 TOKEN_REFRESHED');
-            // Si on a perdu le profil, le recharger
+            // Recharger le profil si nécessaire
             if (session?.user && !profile && !isLoadingProfileRef.current) {
               await loadProfile(session.user.id);
             }
@@ -317,7 +299,7 @@ export function AuthProvider({ children }) {
       
       subscription?.unsubscribe();
     };
-  }, []); // ✅ Dépendances vides - effect ne s'exécute qu'au mount
+  }, []);
 
   // Connexion
   const signIn = async (email, password) => {
