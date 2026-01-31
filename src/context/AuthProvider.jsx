@@ -17,7 +17,7 @@ export function AuthProvider({ children }) {
     
     try {
       const { data, error } = await supabase
-        .from('utilisateurs')  // ✅ CORRECTION ICI
+        .from('profiles')  // ✅ CORRECTION ICI
         .select('*')
         .eq('id', userId)
         .single();
