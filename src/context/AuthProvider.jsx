@@ -11,13 +11,13 @@ export function AuthProvider({ children }) {
   
   const refreshIntervalRef = useRef(null);
 
-  // ✅ Charger le profil SANS abort (Supabase ne le supporte pas)
+  // ✅ CORRIGÉ : Charger depuis 'utilisateurs' au lieu de 'profiles'
   const loadProfile = async (userId) => {
     console.log('🔍 loadProfile START pour userId:', userId);
     
     try {
       const { data, error } = await supabase
-        .from('profiles')
+        .from('utilisateurs')  // ✅ CORRECTION ICI
         .select('*')
         .eq('id', userId)
         .single();
