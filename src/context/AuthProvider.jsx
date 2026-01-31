@@ -10,80 +10,75 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   
   const refreshIntervalRef = useRef(null);
-  const loadProfileTimeoutRef = useRef(null); // ✅ NOUVEAU
+  const isLoadingProfileRef = useRef(false);
 
-  // ✅ CORRIGÉ : Charger le profil avec timeout
+  // ✅ Charger le profil avec protection contre les appels multiples
   const loadProfile = async (userId) => {
-    console.log('🔍 loadProfile START pour userId:', userId);
-    
-    // ✅ Nettoyer le timeout précédent
-    if (loadProfileTimeoutRef.current) {
-      clearTimeout(loadProfileTimeoutRef.current);
+    // Éviter les appels simultanés
+    if (isLoadingProfileRef.current) {
+      console.log('⚠️ loadProfile déjà en cours, skip');
+      return;
     }
     
-    // ✅ Timeout de sécurité : débloquer après 8 secondes
-    loadProfileTimeoutRef.current = setTimeout(() => {
-      console.warn('⏱️ TIMEOUT loadProfile après 8 secondes - déconnexion');
-      setProfile(null);
-      setUser(null);
-      setLoading(false);
-      localStorage.clear();
-      supabase.auth.signOut();
-    }, 8000);
+    isLoadingProfileRef.current = true;
+    console.log('🔍 loadProfile START pour userId:', userId);
     
     try {
-      const { data, error } = await supabase
+      // Timeout Promise
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout')), 10000);
+      });
+      
+      // Requête Supabase
+      const fetchPromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
       
-      // ✅ Nettoyer le timeout si réponse reçue
-      if (loadProfileTimeoutRef.current) {
-        clearTimeout(loadProfileTimeoutRef.current);
-        loadProfileTimeoutRef.current = null;
-      }
+      // Race entre timeout et requête
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
       
       console.log('📡 loadProfile RESPONSE:', { 
         hasData: !!data, 
         errorCode: error?.code,
-        errorMessage: error?.message,
-        data: data
+        errorMessage: error?.message
       });
       
       if (error) {
         console.error('❌ Erreur loadProfile:', error);
         
-        // Si erreur RLS/JWT, forcer déconnexion
-        if (error.code === 'PGRST301' || error.code === 'PGRST116' || error.message?.includes('JWT')) {
-          console.warn('⚠️ Erreur authentification, déconnexion forcée');
+        // Erreurs qui nécessitent une déconnexion
+        const shouldSignOut = 
+          error.code === 'PGRST301' || 
+          error.code === 'PGRST116' || 
+          error.message?.includes('JWT') ||
+          error.message?.includes('expired');
+        
+        if (shouldSignOut) {
+          console.warn('⚠️ Déconnexion requise');
           localStorage.clear();
           await supabase.auth.signOut();
           setUser(null);
           setProfile(null);
-          setLoading(false);
-          return;
+        } else {
+          setProfile(null);
         }
         
-        // Si pas de données trouvées (PGRST116)
-        if (error.code === 'PGRST116') {
-          console.error('❌ AUCUN PROFIL TROUVÉ pour cet utilisateur !');
-          alert(`Erreur : Aucun profil trouvé pour l'utilisateur ${userId}. Veuillez contacter l'administrateur.`);
-        }
-        
-        setProfile(null);
         setLoading(false);
+        isLoadingProfileRef.current = false;
         return;
       }
       
       if (!data) {
-        console.error('❌ Pas de profile dans la réponse');
+        console.error('❌ Pas de profil');
         setProfile(null);
         setLoading(false);
+        isLoadingProfileRef.current = false;
         return;
       }
       
-      console.log('✅ Profile chargé avec succès:', data.nomsociete);
+      console.log('✅ Profil chargé:', data.nomsociete);
       setProfile(data);
       setLoading(false);
       
@@ -94,14 +89,19 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.error("❌ EXCEPTION loadProfile:", err);
       
-      // ✅ Nettoyer le timeout
-      if (loadProfileTimeoutRef.current) {
-        clearTimeout(loadProfileTimeoutRef.current);
-        loadProfileTimeoutRef.current = null;
+      // Si timeout ou erreur réseau, déconnecter
+      if (err.message === 'Timeout' || err.message?.includes('network')) {
+        console.warn('⚠️ Timeout/Network error - déconnexion');
+        localStorage.clear();
+        await supabase.auth.signOut();
+        setUser(null);
       }
       
       setProfile(null);
       setLoading(false);
+      
+    } finally {
+      isLoadingProfileRef.current = false;
     }
   };
 
@@ -109,17 +109,12 @@ export function AuthProvider({ children }) {
   const signOut = async () => {
     console.log('👋 Déconnexion');
     
-    // ✅ Nettoyer les timeouts
     if (refreshIntervalRef.current) {
       clearInterval(refreshIntervalRef.current);
       refreshIntervalRef.current = null;
     }
     
-    if (loadProfileTimeoutRef.current) {
-      clearTimeout(loadProfileTimeoutRef.current);
-      loadProfileTimeoutRef.current = null;
-    }
-    
+    isLoadingProfileRef.current = false;
     setUser(null);
     setProfile(null);
     setLoading(false);
@@ -127,26 +122,39 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut();
   };
 
-  // Auto-refresh
+  // Auto-refresh session
   const startAutoRefresh = () => {
     if (refreshIntervalRef.current) {
       clearInterval(refreshIntervalRef.current);
     }
     
     refreshIntervalRef.current = setInterval(async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) return;
-      
-      const expiresAt = session.expires_at * 1000;
-      const now = Date.now();
-      const timeUntilExpiry = expiresAt - now;
-      
-      if (timeUntilExpiry < 10 * 60 * 1000) {
-        console.log('🔄 Rafraîchissement session');
-        await supabase.auth.refreshSession();
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          console.log('⚠️ Plus de session active');
+          return;
+        }
+        
+        const expiresAt = session.expires_at * 1000;
+        const now = Date.now();
+        const timeUntilExpiry = expiresAt - now;
+        
+        // Rafraîchir 10 minutes avant expiration
+        if (timeUntilExpiry < 10 * 60 * 1000 && timeUntilExpiry > 0) {
+          console.log('🔄 Rafraîchissement session');
+          const { error } = await supabase.auth.refreshSession();
+          
+          if (error) {
+            console.error('❌ Erreur refresh session:', error);
+            await signOut();
+          }
+        }
+      } catch (err) {
+        console.error('❌ Erreur auto-refresh:', err);
       }
-    }, 15 * 60 * 1000);
+    }, 5 * 60 * 1000); // Vérifier toutes les 5 minutes
   };
 
   // Effect principal
@@ -157,7 +165,6 @@ export function AuthProvider({ children }) {
 
     const initAuth = async () => {
       try {
-        // ✅ Vérifier si la session est expirée
         const { data, error } = await supabase.auth.getSession();
         
         console.log('🔍 Session check:', { 
@@ -166,14 +173,11 @@ export function AuthProvider({ children }) {
           userId: data?.session?.user?.id
         });
         
+        // Erreur de session
         if (error) {
           console.error('❌ Erreur session:', error);
-          
-          if (error.message?.includes('JWT') || error.message?.includes('Invalid') || error.message?.includes('expired')) {
-            console.warn('⚠️ Token invalide, nettoyage');
-            localStorage.clear();
-            await supabase.auth.signOut();
-          }
+          localStorage.clear();
+          await supabase.auth.signOut();
           
           if (isMounted) {
             setUser(null);
@@ -183,6 +187,7 @@ export function AuthProvider({ children }) {
           return;
         }
 
+        // Pas de session
         if (!data?.session) {
           console.log('ℹ️ Pas de session');
           if (isMounted) {
@@ -193,15 +198,16 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        // ✅ Vérifier si la session est expirée
+        // Session expirée
         const session = data.session;
         const expiresAt = session.expires_at * 1000;
         const now = Date.now();
         
-        if (now > expiresAt) {
-          console.warn('⚠️ Session expirée, déconnexion');
+        if (now >= expiresAt) {
+          console.warn('⚠️ Session expirée');
           localStorage.clear();
           await supabase.auth.signOut();
+          
           if (isMounted) {
             setUser(null);
             setProfile(null);
@@ -210,19 +216,14 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        console.log('✅ Session trouvée:', session.user.id);
+        // Session valide
+        console.log('✅ Session valide:', session.user.id);
         
         if (isMounted) {
           setUser(session.user);
+          await loadProfile(session.user.id);
+          startAutoRefresh();
         }
-        
-        // Charger le profil
-        console.log('📞 Appel loadProfile...');
-        await loadProfile(session.user.id);
-        
-        console.log('✅ loadProfile terminé');
-        
-        startAutoRefresh();
 
       } catch (err) {
         console.error('❌ Exception initAuth:', err);
@@ -236,63 +237,65 @@ export function AuthProvider({ children }) {
 
     initAuth();
 
-    // Listener auth changes
+    // Listener auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('🔔 Auth event:', event);
         
         if (!isMounted) return;
 
-        if (event === "SIGNED_IN" && session?.user) {
-          console.log('✅ SIGNED_IN:', session.user.id);
-          setUser(session.user);
-          console.log('📞 Appel loadProfile depuis SIGNED_IN...');
-          await loadProfile(session.user.id);
-          console.log('✅ loadProfile terminé depuis SIGNED_IN');
-          startAutoRefresh();
-        }
+        switch (event) {
+          case "SIGNED_IN":
+            if (session?.user) {
+              console.log('✅ SIGNED_IN:', session.user.id);
+              setUser(session.user);
+              await loadProfile(session.user.id);
+              startAutoRefresh();
+            }
+            break;
 
-        if (event === "SIGNED_OUT") {
-          console.log('👋 SIGNED_OUT');
-          if (refreshIntervalRef.current) {
-            clearInterval(refreshIntervalRef.current);
-            refreshIntervalRef.current = null;
-          }
-          if (loadProfileTimeoutRef.current) {
-            clearTimeout(loadProfileTimeoutRef.current);
-            loadProfileTimeoutRef.current = null;
-          }
-          setUser(null);
-          setProfile(null);
-          setLoading(false);
-        }
-        
-        // ✅ NOUVEAU : Gérer TOKEN_REFRESHED
-        if (event === "TOKEN_REFRESHED") {
-          console.log('🔄 Token rafraîchi');
-          if (session?.user && !profile) {
-            console.log('📞 Recharger le profil après refresh token');
-            await loadProfile(session.user.id);
-          }
+          case "SIGNED_OUT":
+            console.log('👋 SIGNED_OUT');
+            if (refreshIntervalRef.current) {
+              clearInterval(refreshIntervalRef.current);
+              refreshIntervalRef.current = null;
+            }
+            isLoadingProfileRef.current = false;
+            setUser(null);
+            setProfile(null);
+            setLoading(false);
+            break;
+
+          case "TOKEN_REFRESHED":
+            console.log('🔄 TOKEN_REFRESHED');
+            // Si on a perdu le profil, le recharger
+            if (session?.user && !profile && !isLoadingProfileRef.current) {
+              await loadProfile(session.user.id);
+            }
+            break;
+
+          case "USER_UPDATED":
+            console.log('🔄 USER_UPDATED');
+            if (session?.user) {
+              await loadProfile(session.user.id);
+            }
+            break;
         }
       }
     );
 
+    // Cleanup
     return () => {
-      console.log('🧹 Cleanup');
+      console.log('🧹 AuthProvider cleanup');
       isMounted = false;
       
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
       }
       
-      if (loadProfileTimeoutRef.current) {
-        clearTimeout(loadProfileTimeoutRef.current);
-      }
-      
       subscription?.unsubscribe();
     };
-  }, []);
+  }, []); // ✅ Dépendances vides - effect ne s'exécute qu'au mount
 
   // Connexion
   const signIn = async (email, password) => {
@@ -318,7 +321,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  console.log('📊 Render - user:', !!user, 'profile:', !!profile, 'loading:', loading);
+  console.log('📊 AuthProvider state - user:', !!user, 'profile:', !!profile, 'loading:', loading);
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, signIn, signOut }}>
