@@ -22,48 +22,93 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
   const [uploading, setUploading] = useState({});
   const [saving, setSaving] = useState({});
 
-  // Récupérer uniquement les NC assignées à cet artisan
+  // ✅ CORRIGÉ : Récupérer NC du modèle ET des points spécifiques
   const mesNC = useMemo(() => {
     const points = [];
     const controlesChantier = controles.filter(c => c.chantier_id === chantierId);
 
     controlesChantier.forEach(ctrl => {
       const modele = modelesCQ.find(m => m.id === ctrl.modele_cq_id);
-      if (!modele || !ctrl.resultats) return;
+      if (!modele) return;
 
-      Object.entries(ctrl.resultats).forEach(([categorieId, resultatsCategorie]) => {
-        const categorie = modele.categories?.find(c => c.id === categorieId);
-        if (!categorie) return;
+      // ✅ 1️⃣ RÉCUPÉRER NC DU MODÈLE DE BASE (ctrl.resultats)
+      if (ctrl.resultats) {
+        Object.entries(ctrl.resultats).forEach(([categorieId, resultatsCategorie]) => {
+          const categorie = modele.categories?.find(c => c.id === categorieId);
+          if (!categorie) return;
 
-        Object.entries(resultatsCategorie).forEach(([sousCategorieId, resultatsSousCategorie]) => {
-          const sousCategorie = categorie.sousCategories?.find(sc => sc.id === sousCategorieId);
-          if (!sousCategorie) return;
+          Object.entries(resultatsCategorie).forEach(([sousCategorieId, resultatsSousCategorie]) => {
+            const sousCategorie = categorie.sousCategories?.find(sc => sc.id === sousCategorieId);
+            if (!sousCategorie) return;
 
-          Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
-            if (
-              resultatPoint.resultat === 'NC' && 
-              resultatPoint.soustraitant_id === soustraitantId &&
-              !resultatPoint.repriseValidee
-            ) {
-              const pointControle = sousCategorie.pointsControle?.find(pc => pc.id === pointControleId);
-              if (pointControle) {
+            Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
+              if (
+                resultatPoint.resultat === 'NC' && 
+                resultatPoint.soustraitant_id === soustraitantId &&
+                !resultatPoint.repriseValidee
+              ) {
+                const pointControle = sousCategorie.pointsControle?.find(pc => pc.id === pointControleId);
+                if (pointControle) {
+                  points.push({
+                    ...resultatPoint,
+                    pointControleId,
+                    libelle: pointControle.libelle,
+                    modeleTitre: modele.titre,
+                    categorieNom: categorie.nom,
+                    sousCategorieNom: sousCategorie.nom,
+                    controleId: ctrl.id,
+                    modeleId: modele.id,
+                    categorieId,
+                    sousCategorieId,
+                  });
+                }
+              }
+            });
+          });
+        });
+      }
+
+      // ✅ 2️⃣ RÉCUPÉRER NC DES POINTS SPÉCIFIQUES CHANTIER (ctrl.points_specifiques)
+      if (ctrl.points_specifiques) {
+        Object.entries(ctrl.points_specifiques).forEach(([categorieId, categoriePoints]) => {
+          const categorie = modele.categories?.find(c => c.id === categorieId);
+          
+          Object.entries(categoriePoints).forEach(([sousCategorieKey, pointsMap]) => {
+            // Trouver la sous-catégorie (peut être '_global' ou un ID réel)
+            const sousCategorie = sousCategorieKey === '_global' 
+              ? { id: '_global', nom: 'Points spécifiques' }
+              : categorie?.sousCategories?.find(sc => sc.id === sousCategorieKey);
+            
+            if (!sousCategorie) return;
+
+            Object.entries(pointsMap).forEach(([pointControleId, pointData]) => {
+              // Vérifier si ce point a un résultat NC dans ctrl.resultats
+              const resultatPoint = ctrl.resultats?.[categorieId]?.[sousCategorieKey]?.[pointControleId];
+              
+              if (
+                resultatPoint?.resultat === 'NC' && 
+                resultatPoint.soustraitant_id === soustraitantId &&
+                !resultatPoint.repriseValidee
+              ) {
                 points.push({
                   ...resultatPoint,
                   pointControleId,
-                  libelle: pointControle.libelle,
+                  libelle: pointData.libelle,
+                  description: pointData.description,
                   modeleTitre: modele.titre,
-                  categorieNom: categorie.nom,
+                  categorieNom: categorie?.nom || 'Catégorie spécifique',
                   sousCategorieNom: sousCategorie.nom,
                   controleId: ctrl.id,
                   modeleId: modele.id,
                   categorieId,
-                  sousCategorieId,
+                  sousCategorieId: sousCategorieKey,
+                  isChantierSpecific: true, // ✅ Flag pour identifier
                 });
               }
-            }
+            });
           });
         });
-      });
+      }
     });
 
     return points.sort((a, b) => {
@@ -75,7 +120,6 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
 
   // Fonction pour télécharger une image
   const handleDownloadImage = (imageUrl, fileName = 'photo.jpg') => {
-    // Si l'image est déjà visible, créer un lien de téléchargement direct
     const a = document.createElement('a');
     a.href = imageUrl;
     a.download = fileName;
@@ -300,6 +344,11 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                 </CardTitle>
                 <CardDescription className="text-xs">
                   {pnc.modeleTitre} &gt; {pnc.categorieNom} &gt; {pnc.sousCategorieNom}
+                  {pnc.isChantierSpecific && (
+                    <span className="ml-2 text-purple-600 font-medium">
+                      [Point spécifique chantier]
+                    </span>
+                  )}
                 </CardDescription>
               </CardHeader>
 
@@ -340,7 +389,6 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                       <span className="text-xs font-medium text-slate-600">Photos NC :</span>
                       <div className="mt-2 grid grid-cols-4 gap-2">
                         {pnc.photos.map((photo, i) => {
-                          // ✅ Gérer photo = string OU photo = {url: "..."}
                           const photoUrl = typeof photo === 'string' ? photo : photo?.url || photo;
                           return (
                             <img 
@@ -363,7 +411,6 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                       <span className="text-xs font-medium text-slate-600">Plans annotés :</span>
                       <div className="mt-2 grid grid-cols-4 gap-2">
                         {pnc.plans.map((plan, i) => {
-                          // ✅ Gérer plan = string OU plan = {url: "..."}
                           const planUrl = typeof plan === 'string' ? plan : plan?.url || plan;
                           return (
                             <img 

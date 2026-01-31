@@ -7,7 +7,7 @@ import { useCommentaires } from '@/context/CommentairesContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft, MessageSquare, Send, AlertTriangle, Edit2, Trash2, CheckSquare, Plus, CheckCircle } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Send, AlertTriangle, Edit2, Trash2, CheckSquare, Plus } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
@@ -36,7 +36,7 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
   const commentaires = useMemo(() => getCommentairesByChantier(chantierId), [chantierId, getCommentairesByChantier]);
 
   // =========================================
-  // RÉCUPÉRER LES POINTS NC NON VALIDÉS
+  // ✅ CORRIGÉ : RÉCUPÉRER LES POINTS NC NON VALIDÉS (MODÈLE + SPÉCIFIQUES)
   // =========================================
   const pointsNCNonValides = useMemo(() => {
     const points = [];
@@ -44,37 +44,76 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
 
     controlesChantier.forEach(ctrl => {
       const modele = modelesCQ.find(m => m.id === ctrl.modele_cq_id);
-      if (!modele || !ctrl.resultats) return;
+      if (!modele) return;
 
-      Object.entries(ctrl.resultats).forEach(([categorieId, resultatsCategorie]) => {
-        const categorie = modele.categories?.find(c => c.id === categorieId);
-        if (!categorie) return;
+      // ✅ 1️⃣ NC DU MODÈLE DE BASE (ctrl.resultats)
+      if (ctrl.resultats) {
+        Object.entries(ctrl.resultats).forEach(([categorieId, resultatsCategorie]) => {
+          const categorie = modele.categories?.find(c => c.id === categorieId);
+          if (!categorie) return;
 
-        Object.entries(resultatsCategorie).forEach(([sousCategorieId, resultatsSousCategorie]) => {
-          const sousCategorie = categorie.sousCategories?.find(sc => sc.id === sousCategorieId);
-          if (!sousCategorie) return;
+          Object.entries(resultatsCategorie).forEach(([sousCategorieId, resultatsSousCategorie]) => {
+            const sousCategorie = categorie.sousCategories?.find(sc => sc.id === sousCategorieId);
+            if (!sousCategorie) return;
 
-          Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
-            if (resultatPoint.resultat === 'NC' && !resultatPoint.repriseValidee) {
-              const pointControle = sousCategorie.pointsControle?.find(pc => pc.id === pointControleId);
-              if (pointControle) {
+            Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
+              if (resultatPoint.resultat === 'NC' && !resultatPoint.repriseValidee) {
+                const pointControle = sousCategorie.pointsControle?.find(pc => pc.id === pointControleId);
+                if (pointControle) {
+                  points.push({
+                    ...resultatPoint,
+                    pointControleId,
+                    libelle: pointControle.libelle,
+                    modeleTitre: modele.titre,
+                    categorieNom: categorie.nom,
+                    sousCategorieNom: sousCategorie.nom,
+                    controleId: ctrl.id,
+                    modeleId: modele.id,
+                    categorieId,
+                    sousCategorieId,
+                  });
+                }
+              }
+            });
+          });
+        });
+      }
+
+      // ✅ 2️⃣ NC DES POINTS SPÉCIFIQUES CHANTIER (ctrl.points_specifiques)
+      if (ctrl.points_specifiques) {
+        Object.entries(ctrl.points_specifiques).forEach(([categorieId, categoriePoints]) => {
+          const categorie = modele.categories?.find(c => c.id === categorieId);
+          
+          Object.entries(categoriePoints).forEach(([sousCategorieKey, pointsMap]) => {
+            const sousCategorie = sousCategorieKey === '_global' 
+              ? { id: '_global', nom: 'Points spécifiques' }
+              : categorie?.sousCategories?.find(sc => sc.id === sousCategorieKey);
+            
+            if (!sousCategorie) return;
+
+            Object.entries(pointsMap).forEach(([pointControleId, pointData]) => {
+              const resultatPoint = ctrl.resultats?.[categorieId]?.[sousCategorieKey]?.[pointControleId];
+              
+              if (resultatPoint?.resultat === 'NC' && !resultatPoint.repriseValidee) {
                 points.push({
                   ...resultatPoint,
                   pointControleId,
-                  libelle: pointControle.libelle,
+                  libelle: pointData.libelle,
+                  description: pointData.description,
                   modeleTitre: modele.titre,
-                  categorieNom: categorie.nom,
+                  categorieNom: categorie?.nom || 'Catégorie spécifique',
                   sousCategorieNom: sousCategorie.nom,
                   controleId: ctrl.id,
                   modeleId: modele.id,
                   categorieId,
-                  sousCategorieId,
+                  sousCategorieId: sousCategorieKey,
+                  isChantierSpecific: true,
                 });
               }
-            }
+            });
           });
         });
-      });
+      }
     });
 
     return points.sort((a, b) => {
@@ -278,6 +317,11 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
                       <p className="font-medium text-sm text-red-700">{pnc.libelle}</p>
                       <p className="text-xs text-slate-500">
                         {pnc.modeleTitre} &gt; {pnc.categorieNom} &gt; {pnc.sousCategorieNom}
+                        {pnc.isChantierSpecific && (
+                          <span className="ml-2 text-purple-600 font-medium">
+                            [Point spécifique chantier]
+                          </span>
+                        )}
                       </p>
                       {pnc.explicationNC && (
                         <p className="text-xs text-slate-600 mt-1">
@@ -292,7 +336,7 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
                       )}
                     </div>
                     
-                    {/* ✅ CHECKBOX VALIDATION au lieu du bouton Edit */}
+                    {/* ✅ CHECKBOX VALIDATION */}
                     <div className="flex items-center space-x-2 ml-3">
                       <Checkbox
                         id={`valider-${pnc.modeleId}-${pnc.pointControleId}`}
