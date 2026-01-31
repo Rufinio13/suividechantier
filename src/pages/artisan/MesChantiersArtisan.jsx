@@ -94,7 +94,7 @@ export function MesChantiersArtisan() {
     ).length;
   };
 
-  // Compter les NC par chantier
+  // ✅ CORRIGÉ : Compter les NC par chantier avec vérification des suppressions
   const countNC = (chantierId) => {
     if (!monSousTraitantId) return 0;
     
@@ -102,21 +102,85 @@ export function MesChantiersArtisan() {
     const controlesChantier = controles.filter(c => c.chantier_id === chantierId);
 
     controlesChantier.forEach(ctrl => {
-      if (!ctrl.resultats) return;
+      const modele = modelesCQ.find(m => m.id === ctrl.modele_cq_id);
+      if (!modele) return;
 
-      Object.values(ctrl.resultats).forEach(categorie => {
-        Object.values(categorie).forEach(sousCategorie => {
-          Object.values(sousCategorie).forEach(point => {
-            if (
-              point.resultat === 'NC' && 
-              point.soustraitant_id === monSousTraitantId &&
-              !point.repriseValidee
-            ) {
-              count++;
-            }
+      // ✅ 1️⃣ NC DU MODÈLE DE BASE (ctrl.resultats)
+      if (ctrl.resultats) {
+        Object.entries(ctrl.resultats).forEach(([categorieId, resultatsCategorie]) => {
+          const categorie = modele.categories?.find(c => c.id === categorieId);
+          if (!categorie) return;
+
+          // ✅ Vérifier si la catégorie n'est pas supprimée
+          const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
+          if (categoriesSupprimees.includes(categorieId)) return;
+
+          Object.entries(resultatsCategorie).forEach(([sousCategorieId, resultatsSousCategorie]) => {
+            const sousCategorie = categorie.sousCategories?.find(sc => sc.id === sousCategorieId);
+            if (!sousCategorie) return;
+
+            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
+            const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
+            if (sousCategoriesSupprimees.includes(sousCategorieId)) return;
+
+            Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
+              // ✅ Vérifier si le point n'est pas supprimé
+              const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieId] || [];
+              if (pointsSupprimes.includes(pointControleId)) return;
+
+              if (
+                resultatPoint.resultat === 'NC' && 
+                resultatPoint.soustraitant_id === monSousTraitantId &&
+                !resultatPoint.repriseValidee
+              ) {
+                const pointControle = sousCategorie.pointsControle?.find(pc => pc.id === pointControleId);
+                if (pointControle) {
+                  count++;
+                }
+              }
+            });
           });
         });
-      });
+      }
+
+      // ✅ 2️⃣ NC DES POINTS SPÉCIFIQUES (ctrl.points_specifiques)
+      if (ctrl.points_specifiques) {
+        Object.entries(ctrl.points_specifiques).forEach(([categorieId, categoriePoints]) => {
+          const categorie = modele.categories?.find(c => c.id === categorieId);
+          
+          // ✅ Vérifier si la catégorie n'est pas supprimée
+          const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
+          if (categoriesSupprimees.includes(categorieId)) return;
+          
+          Object.entries(categoriePoints).forEach(([sousCategorieKey, pointsMap]) => {
+            const sousCategorie = sousCategorieKey === '_global' 
+              ? { id: '_global', nom: 'Points spécifiques' }
+              : categorie?.sousCategories?.find(sc => sc.id === sousCategorieKey);
+            
+            if (!sousCategorie) return;
+
+            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
+            const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
+            if (sousCategoriesSupprimees.includes(sousCategorieKey)) return;
+
+            Object.entries(pointsMap).forEach(([pointControleId, pointData]) => {
+              // ✅ Vérifier si le point n'est pas supprimé
+              const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieKey] || [];
+              if (pointsSupprimes.includes(pointControleId)) return;
+
+              const resultatPoint = ctrl.resultats?.[categorieId]?.[sousCategorieKey]?.[pointControleId];
+              
+              if (
+                resultatPoint?.resultat === 'NC' && 
+                resultatPoint.soustraitant_id === monSousTraitantId &&
+                !resultatPoint.repriseValidee
+              ) {
+                count++;
+              }
+            });
+          });
+        });
+      }
     });
 
     return count;

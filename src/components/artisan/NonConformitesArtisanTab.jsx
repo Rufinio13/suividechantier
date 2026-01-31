@@ -22,7 +22,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
   const [uploading, setUploading] = useState({});
   const [saving, setSaving] = useState({});
 
-  // ✅ CORRIGÉ : Récupérer NC du modèle ET des points spécifiques
+  // ✅ CORRIGÉ : Récupérer NC avec vérification des suppressions
   const mesNC = useMemo(() => {
     const points = [];
     const controlesChantier = controles.filter(c => c.chantier_id === chantierId);
@@ -37,11 +37,23 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
           const categorie = modele.categories?.find(c => c.id === categorieId);
           if (!categorie) return;
 
+          // ✅ Vérifier si la catégorie n'est pas supprimée
+          const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
+          if (categoriesSupprimees.includes(categorieId)) return;
+
           Object.entries(resultatsCategorie).forEach(([sousCategorieId, resultatsSousCategorie]) => {
             const sousCategorie = categorie.sousCategories?.find(sc => sc.id === sousCategorieId);
             if (!sousCategorie) return;
 
+            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
+            const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
+            if (sousCategoriesSupprimees.includes(sousCategorieId)) return;
+
             Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
+              // ✅ Vérifier si le point n'est pas supprimé
+              const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieId] || [];
+              if (pointsSupprimes.includes(pointControleId)) return;
+
               if (
                 resultatPoint.resultat === 'NC' && 
                 resultatPoint.soustraitant_id === soustraitantId &&
@@ -73,6 +85,10 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
         Object.entries(ctrl.points_specifiques).forEach(([categorieId, categoriePoints]) => {
           const categorie = modele.categories?.find(c => c.id === categorieId);
           
+          // ✅ Vérifier si la catégorie n'est pas supprimée
+          const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
+          if (categoriesSupprimees.includes(categorieId)) return;
+          
           Object.entries(categoriePoints).forEach(([sousCategorieKey, pointsMap]) => {
             // Trouver la sous-catégorie (peut être '_global' ou un ID réel)
             const sousCategorie = sousCategorieKey === '_global' 
@@ -81,7 +97,15 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
             
             if (!sousCategorie) return;
 
+            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
+            const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
+            if (sousCategoriesSupprimees.includes(sousCategorieKey)) return;
+
             Object.entries(pointsMap).forEach(([pointControleId, pointData]) => {
+              // ✅ Vérifier si le point n'est pas supprimé
+              const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieKey] || [];
+              if (pointsSupprimes.includes(pointControleId)) return;
+
               // Vérifier si ce point a un résultat NC dans ctrl.resultats
               const resultatPoint = ctrl.resultats?.[categorieId]?.[sousCategorieKey]?.[pointControleId];
               
@@ -102,7 +126,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                   modeleId: modele.id,
                   categorieId,
                   sousCategorieId: sousCategorieKey,
-                  isChantierSpecific: true, // ✅ Flag pour identifier
+                  isChantierSpecific: true,
                 });
               }
             });

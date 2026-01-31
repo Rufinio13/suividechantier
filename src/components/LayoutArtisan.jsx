@@ -26,7 +26,7 @@ export function LayoutArtisan() {
   const navigate = useNavigate();
   const { signOut, profile } = useAuth();
   const { sousTraitants } = useSousTraitant();
-  const { controles } = useReferentielCQ();
+  const { controles, modelesCQ } = useReferentielCQ();
   const { taches } = useChantier();
 
   // Trouver l'ID du sous-traitant
@@ -55,13 +55,8 @@ export function LayoutArtisan() {
         const maintenant = new Date();
         
         const enRetard = taches.filter(t => {
-          // Tâche assignée à cet artisan
           const estMonTache = t.assignetype === 'soustraitant' && t.assigneid === monSousTraitantId;
-          
-          // ✅ NON terminée par l'artisan ET NON validée par le constructeur
           const nonTerminee = !t.artisan_termine && !t.constructeur_valide;
-          
-          // Date de fin passée
           const dateFinPassee = t.datefin && new Date(t.datefin) < maintenant;
           
           return estMonTache && nonTerminee && dateFinPassee;
@@ -79,7 +74,7 @@ export function LayoutArtisan() {
     return () => clearInterval(interval);
   }, [monSousTraitantId, taches]);
   
-  // ✅ NOUVEAU : Compter les notifications
+  // ✅ Compter les notifications
   useEffect(() => {
     const loadNotificationsCount = async () => {
       if (!monSousTraitantId) return;
@@ -111,34 +106,98 @@ export function LayoutArtisan() {
     return () => clearInterval(interval);
   }, [monSousTraitantId]);
 
-  // ✅ Compter les NC non validées
+  // ✅ CORRIGÉ : Compter les NC EXACTEMENT comme NonConformitesArtisanTab
   useEffect(() => {
     const loadNcCount = () => {
-      if (!monSousTraitantId || !controles || mesChantierIds.length === 0) return;
+      if (!monSousTraitantId || !controles || !modelesCQ || mesChantierIds.length === 0) return;
 
       try {
         let totalNC = 0;
+        const controlesChantier = controles.filter(c => mesChantierIds.includes(c.chantier_id));
 
-        controles.forEach(ctrl => {
-          if (!mesChantierIds.includes(ctrl.chantier_id)) return;
-          if (!ctrl.resultats) return;
+        controlesChantier.forEach(ctrl => {
+          const modele = modelesCQ.find(m => m.id === ctrl.modele_cq_id);
+          if (!modele) return;
 
-          Object.values(ctrl.resultats).forEach(categorie => {
-            Object.values(categorie).forEach(sousCategorie => {
-              Object.values(sousCategorie).forEach(point => {
-                if (
-                  point.resultat === 'NC' &&
-                  point.soustraitant_id === monSousTraitantId &&
-                  !point.repriseValidee
-                ) {
-                  totalNC++;
-                }
+          // ✅ 1️⃣ NC DU MODÈLE DE BASE (ctrl.resultats)
+          if (ctrl.resultats) {
+            Object.entries(ctrl.resultats).forEach(([categorieId, resultatsCategorie]) => {
+              const categorie = modele.categories?.find(c => c.id === categorieId);
+              if (!categorie) return;
+
+              // ✅ Vérifier si la catégorie n'est pas supprimée
+              const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
+              if (categoriesSupprimees.includes(categorieId)) return;
+
+              Object.entries(resultatsCategorie).forEach(([sousCategorieId, resultatsSousCategorie]) => {
+                const sousCategorie = categorie.sousCategories?.find(sc => sc.id === sousCategorieId);
+                if (!sousCategorie) return;
+
+                // ✅ Vérifier si la sous-catégorie n'est pas supprimée
+                const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
+                if (sousCategoriesSupprimees.includes(sousCategorieId)) return;
+
+                Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
+                  // ✅ Vérifier si le point n'est pas supprimé
+                  const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieId] || [];
+                  if (pointsSupprimes.includes(pointControleId)) return;
+
+                  if (
+                    resultatPoint.resultat === 'NC' && 
+                    resultatPoint.soustraitant_id === monSousTraitantId &&
+                    !resultatPoint.repriseValidee
+                  ) {
+                    const pointControle = sousCategorie.pointsControle?.find(pc => pc.id === pointControleId);
+                    if (pointControle) {
+                      totalNC++;
+                    }
+                  }
+                });
               });
             });
-          });
+          }
+
+          // ✅ 2️⃣ NC DES POINTS SPÉCIFIQUES (ctrl.points_specifiques)
+          if (ctrl.points_specifiques) {
+            Object.entries(ctrl.points_specifiques).forEach(([categorieId, categoriePoints]) => {
+              const categorie = modele.categories?.find(c => c.id === categorieId);
+              
+              // ✅ Vérifier si la catégorie n'est pas supprimée
+              const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
+              if (categoriesSupprimees.includes(categorieId)) return;
+              
+              Object.entries(categoriePoints).forEach(([sousCategorieKey, pointsMap]) => {
+                const sousCategorie = sousCategorieKey === '_global' 
+                  ? { id: '_global', nom: 'Points spécifiques' }
+                  : categorie?.sousCategories?.find(sc => sc.id === sousCategorieKey);
+                
+                if (!sousCategorie) return;
+
+                // ✅ Vérifier si la sous-catégorie n'est pas supprimée
+                const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
+                if (sousCategoriesSupprimees.includes(sousCategorieKey)) return;
+
+                Object.entries(pointsMap).forEach(([pointControleId, pointData]) => {
+                  // ✅ Vérifier si le point n'est pas supprimé
+                  const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieKey] || [];
+                  if (pointsSupprimes.includes(pointControleId)) return;
+
+                  const resultatPoint = ctrl.resultats?.[categorieId]?.[sousCategorieKey]?.[pointControleId];
+                  
+                  if (
+                    resultatPoint?.resultat === 'NC' && 
+                    resultatPoint.soustraitant_id === monSousTraitantId &&
+                    !resultatPoint.repriseValidee
+                  ) {
+                    totalNC++;
+                  }
+                });
+              });
+            });
+          }
         });
 
-        console.log('📊 NC non validées:', totalNC);
+        console.log('📊 NC non validées (après filtrage supprimés):', totalNC);
         setNcCount(totalNC);
       } catch (error) {
         console.error('Erreur comptage NC:', error);
@@ -148,7 +207,7 @@ export function LayoutArtisan() {
     loadNcCount();
     const interval = setInterval(loadNcCount, 30000);
     return () => clearInterval(interval);
-  }, [monSousTraitantId, controles, mesChantierIds]);
+  }, [monSousTraitantId, controles, modelesCQ, mesChantierIds]);
 
   // ✅ Compter les documents à signer + nouveaux
   useEffect(() => {
@@ -167,7 +226,6 @@ export function LayoutArtisan() {
         let nouveauxCount = 0;
 
         data.forEach(doc => {
-          // Documents à signer
           if (
             doc.necessite_signature &&
             doc.artisan_assigne_signature === monSousTraitantId &&
@@ -175,7 +233,6 @@ export function LayoutArtisan() {
           ) {
             aSignerCount++;
           }
-          // Nouveaux documents (normaux, non vus, et pas à signer)
           else if (
             !doc.necessite_signature &&
             (!doc.artisans_vus || !doc.artisans_vus.includes(monSousTraitantId))
@@ -329,7 +386,7 @@ export function LayoutArtisan() {
                     {item.name}
                   </div>
                   
-                  {/* ✅ Badges multiples pour chantiers */}
+                  {/* ✅ Badges multiples */}
                   {item.badges && (
                     <div className="flex gap-1">
                       {item.badges.map((badge, idx) => 
@@ -351,7 +408,7 @@ export function LayoutArtisan() {
                     </div>
                   )}
                   
-                  {/* ✅ Badge unique pour SAV et Calendrier (tâches en retard) */}
+                  {/* ✅ Badge unique */}
                   {item.badge > 0 && (
                     <Badge 
                       variant="destructive" 

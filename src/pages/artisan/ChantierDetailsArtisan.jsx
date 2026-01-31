@@ -20,7 +20,7 @@ export function ChantierDetailsArtisan() {
   const { profile } = useAuth();
   const { chantiers, taches, loading } = useChantier();
   const { sousTraitants } = useSousTraitant();
-  const { controles } = useReferentielCQ();
+  const { controles, modelesCQ } = useReferentielCQ();
   
   const [activeTab, setActiveTab] = useState('taches');
   const [docsASignerCount, setDocsASignerCount] = useState(0);
@@ -48,33 +48,97 @@ export function ChantierDetailsArtisan() {
     );
   }, [taches, id, monSousTraitantId]);
 
-  // Compter les NC
+  // ✅ CORRIGÉ : Compter les NC avec vérification des suppressions
   const ncCount = useMemo(() => {
-    if (!monSousTraitantId || !id || !controles) return 0;
+    if (!monSousTraitantId || !id || !controles || !modelesCQ) return 0;
 
     let count = 0;
+    const controlesChantier = controles.filter(c => c.chantier_id === id);
 
-    controles.forEach(ctrl => {
-      if (ctrl.chantier_id !== id) return;
-      if (!ctrl.resultats) return;
+    controlesChantier.forEach(ctrl => {
+      const modele = modelesCQ.find(m => m.id === ctrl.modele_cq_id);
+      if (!modele) return;
 
-      Object.values(ctrl.resultats).forEach(categorie => {
-        Object.values(categorie).forEach(sousCategorie => {
-          Object.values(sousCategorie).forEach(point => {
-            if (
-              point.resultat === 'NC' &&
-              point.soustraitant_id === monSousTraitantId &&
-              !point.repriseValidee
-            ) {
-              count++;
-            }
+      // ✅ 1️⃣ NC DU MODÈLE DE BASE (ctrl.resultats)
+      if (ctrl.resultats) {
+        Object.entries(ctrl.resultats).forEach(([categorieId, resultatsCategorie]) => {
+          const categorie = modele.categories?.find(c => c.id === categorieId);
+          if (!categorie) return;
+
+          // ✅ Vérifier si la catégorie n'est pas supprimée
+          const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
+          if (categoriesSupprimees.includes(categorieId)) return;
+
+          Object.entries(resultatsCategorie).forEach(([sousCategorieId, resultatsSousCategorie]) => {
+            const sousCategorie = categorie.sousCategories?.find(sc => sc.id === sousCategorieId);
+            if (!sousCategorie) return;
+
+            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
+            const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
+            if (sousCategoriesSupprimees.includes(sousCategorieId)) return;
+
+            Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
+              // ✅ Vérifier si le point n'est pas supprimé
+              const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieId] || [];
+              if (pointsSupprimes.includes(pointControleId)) return;
+
+              if (
+                resultatPoint.resultat === 'NC' && 
+                resultatPoint.soustraitant_id === monSousTraitantId &&
+                !resultatPoint.repriseValidee
+              ) {
+                const pointControle = sousCategorie.pointsControle?.find(pc => pc.id === pointControleId);
+                if (pointControle) {
+                  count++;
+                }
+              }
+            });
           });
         });
-      });
+      }
+
+      // ✅ 2️⃣ NC DES POINTS SPÉCIFIQUES (ctrl.points_specifiques)
+      if (ctrl.points_specifiques) {
+        Object.entries(ctrl.points_specifiques).forEach(([categorieId, categoriePoints]) => {
+          const categorie = modele.categories?.find(c => c.id === categorieId);
+          
+          // ✅ Vérifier si la catégorie n'est pas supprimée
+          const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
+          if (categoriesSupprimees.includes(categorieId)) return;
+          
+          Object.entries(categoriePoints).forEach(([sousCategorieKey, pointsMap]) => {
+            const sousCategorie = sousCategorieKey === '_global' 
+              ? { id: '_global', nom: 'Points spécifiques' }
+              : categorie?.sousCategories?.find(sc => sc.id === sousCategorieKey);
+            
+            if (!sousCategorie) return;
+
+            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
+            const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
+            if (sousCategoriesSupprimees.includes(sousCategorieKey)) return;
+
+            Object.entries(pointsMap).forEach(([pointControleId, pointData]) => {
+              // ✅ Vérifier si le point n'est pas supprimé
+              const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieKey] || [];
+              if (pointsSupprimes.includes(pointControleId)) return;
+
+              const resultatPoint = ctrl.resultats?.[categorieId]?.[sousCategorieKey]?.[pointControleId];
+              
+              if (
+                resultatPoint?.resultat === 'NC' && 
+                resultatPoint.soustraitant_id === monSousTraitantId &&
+                !resultatPoint.repriseValidee
+              ) {
+                count++;
+              }
+            });
+          });
+        });
+      }
     });
 
     return count;
-  }, [monSousTraitantId, id, controles]);
+  }, [monSousTraitantId, id, controles, modelesCQ]);
 
   // ✅ Compter les documents
   useEffect(() => {

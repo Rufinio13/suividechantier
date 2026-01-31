@@ -33,7 +33,16 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
   const [editingCommentaire, setEditingCommentaire] = useState(null);
 
   const chantier = useMemo(() => chantiers.find(c => c.id === chantierId), [chantiers, chantierId]);
-  const commentaires = useMemo(() => getCommentairesByChantier(chantierId), [chantierId, getCommentairesByChantier]);
+  
+  // ✅ CORRIGÉ : Trier les commentaires par date décroissante (plus récent en premier)
+const commentaires = useMemo(() => {
+  const comments = getCommentairesByChantier(chantierId);
+  return comments.sort((a, b) => {
+    const dateA = a.date ? new Date(a.date) : new Date(0);
+    const dateB = b.date ? new Date(b.date) : new Date(0);
+    return dateA - dateB; // ✅ Ordre croissant (plus ancien en premier)
+  });
+}, [chantierId, getCommentairesByChantier]);
 
   // =========================================
   // ✅ CORRIGÉ : RÉCUPÉRER LES POINTS NC NON VALIDÉS (MODÈLE + SPÉCIFIQUES)
@@ -52,11 +61,23 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
           const categorie = modele.categories?.find(c => c.id === categorieId);
           if (!categorie) return;
 
+          // ✅ Vérifier si la catégorie n'est pas supprimée
+          const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
+          if (categoriesSupprimees.includes(categorieId)) return;
+
           Object.entries(resultatsCategorie).forEach(([sousCategorieId, resultatsSousCategorie]) => {
             const sousCategorie = categorie.sousCategories?.find(sc => sc.id === sousCategorieId);
             if (!sousCategorie) return;
 
+            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
+            const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
+            if (sousCategoriesSupprimees.includes(sousCategorieId)) return;
+
             Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
+              // ✅ Vérifier si le point n'est pas supprimé
+              const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieId] || [];
+              if (pointsSupprimes.includes(pointControleId)) return;
+
               if (resultatPoint.resultat === 'NC' && !resultatPoint.repriseValidee) {
                 const pointControle = sousCategorie.pointsControle?.find(pc => pc.id === pointControleId);
                 if (pointControle) {
@@ -84,6 +105,10 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
         Object.entries(ctrl.points_specifiques).forEach(([categorieId, categoriePoints]) => {
           const categorie = modele.categories?.find(c => c.id === categorieId);
           
+          // ✅ Vérifier si la catégorie n'est pas supprimée
+          const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
+          if (categoriesSupprimees.includes(categorieId)) return;
+          
           Object.entries(categoriePoints).forEach(([sousCategorieKey, pointsMap]) => {
             const sousCategorie = sousCategorieKey === '_global' 
               ? { id: '_global', nom: 'Points spécifiques' }
@@ -91,7 +116,15 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
             
             if (!sousCategorie) return;
 
+            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
+            const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
+            if (sousCategoriesSupprimees.includes(sousCategorieKey)) return;
+
             Object.entries(pointsMap).forEach(([pointControleId, pointData]) => {
+              // ✅ Vérifier si le point n'est pas supprimé
+              const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieKey] || [];
+              if (pointsSupprimes.includes(pointControleId)) return;
+
               const resultatPoint = ctrl.resultats?.[categorieId]?.[sousCategorieKey]?.[pointControleId];
               
               if (resultatPoint?.resultat === 'NC' && !resultatPoint.repriseValidee) {
