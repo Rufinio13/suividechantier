@@ -42,7 +42,8 @@ export function AuthProvider({ children }) {
       console.log('📡 loadProfile RESPONSE:', { 
         hasData: !!data, 
         errorCode: error?.code,
-        errorMessage: error?.message
+        errorMessage: error?.message,
+        nomsociete: data?.nomsociete
       });
       
       if (error) {
@@ -61,6 +62,8 @@ export function AuthProvider({ children }) {
           await supabase.auth.signOut();
           setUser(null);
           setProfile(null);
+          // ✅ RESET du contexte RLS
+          await setSupabaseRLSContext(null);
         } else {
           setProfile(null);
         }
@@ -79,12 +82,15 @@ export function AuthProvider({ children }) {
       }
       
       console.log('✅ Profil chargé:', data.nomsociete);
-      setProfile(data);
-      setLoading(false);
       
+      // ✅ TOUJOURS définir le contexte RLS AVANT de set le profile
       if (data?.nomsociete) {
+        console.log('🔐 Définition du contexte RLS:', data.nomsociete);
         await setSupabaseRLSContext(data.nomsociete);
       }
+      
+      setProfile(data);
+      setLoading(false);
       
     } catch (err) {
       console.error("❌ EXCEPTION loadProfile:", err);
@@ -95,6 +101,8 @@ export function AuthProvider({ children }) {
         localStorage.clear();
         await supabase.auth.signOut();
         setUser(null);
+        // ✅ RESET du contexte RLS
+        await setSupabaseRLSContext(null);
       }
       
       setProfile(null);
@@ -105,7 +113,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Déconnexion
+  // ✅ Déconnexion avec RESET du contexte RLS
   const signOut = async () => {
     console.log('👋 Déconnexion');
     
@@ -119,7 +127,11 @@ export function AuthProvider({ children }) {
     setProfile(null);
     setLoading(false);
     
+    // ✅ RESET du contexte RLS AVANT de sign out
+    await setSupabaseRLSContext(null);
     await supabase.auth.signOut();
+    
+    console.log('✅ Contexte RLS réinitialisé');
   };
 
   // Auto-refresh session
@@ -177,6 +189,8 @@ export function AuthProvider({ children }) {
         if (error) {
           console.error('❌ Erreur session:', error);
           localStorage.clear();
+          // ✅ RESET du contexte RLS
+          await setSupabaseRLSContext(null);
           await supabase.auth.signOut();
           
           if (isMounted) {
@@ -190,6 +204,9 @@ export function AuthProvider({ children }) {
         // Pas de session
         if (!data?.session) {
           console.log('ℹ️ Pas de session');
+          // ✅ RESET du contexte RLS
+          await setSupabaseRLSContext(null);
+          
           if (isMounted) {
             setUser(null);
             setProfile(null);
@@ -206,6 +223,8 @@ export function AuthProvider({ children }) {
         if (now >= expiresAt) {
           console.warn('⚠️ Session expirée');
           localStorage.clear();
+          // ✅ RESET du contexte RLS
+          await setSupabaseRLSContext(null);
           await supabase.auth.signOut();
           
           if (isMounted) {
@@ -249,6 +268,7 @@ export function AuthProvider({ children }) {
             if (session?.user) {
               console.log('✅ SIGNED_IN:', session.user.id);
               setUser(session.user);
+              // ✅ Charger le profil (qui mettra à jour le contexte RLS)
               await loadProfile(session.user.id);
               startAutoRefresh();
             }
@@ -261,6 +281,8 @@ export function AuthProvider({ children }) {
               refreshIntervalRef.current = null;
             }
             isLoadingProfileRef.current = false;
+            // ✅ RESET du contexte RLS
+            await setSupabaseRLSContext(null);
             setUser(null);
             setProfile(null);
             setLoading(false);
@@ -321,7 +343,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  console.log('📊 AuthProvider state - user:', !!user, 'profile:', !!profile, 'loading:', loading);
+  console.log('📊 AuthProvider state - user:', !!user, 'profile:', !!profile, 'loading:', loading, 'nomsociete:', profile?.nomsociete);
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, signIn, signOut }}>
