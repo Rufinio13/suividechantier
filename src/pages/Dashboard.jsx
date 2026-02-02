@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useChantier } from '@/context/ChantierContext.jsx';
+import { useSAV } from '@/context/SAVContext.jsx'; // ✅ AJOUT
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChantierCard } from '@/components/ChantierCard.jsx';
@@ -11,7 +12,8 @@ import { subWeeks, startOfDay } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
 
 export function Dashboard() {
-  const { chantiers, taches, sousTraitants, demandesSAV, loading: chantierLoading } = useChantier();
+  const { chantiers, taches, sousTraitants, loading: chantierLoading } = useChantier();
+  const { demandesSAV, loading: savLoading } = useSAV(); // ✅ AJOUT
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -32,13 +34,13 @@ export function Dashboard() {
     []
   );
 
-  if (authLoading || chantierLoading) {
+  if (authLoading || chantierLoading || savLoading) { // ✅ AJOUT savLoading
     return <div className="flex justify-center items-center h-64">Chargement...</div>;
   }
 
   const chantiersEnCoursCount = chantiers.filter(c => c.statut === 'En cours').length;
   const chantiersReceptionnesCount = chantiers.filter(c => c.statut === 'Réceptionné').length;
-  const savOuvertes = demandesSAV ? demandesSAV.filter(sav => !sav.repriseValidee).length : 0;
+  const savOuvertes = demandesSAV ? demandesSAV.filter(s => !s.constructeur_valide).length : 0; // ✅ CORRECTION
 
   const chantiersRecents = [...chantiers]
     .sort((a, b) => {
@@ -54,7 +56,7 @@ export function Dashboard() {
 
   return (
     <div className="space-y-8">
-      {/* Header - ❌ BOUTON DÉCONNEXION SUPPRIMÉ */}
+      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Tableau de bord</h1>
       </div>
