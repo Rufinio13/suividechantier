@@ -324,7 +324,13 @@ export function SAVList() {
                   </div>
                 </CardHeader>
                 <CardContent className="text-sm space-y-2">
-                  <p><strong>Description:</strong> {sav.description || "Aucune description"}</p>
+                  {/* ✅ Description avec sauts de ligne préservés */}
+                  <div>
+                    <p className="font-semibold mb-1">Description:</p>
+                    <p className="whitespace-pre-wrap text-slate-700">
+                      {sav.description || "Aucune description"}
+                    </p>
+                  </div>
                   
                   {/* ✅ Artisan assigné */}
                   {sav.soustraitant_id && (
@@ -354,7 +360,7 @@ export function SAVList() {
                         Intervention terminée par l'artisan le {formatDateTime(sav.artisan_termine_date)}
                       </p>
                       {sav.artisan_commentaire && (
-                        <p className="text-xs text-slate-700 mt-1">
+                        <p className="text-xs text-slate-700 mt-1 whitespace-pre-wrap">
                           <strong>Commentaire:</strong> {sav.artisan_commentaire}
                         </p>
                       )}
@@ -378,8 +384,13 @@ export function SAVList() {
                       </div>
                     </div>
                   )}
+                  
+                  {/* ✅ Notes avec sauts de ligne préservés */}
                   {sav.notes && (
-                    <p className="text-xs text-muted-foreground"><strong>Notes:</strong> {sav.notes}</p>
+                    <div className="text-xs text-muted-foreground">
+                      <strong>Notes:</strong>
+                      <p className="whitespace-pre-wrap mt-1">{sav.notes}</p>
+                    </div>
                   )}
                   
                   {/* ✅ Validation constructeur */}
