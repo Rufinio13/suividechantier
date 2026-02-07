@@ -9,7 +9,7 @@ import {
   endOfWeek,
   addWeeks,
   subWeeks,
-  addDays,
+  isPast,
   eachDayOfInterval,
   eachWeekOfInterval,
   isSameDay,
@@ -32,20 +32,6 @@ const DAY_GAP = 2;
 const CHANTIER_COL_WIDTH_DESKTOP = 200;
 const CHANTIER_COL_WIDTH_TABLET = 150;
 const CHANTIER_COL_WIDTH_MOBILE = 100;
-
-// ✅ Palette de couleurs pour les chantiers (SANS rouge)
-const CHANTIER_COLORS = [
-  'bg-blue-500',
-  'bg-green-500',
-  'bg-purple-500',
-  'bg-orange-400',
-  'bg-teal-500',
-  'bg-indigo-500',
-  'bg-pink-500',
-  'bg-cyan-500',
-  'bg-amber-500',
-  'bg-emerald-500',
-];
 
 const isValidDate = (date) => date instanceof Date && !isNaN(date.getTime());
 
@@ -144,9 +130,31 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
     return conflicts;
   }, [cleanTaches]);
 
+  // ✅ FONCTION POUR DÉTERMINER LA COULEUR D'UNE TÂCHE
+  const getTaskColor = (tache, hasConflict) => {
+    if (hasConflict) {
+      return 'bg-red-600'; // 🔴 Conflit artisan
+    }
+    
+    if (tache.artisan_termine && !tache.constructeur_valide) {
+      return 'bg-yellow-500'; // 🟡 Terminée par artisan (en attente validation)
+    }
+    
+    if (tache.constructeur_valide || tache.terminee) {
+      return 'bg-blue-500'; // 🔵 Validée
+    }
+    
+    const dateFinTache = safeParseDate(tache.datefin);
+    if (dateFinTache && isPast(endOfDay(dateFinTache))) {
+      return 'bg-orange-500'; // 🟠 En retard
+    }
+    
+    return 'bg-green-500'; // 🟢 À faire
+  };
+
   const ganttData = useMemo(() => {
     const today = startOfDay(new Date());
-    const todayWorkday = getClosestWorkday(today); // ✅ Jour ouvré le plus proche
+    const todayWorkday = getClosestWorkday(today);
     
     if (chantiers.length === 0) {
       const defaultStartWeek = startOfWeek(todayWorkday, { weekStartsOn: 1 });
@@ -154,7 +162,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
       return { items: [], overallStartDate: defaultStartWeek, overallEndDate: defaultEndWeek };
     }
 
-    const items = chantiers.map((chantier, index) => {
+    const items = chantiers.map((chantier) => {
       const chantierTaches = cleanTaches.filter(t => t.chantierid === chantier.id);
 
       let earliestTaskDate = null;
@@ -168,7 +176,8 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         }
       });
 
-      const daysWithTasks = new Set();
+      // ✅ Stocker les jours avec leurs tâches (pour déterminer la couleur)
+      const daysTasks = new Map(); // dayKey -> array of tasks
       
       chantierTaches.forEach(tache => {
         const startDate = safeParseDate(tache.datedebut);
@@ -178,19 +187,20 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
           const days = eachDayOfInterval({ start: startOfDay(startDate), end: endOfDay(endDate) });
           days.forEach(day => {
             if (!isWeekend(day)) {
-              daysWithTasks.add(format(day, 'yyyy-MM-dd'));
+              const dayKey = format(day, 'yyyy-MM-dd');
+              if (!daysTasks.has(dayKey)) {
+                daysTasks.set(dayKey, []);
+              }
+              daysTasks.get(dayKey).push(tache);
             }
           });
         }
       });
 
-      const chantierColor = CHANTIER_COLORS[index % CHANTIER_COLORS.length];
-
       return {
         id: chantier.id,
         name: chantier.nomchantier,
-        daysWithTasks,
-        color: chantierColor,
+        daysTasks, // Map de jour -> tâches
         tasks: chantierTaches,
         earliestTaskDate: earliestTaskDate || new Date(8640000000000000),
       };
@@ -222,7 +232,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
       });
     });
 
-    // ✅ GARANTIR que le jour ouvré actuel est inclus
     if (!overallStartDate || todayWorkday < overallStartDate) {
       overallStartDate = subWeeks(todayWorkday, 4);
     }
@@ -250,7 +259,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
 
   const allDays = eachDayOfInterval({ start: overallStartDate, end: overallEndDate }).filter(day => !isWeekend(day));
 
-  // ✅ Jour de référence pour le scroll (aujourd'hui si ouvré, sinon lundi)
   const targetScrollDay = getClosestWorkday(startOfDay(new Date()));
 
   const weekHeaders = useMemo(() => {
@@ -319,29 +327,18 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
   const totalWidth = getDayPosition(allDays.length);
   const chartHeight = items.length * ROW_HEIGHT + 100;
 
-  // ✅ CENTRER SUR LE JOUR OUVRÉ LE PLUS PROCHE
   useEffect(() => {
     if (scrollContainerRef.current && allDays.length > 0 && !hasScrolledToToday.current) {
       const scrollToToday = () => {
         const todayIndex = allDays.findIndex(day => isSameDay(day, targetScrollDay));
-        
-        console.log('🔍 Jour réel:', format(new Date(), 'dd/MM/yyyy (EEEE)', { locale: fr }));
-        console.log('🎯 Jour cible (ouvré):', format(targetScrollDay, 'dd/MM/yyyy (EEEE)', { locale: fr }));
-        console.log('📅 Index trouvé:', todayIndex);
-        console.log('📊 Nombre total de jours:', allDays.length);
         
         if (todayIndex !== -1) {
           const todayPosition = getDayPosition(todayIndex);
           const containerWidth = scrollContainerRef.current.offsetWidth;
           const scrollPosition = todayPosition - (containerWidth / 2) + (dayWidth / 2);
           
-          console.log('📍 Position du jour:', todayPosition);
-          console.log('🎯 Scroll vers:', Math.max(0, scrollPosition));
-          
           scrollContainerRef.current.scrollLeft = Math.max(0, scrollPosition);
           hasScrolledToToday.current = true;
-        } else {
-          console.warn('⚠️ Jour cible non trouvé dans allDays');
         }
       };
 
@@ -391,7 +388,32 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
           </Button>
         </div>
 
-        <div className="flex">
+        {/* ✅ LÉGENDE */}
+        <div className="absolute top-1 left-1 z-30 flex items-center gap-3 text-xs bg-white/90 px-2 py-1 rounded-md shadow-sm">
+          <span className="font-semibold text-slate-700">Légende :</span>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-green-500 rounded"></div>
+            <span>À faire</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-yellow-500 rounded"></div>
+            <span>Terminée par artisan</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-blue-500 rounded"></div>
+            <span>Validée</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-orange-500 rounded"></div>
+            <span>En retard</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 bg-red-600 rounded"></div>
+            <span>Conflit artisan</span>
+          </div>
+        </div>
+
+        <div className="flex mt-10">
           {/* COLONNE CHANTIERS */}
           <div className="flex-shrink-0 bg-slate-200" style={{ width: chantierColWidth }}>
             <div className="h-7 border-r border-slate-300 border-b border-slate-300 flex items-center justify-center bg-slate-200 sticky top-0 z-20">
@@ -452,27 +474,27 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
               </div>
 
               {/* EN-TÊTE JOURS (L M M J V uniquement) avec dates */}
-<div className="flex sticky top-13 bg-slate-50 z-20 border-b border-slate-300" style={{ gap: `${DAY_GAP}px` }}>
-  {allDays.map((day, idx) => {
-    const dayLetter = format(day, 'EEEEE', { locale: fr });
-    const dayNumber = format(day, 'd'); // ✅ Numéro du jour (1, 2, 3...)
-    const isTargetDay = isSameDay(day, targetScrollDay);
-    
-    return (
-      <div 
-        key={`day-header-${idx}`} 
-        className={`h-5 flex flex-col items-center justify-center text-[9px] font-medium ${
-          isTargetDay ? 'bg-blue-500 text-white font-bold' : 'bg-white text-slate-600'
-        }`}
-        style={{ width: dayWidth }}
-        title={format(day, 'dd MMM yyyy', { locale: fr })}
-      >
-        <span className="leading-none">{dayLetter}</span>
-        <span className="leading-none text-[8px] opacity-70">{dayNumber}</span>
-      </div>
-    );
-  })}
-</div>
+              <div className="flex sticky top-13 bg-slate-50 z-20 border-b border-slate-300" style={{ gap: `${DAY_GAP}px` }}>
+                {allDays.map((day, idx) => {
+                  const dayLetter = format(day, 'EEEEE', { locale: fr });
+                  const dayNumber = format(day, 'd');
+                  const isTargetDay = isSameDay(day, targetScrollDay);
+                  
+                  return (
+                    <div 
+                      key={`day-header-${idx}`} 
+                      className={`h-5 flex flex-col items-center justify-center text-[9px] font-medium ${
+                        isTargetDay ? 'bg-blue-500 text-white font-bold' : 'bg-white text-slate-600'
+                      }`}
+                      style={{ width: dayWidth }}
+                      title={format(day, 'dd MMM yyyy', { locale: fr })}
+                    >
+                      <span className="leading-none">{dayLetter}</span>
+                      <span className="leading-none text-[8px] opacity-70">{dayNumber}</span>
+                    </div>
+                  );
+                })}
+              </div>
 
               {/* GRILLE DE FOND */}
               <div className="relative pointer-events-none">
@@ -520,12 +542,16 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
 
                       {allDays.map((day, dayIndex) => {
                         const dayKey = format(day, 'yyyy-MM-dd');
-                        const hasTask = chantier.daysWithTasks.has(dayKey);
+                        const tasksForDay = chantier.daysTasks.get(dayKey);
                         
-                        if (!hasTask) return null;
+                        if (!tasksForDay || tasksForDay.length === 0) return null;
 
+                        // ✅ Déterminer si ce jour a un conflit
                         const hasConflict = conflictsByDay[dayKey]?.has(chantier.id);
-                        const boxColor = hasConflict ? 'bg-red-500' : chantier.color;
+                        
+                        // ✅ Prendre la couleur de la première tâche (ou rouge si conflit)
+                        const firstTask = tasksForDay[0];
+                        const boxColor = getTaskColor(firstTask, hasConflict);
 
                         return (
                           <motion.div
@@ -542,7 +568,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ duration: 0.2, delay: chantierIndex * 0.02 + dayIndex * 0.001 }}
                             onClick={() => handleDayClick(chantier, day)}
-                            title={`${chantier.name} - ${format(day, 'dd MMM yyyy', { locale: fr })}${hasConflict ? ' - CONFLIT ARTISAN' : ''}`}
+                            title={`${chantier.name} - ${format(day, 'dd MMM yyyy', { locale: fr })}${hasConflict ? ' - CONFLIT ARTISAN' : ''}\n${tasksForDay.length} tâche(s)`}
                           />
                         );
                       })}
@@ -571,52 +597,65 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                   Tâches du jour ({selectedDayData.tasks.length}) :
                 </p>
 
-                {selectedDayData.tasks.map(tache => (
-                  <motion.div
-                    key={tache.id}
-                    className="p-3 bg-slate-50 border border-slate-200 rounded-md hover:bg-slate-100 transition-colors"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <p className="font-medium text-sm text-slate-800">{tache.nom}</p>
-                        
-                        {tache.description && (
-                          <p className="text-xs text-slate-600 mt-1">{tache.description}</p>
-                        )}
-
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-slate-500">
-                          <span>
-                            📅 Du {format(parseISO(tache.datedebut), 'dd/MM/yy', { locale: fr })} au {format(parseISO(tache.datefin), 'dd/MM/yy', { locale: fr })}
-                          </span>
+                {selectedDayData.tasks.map(tache => {
+                  const hasConflict = conflictsByDay[selectedDayData.dayKey]?.has(tache.chantierid);
+                  const taskColor = getTaskColor(tache, hasConflict);
+                  
+                  return (
+                    <motion.div
+                      key={tache.id}
+                      className="p-3 bg-slate-50 border border-slate-200 rounded-md hover:bg-slate-100 transition-colors"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-3 h-3 rounded ${taskColor}`}></div>
+                            <p className="font-medium text-sm text-slate-800">{tache.nom}</p>
+                          </div>
                           
-                          {tache.assignetype === 'soustraitant' && tache.assigneid && (
-                            <span className="text-orange-700 font-medium">
-                              👷 {getArtisanNom(tache.assigneid)}
-                            </span>
+                          {tache.description && (
+                            <p className="text-xs text-slate-600 mt-1">{tache.description}</p>
                           )}
-                        </div>
 
-                        <div className="mt-2">
-                          {tache.constructeur_valide || tache.terminee ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                              ✅ Validée
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-slate-500">
+                            <span>
+                              📅 Du {format(parseISO(tache.datedebut), 'dd/MM/yy', { locale: fr })} au {format(parseISO(tache.datefin), 'dd/MM/yy', { locale: fr })}
                             </span>
-                          ) : tache.artisan_termine ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                              ⏳ En attente validation
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                              🚧 À faire
-                            </span>
-                          )}
+                            
+                            {tache.assignetype === 'soustraitant' && tache.assigneid && (
+                              <span className="text-orange-700 font-medium">
+                                👷 {getArtisanNom(tache.assigneid)}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-2">
+                            {hasConflict && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 mr-2">
+                                ⚠️ Conflit artisan
+                              </span>
+                            )}
+                            {tache.constructeur_valide || tache.terminee ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                ✅ Validée
+                              </span>
+                            ) : tache.artisan_termine ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                                ⏳ En attente validation
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                🚧 À faire
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  );
+                })}
               </div>
             </DialogContent>
           </Dialog>
