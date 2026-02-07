@@ -1,36 +1,51 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   parseISO,
   format,
   startOfDay,
   endOfDay,
-  isPast,
-  isFuture,
   startOfWeek,
   endOfWeek,
-  differenceInWeeks,
   addWeeks,
-  isValid as isValidFn,
+  subWeeks,
+  addDays,
+  eachDayOfInterval,
   eachWeekOfInterval,
+  isSameDay,
   isSameWeek,
-  subWeeks
+  isWeekend,
+  nextMonday
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, ChevronDown, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ZoomIn, ZoomOut } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-const MIN_WEEK_WIDTH = 24;
-const MAX_WEEK_WIDTH = 120;
-const DEFAULT_WEEK_WIDTH = 56;
-const ROW_HEIGHT = 36;
-const TASK_ROW_HEIGHT = 32;
-const WEEK_GAP = 4;
+const MIN_DAY_WIDTH = 16;
+const MAX_DAY_WIDTH = 48;
+const DEFAULT_DAY_WIDTH = 24;
+const ROW_HEIGHT = 40;
+const DAY_GAP = 2;
 
-const CHANTIER_COL_WIDTH_DESKTOP = 250;
-const CHANTIER_COL_WIDTH_TABLET = 180;
-const CHANTIER_COL_WIDTH_MOBILE = 120;
+const CHANTIER_COL_WIDTH_DESKTOP = 200;
+const CHANTIER_COL_WIDTH_TABLET = 150;
+const CHANTIER_COL_WIDTH_MOBILE = 100;
+
+// ✅ Palette de couleurs pour les chantiers (SANS rouge)
+const CHANTIER_COLORS = [
+  'bg-blue-500',
+  'bg-green-500',
+  'bg-purple-500',
+  'bg-orange-400',
+  'bg-teal-500',
+  'bg-indigo-500',
+  'bg-pink-500',
+  'bg-cyan-500',
+  'bg-amber-500',
+  'bg-emerald-500',
+];
 
 const isValidDate = (date) => date instanceof Date && !isNaN(date.getTime());
 
@@ -40,83 +55,32 @@ const safeParseDate = (value) => {
   return isValidDate(parsed) ? parsed : null;
 };
 
-const calculerPeriodeChantier = (tachesDuChantier) => {
-  const debuts = [];
-  const fins = [];
-
-  tachesDuChantier.forEach(tache => {
-    const debut = safeParseDate(tache.datedebut);
-    const fin = safeParseDate(tache.datefin);
-    if (isValidDate(debut)) debuts.push(startOfDay(debut));
-    if (isValidDate(fin)) fins.push(endOfDay(fin));
-  });
-
-  const datesDebutValid = debuts.filter(d => d instanceof Date && !isNaN(d));
-  const datesFinValid = fins.filter(d => d instanceof Date && !isNaN(d));
-
-  if (datesDebutValid.length === 0 || datesFinValid.length === 0) {
-    return null;
-  }
-
-  const debutGlobal = new Date(Math.min(...datesDebutValid.map(d => d.getTime())));
-  const finGlobal = new Date(Math.max(...datesFinValid.map(d => d.getTime())));
-
-  return { debutGlobal, finGlobal };
-};
-
-const isOverlap = (startA, endA, startB, endB) => {
-  return startA <= endB && startB <= endA;
-};
-
-const detectGlobalConflicts = (allTaches) => {
-  const taskConflicts = new Set();
-  const stAssignments = {};
-
-  allTaches.forEach(tache => {
-    if (tache.assignetype === 'soustraitant' && tache.assigneid && tache.datedebut && tache.datefin) {
-      const startDate = startOfDay(parseISO(tache.datedebut));
-      const endDate = endOfDay(parseISO(tache.datefin));
-      if (!isValidDate(startDate) || !isValidDate(endDate)) return;
-
-      const stId = tache.assigneid;
-      if (!stAssignments[stId]) stAssignments[stId] = [];
-      stAssignments[stId].push({
-        tacheId: tache.id,
-        start: startDate,
-        end: endDate,
-        chantierid: tache.chantierid,
-      });
-    }
-  });
-
-  Object.keys(stAssignments).forEach(stId => {
-    const assignments = stAssignments[stId].sort((a,b) => a.start - b.start);
-    for (let i = 0; i < assignments.length; i++) {
-      for (let j = i + 1; j < assignments.length; j++) {
-        const assignA = assignments[i];
-        const assignB = assignments[j];
-        if (assignA.chantierid !== assignB.chantierid && isOverlap(assignA.start, assignA.end, assignB.start, assignB.end)) {
-          taskConflicts.add(assignA.tacheId);
-          taskConflicts.add(assignB.tacheId);
-        }
-      }
-    }
-  });
-  return taskConflicts;
-};
-
 const isCurrentWeek = (weekStart) => {
   const today = new Date();
   return isSameWeek(weekStart, today, { weekStartsOn: 1 });
 };
 
-export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
-  const [expandedChantiers, setExpandedChantiers] = useState({});
-  const [weekWidth, setWeekWidth] = useState(DEFAULT_WEEK_WIDTH);
+const isToday = (date) => {
+  return isSameDay(date, new Date());
+};
+
+// ✅ Trouver le jour ouvré le plus proche (aujourd'hui si ouvré, sinon lundi suivant)
+const getClosestWorkday = (date) => {
+  if (isWeekend(date)) {
+    return nextMonday(date);
+  }
+  return date;
+};
+
+export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTraitants }) {
+  const [dayWidth, setDayWidth] = useState(DEFAULT_DAY_WIDTH);
   const [chantierColWidth, setChantierColWidth] = useState(CHANTIER_COL_WIDTH_DESKTOP);
+  const [selectedDayData, setSelectedDayData] = useState(null);
+  
+  const scrollContainerRef = useRef(null);
+  const hasScrolledToToday = useRef(false);
 
   const cleanTaches = useMemo(() => taches || [], [taches]);
-  const conflictingTaskIdsAcrossAllChantiers = useMemo(() => detectGlobalConflicts(cleanTaches), [cleanTaches]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -134,472 +98,530 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate }) {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // ✅ DÉTECTER LES CONFLITS PAR JOUR
+  const conflictsByDay = useMemo(() => {
+    const conflicts = {};
+    const stAssignments = {};
+
+    cleanTaches.forEach(tache => {
+      if (tache.assignetype === 'soustraitant' && tache.assigneid && tache.datedebut && tache.datefin) {
+        const startDate = safeParseDate(tache.datedebut);
+        const endDate = safeParseDate(tache.datefin);
+        
+        if (!startDate || !endDate) return;
+
+        const days = eachDayOfInterval({ start: startOfDay(startDate), end: endOfDay(endDate) });
+        
+        days.forEach(day => {
+          if (isWeekend(day)) return;
+          
+          const dayKey = format(day, 'yyyy-MM-dd');
+          const stId = tache.assigneid;
+
+          if (!stAssignments[dayKey]) stAssignments[dayKey] = {};
+          if (!stAssignments[dayKey][stId]) stAssignments[dayKey][stId] = [];
+          
+          stAssignments[dayKey][stId].push({
+            tacheId: tache.id,
+            chantierid: tache.chantierid,
+          });
+        });
+      }
+    });
+
+    Object.keys(stAssignments).forEach(dayKey => {
+      Object.keys(stAssignments[dayKey]).forEach(stId => {
+        const assignments = stAssignments[dayKey][stId];
+        const chantierIds = [...new Set(assignments.map(a => a.chantierid))];
+        
+        if (chantierIds.length > 1) {
+          if (!conflicts[dayKey]) conflicts[dayKey] = new Set();
+          chantierIds.forEach(cid => conflicts[dayKey].add(cid));
+        }
+      });
+    });
+
+    return conflicts;
+  }, [cleanTaches]);
+
   const ganttData = useMemo(() => {
+    const today = startOfDay(new Date());
+    const todayWorkday = getClosestWorkday(today); // ✅ Jour ouvré le plus proche
+    
     if (chantiers.length === 0) {
-      const defaultStart = initialStartDate || startOfDay(new Date());
-      const defaultStartWeek = startOfWeek(defaultStart, { weekStartsOn: 1 });
+      const defaultStartWeek = startOfWeek(todayWorkday, { weekStartsOn: 1 });
       const defaultEndWeek = endOfWeek(addWeeks(defaultStartWeek, 4), { weekStartsOn: 1 });
-      const totalWeeks = differenceInWeeks(defaultEndWeek, defaultStartWeek) + 1;
-      return { items: [], overallStartDate: defaultStartWeek, overallEndDate: defaultEndWeek, totalWeeks };
+      return { items: [], overallStartDate: defaultStartWeek, overallEndDate: defaultEndWeek };
     }
 
-    const today = startOfDay(new Date());
+    const items = chantiers.map((chantier, index) => {
+      const chantierTaches = cleanTaches.filter(t => t.chantierid === chantier.id);
 
-    const items = chantiers.map(chantier => {
-      const chantierTaches = cleanTaches
-        .filter(t => t.chantierid === chantier.id)
-        .sort((a,b) => {
-          const dateA = parseISO(a.datedebut);
-          const dateB = parseISO(b.datedebut);
-          if (!isValidDate(dateA) || !isValidDate(dateB)) return 0;
-          return dateA - dateB;
-        });
-
-      let chantierOverallStart = null;
-      let chantierOverallEnd = null;
-
-      const periode = calculerPeriodeChantier(chantierTaches);
-
-      if (periode && isValidDate(periode.debutGlobal) && isValidDate(periode.finGlobal)) {
-        chantierOverallStart = periode.debutGlobal;
-        chantierOverallEnd = periode.finGlobal;
-      }
-
-      if (!isValidDate(chantierOverallStart) || !isValidDate(chantierOverallEnd)) {
-        chantierOverallStart = startOfDay(new Date());
-        chantierOverallEnd = endOfDay(new Date());
-      }
-
-      // ✅ CALCULER QUELLES SEMAINES ONT DES CONFLITS
-      const conflictWeeks = new Set();
+      let earliestTaskDate = null;
+      
       chantierTaches.forEach(tache => {
-        if (conflictingTaskIdsAcrossAllChantiers.has(tache.id) && tache.datedebut && tache.datefin) {
-          const tacheStart = parseISO(tache.datedebut);
-          const tacheEnd = parseISO(tache.datefin);
-          
-          if (isValidDate(tacheStart) && isValidDate(tacheEnd)) {
-            const weeks = eachWeekOfInterval(
-              { start: startOfWeek(tacheStart, { weekStartsOn: 1 }), end: endOfWeek(tacheEnd, { weekStartsOn: 1 }) },
-              { weekStartsOn: 1 }
-            );
-            weeks.forEach(week => conflictWeeks.add(format(week, 'yyyy-MM-dd')));
+        const startDate = safeParseDate(tache.datedebut);
+        if (startDate) {
+          if (!earliestTaskDate || startDate < earliestTaskDate) {
+            earliestTaskDate = startDate;
           }
         }
       });
 
+      const daysWithTasks = new Set();
+      
+      chantierTaches.forEach(tache => {
+        const startDate = safeParseDate(tache.datedebut);
+        const endDate = safeParseDate(tache.datefin);
+        
+        if (startDate && endDate) {
+          const days = eachDayOfInterval({ start: startOfDay(startDate), end: endOfDay(endDate) });
+          days.forEach(day => {
+            if (!isWeekend(day)) {
+              daysWithTasks.add(format(day, 'yyyy-MM-dd'));
+            }
+          });
+        }
+      });
+
+      const chantierColor = CHANTIER_COLORS[index % CHANTIER_COLORS.length];
+
       return {
         id: chantier.id,
         name: chantier.nomchantier,
-        start: startOfDay(chantierOverallStart),
-        end: endOfDay(chantierOverallEnd),
-        type: 'chantier',
-        conflictWeeks, // ✅ Stocker les semaines avec conflits
-        tasks: chantierTaches
-          .map(tache => {
-            const tacheDateDebut = parseISO(tache.datedebut);
-            const tacheDateFin = parseISO(tache.datefin);
-            const isConflict = conflictingTaskIdsAcrossAllChantiers.has(tache.id);
-            
-            // ✅ CODE COULEUR CORRIGÉ
-            let taskColor = 'bg-gray-400';
-
-            if (isConflict) {
-             // 🔴 ROUGE : Conflit artisan
-             taskColor = 'bg-red-600';
-             } else if (tache.artisan_termine && !tache.constructeur_valide) {
-              // 🟡 JAUNE : Terminée par artisan (en attente validation)
-              taskColor = 'bg-yellow-500';
-             } else if (tache.constructeur_valide || tache.terminee) {
-               // 🔵 BLEU : Tâche validée/terminée
-               taskColor = 'bg-blue-500';
-             } else if (isValidDate(tacheDateFin) && isPast(tacheDateFin)) {
-               // 🟠 ORANGE : En retard
-               taskColor = 'bg-orange-500';
-             } else {
-               // 🟢 VERT : À faire
-               taskColor = 'bg-green-500';
-             }
-
-            return {
-              id: `task-${tache.id}`,
-              name: tache.nom,
-              start: isValidDate(tacheDateDebut) ? startOfDay(tacheDateDebut) : (initialStartDate || startOfDay(new Date())),
-              end: isValidDate(tacheDateFin) ? endOfDay(tacheDateFin) : endOfDay(startOfDay(initialStartDate || new Date())),
-              type: 'task',
-              color: taskColor,
-              chantierid: chantier.id,
-              hasConflict: isConflict,
-            };
-          })
-          .sort((a,b) => a.start - b.start)
+        daysWithTasks,
+        color: chantierColor,
+        tasks: chantierTaches,
+        earliestTaskDate: earliestTaskDate || new Date(8640000000000000),
       };
-    }).sort((a, b) => a.start - b.start);
+    });
 
-    if (items.length === 0) {
-      const defaultStart = initialStartDate || startOfDay(new Date());
-      const defaultStartWeek = startOfWeek(defaultStart, { weekStartsOn: 1 });
-      const defaultEndWeek = endOfWeek(addWeeks(defaultStartWeek, 4), { weekStartsOn: 1 });
-      const totalWeeks = differenceInWeeks(defaultEndWeek, defaultStartWeek) + 1;
-      return { items: [], overallStartDate: defaultStartWeek, overallEndDate: defaultEndWeek, totalWeeks };
+    items.sort((a, b) => {
+      return a.earliestTaskDate - b.earliestTaskDate;
+    });
+
+    // ✅ FORCER L'INCLUSION DU JOUR OUVRÉ ACTUEL
+    let overallStartDate = null;
+    let overallEndDate = null;
+
+    items.forEach(item => {
+      item.tasks.forEach(tache => {
+        const startDate = safeParseDate(tache.datedebut);
+        const endDate = safeParseDate(tache.datefin);
+        
+        if (startDate) {
+          if (!overallStartDate || startDate < overallStartDate) {
+            overallStartDate = startDate;
+          }
+        }
+        if (endDate) {
+          if (!overallEndDate || endDate > overallEndDate) {
+            overallEndDate = endDate;
+          }
+        }
+      });
+    });
+
+    // ✅ GARANTIR que le jour ouvré actuel est inclus
+    if (!overallStartDate || todayWorkday < overallStartDate) {
+      overallStartDate = subWeeks(todayWorkday, 4);
+    }
+    if (!overallEndDate || todayWorkday > overallEndDate) {
+      overallEndDate = addWeeks(todayWorkday, 8);
     }
 
-    let overallStartDate = items.reduce((minDt, item) => (item.start < minDt ? item.start : minDt), items[0].start);
-    let overallEndDate = items.reduce((maxDt, item) => (item.end > maxDt ? item.end : maxDt), items[0].end);
+    overallStartDate = startOfWeek(overallStartDate, { weekStartsOn: 1 });
+    overallEndDate = endOfWeek(overallEndDate, { weekStartsOn: 1 });
 
-    const currentWeekStart = startOfWeek(today, { weekStartsOn: 1 });
-    const twoWeeksBeforeCurrentWeek = subWeeks(currentWeekStart, 2);
-    
-    if (overallStartDate > twoWeeksBeforeCurrentWeek) {
-      overallStartDate = twoWeeksBeforeCurrentWeek;
-    }
+    return { items, overallStartDate, overallEndDate };
+  }, [chantiers, cleanTaches]);
 
-    if (initialStartDate) {
-      const proposedStart = startOfDay(initialStartDate);
-      overallStartDate = proposedStart < twoWeeksBeforeCurrentWeek ? proposedStart : twoWeeksBeforeCurrentWeek;
-    }
-
-    const overallStartAligned = startOfWeek(overallStartDate, { weekStartsOn: 1 });
-    const overallEndAligned = endOfWeek(overallEndDate, { weekStartsOn: 1 });
-
-    const minEnd = endOfWeek(addWeeks(overallStartAligned, 4), { weekStartsOn: 1 });
-    const finalOverallEnd = overallEndAligned < minEnd ? minEnd : overallEndAligned;
-
-    const totalWeeks = Math.max(1, differenceInWeeks(finalOverallEnd, overallStartAligned) + 1);
-
-    return { items, overallStartDate: overallStartAligned, overallEndDate: finalOverallEnd, totalWeeks };
-  }, [chantiers, cleanTaches, conflictingTaskIdsAcrossAllChantiers, initialStartDate]);
-
-  const { items, overallStartDate, overallEndDate, totalWeeks } = ganttData;
-
-  useEffect(() => {
-    setExpandedChantiers({});
-  }, [chantiers]);
+  const { items, overallStartDate, overallEndDate } = ganttData;
 
   if (items.length === 0 && chantiers.length > 0) {
-    return <p className="text-muted-foreground text-center py-8">Aucune tâche planifiée pour les chantiers en cours pour afficher le planning.</p>;
+    return <p className="text-muted-foreground text-center py-8">Aucune tâche planifiée pour les chantiers en cours.</p>;
   }
   if (chantiers.length === 0) {
     return <p className="text-muted-foreground text-center py-8">Aucun chantier en cours à afficher.</p>;
   }
 
-  const toggleChantierExpand = (chantierId) => {
-    setExpandedChantiers(prev => ({ ...prev, [chantierId]: !prev[chantierId] }));
-  };
+  const handleZoomIn = () => setDayWidth(prev => Math.min(MAX_DAY_WIDTH, prev + 4));
+  const handleZoomOut = () => setDayWidth(prev => Math.max(MIN_DAY_WIDTH, prev - 4));
 
-  const handleZoomIn = () => setWeekWidth(prev => Math.min(MAX_WEEK_WIDTH, prev + 6));
-  const handleZoomOut = () => setWeekWidth(prev => Math.max(MIN_WEEK_WIDTH, prev - 6));
+  const allDays = eachDayOfInterval({ start: overallStartDate, end: overallEndDate }).filter(day => !isWeekend(day));
 
-  const getWeekHeaders = () => {
-    const headers = [];
-    if (!isValidDate(overallStartDate) || !isValidDate(overallEndDate)) return headers;
+  // ✅ Jour de référence pour le scroll (aujourd'hui si ouvré, sinon lundi)
+  const targetScrollDay = getClosestWorkday(startOfDay(new Date()));
 
-    let current = overallStartDate;
-    while (current <= overallEndDate) {
-      headers.push({
-        startDate: current,
-        endDate: endOfWeek(current, { weekStartsOn: 1 }),
-        label: format(current, "'S'ww", { locale: fr }),
-        isCurrentWeek: isCurrentWeek(current)
-      });
-      current = addWeeks(current, 1);
-      if (!isValidDate(current) || headers.length > 520) break;
-    }
-    return headers;
-  };
-
-  const weekHeaders = getWeekHeaders();
-
-  const getMonthHeaders = () => {
-    const months = [];
-    if (weekHeaders.length === 0) return months;
-
-    let group = {
-      monthKey: format(weekHeaders[0].startDate, 'yyyy-MM'),
-      name: format(weekHeaders[0].startDate, 'MMM yyyy', { locale: fr }),
-      weeksCount: 0
-    };
-
-    weekHeaders.forEach((w, idx) => {
-      const wMonthKey = format(w.startDate, 'yyyy-MM');
-      if (wMonthKey !== group.monthKey) {
-        months.push({ ...group });
-        group = {
-          monthKey: wMonthKey,
-          name: format(w.startDate, 'MMM yyyy', { locale: fr }),
-          weeksCount: 1
-        };
-      } else {
-        group.weeksCount += 1;
-      }
-      if (idx === weekHeaders.length - 1) months.push({ ...group });
-    });
-
-    return months.map(m => ({ ...m, width: m.weeksCount * (weekWidth + WEEK_GAP) }));
-  };
-
-  const monthHeaders = getMonthHeaders();
-
-  const getWeekPosition = (weekIndex) => {
-    return weekIndex * (weekWidth + WEEK_GAP);
-  };
-
-  let currentTopOffset = 0;
-  const renderedItems = [];
-
-  items.forEach((chantierItem) => {
-    if (!isValidDate(chantierItem.start) || !isValidDate(chantierItem.end) || !isValidDate(overallStartDate)) return;
-
-    const chantierStartAligned = startOfWeek(chantierItem.start, { weekStartsOn: 1 });
-    const chantierEndAligned = endOfWeek(chantierItem.end, { weekStartsOn: 1 });
-
-    const chantierWeeks = eachWeekOfInterval(
-      { start: chantierStartAligned, end: chantierEndAligned },
+  const weekHeaders = useMemo(() => {
+    const weeks = eachWeekOfInterval(
+      { start: overallStartDate, end: overallEndDate },
       { weekStartsOn: 1 }
     );
 
-    // ✅ SEGMENTS AVEC COULEUR INDIVIDUELLE PAR SEMAINE
-    const chantierSegments = chantierWeeks.map(weekStart => {
-      const weekIndex = differenceInWeeks(weekStart, overallStartDate);
-      const weekKey = format(weekStart, 'yyyy-MM-dd');
-      const hasConflictThisWeek = chantierItem.conflictWeeks.has(weekKey);
-      
+    return weeks.map(weekStart => {
+      const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+      const daysInWeek = eachDayOfInterval({ 
+        start: weekStart > overallStartDate ? weekStart : overallStartDate, 
+        end: weekEnd < overallEndDate ? weekEnd : overallEndDate 
+      }).filter(day => !isWeekend(day));
+
       return {
-        weekIndex,
-        left: getWeekPosition(weekIndex),
-        width: weekWidth,
-        color: hasConflictThisWeek ? 'bg-red-300' : 'bg-blue-300' // ✅ Rouge si conflit, bleu sinon
+        startDate: weekStart,
+        label: format(weekStart, "'S'ww", { locale: fr }),
+        isCurrentWeek: isCurrentWeek(weekStart),
+        daysCount: daysInWeek.length,
       };
     });
+  }, [overallStartDate, overallEndDate]);
 
-    renderedItems.push({
-      ...chantierItem,
-      segments: chantierSegments,
-      displayProps: {
-        top: currentTopOffset,
-        height: ROW_HEIGHT - 4,
+  const monthHeaders = useMemo(() => {
+    const months = [];
+    let currentMonth = null;
+    let dayCount = 0;
+
+    allDays.forEach((day, index) => {
+      const monthKey = format(day, 'yyyy-MM');
+
+      if (monthKey !== currentMonth) {
+        if (currentMonth !== null) {
+          months.push({
+            monthKey: currentMonth,
+            name: format(allDays[index - 1], 'MMM yyyy', { locale: fr }),
+            daysCount: dayCount,
+          });
+        }
+        currentMonth = monthKey;
+        dayCount = 1;
+      } else {
+        dayCount++;
+      }
+
+      if (index === allDays.length - 1) {
+        months.push({
+          monthKey: currentMonth,
+          name: format(day, 'MMM yyyy', { locale: fr }),
+          daysCount: dayCount,
+        });
       }
     });
 
-    currentTopOffset += ROW_HEIGHT;
+    return months.map(m => ({ 
+      ...m, 
+      width: m.daysCount * (dayWidth + DAY_GAP) 
+    }));
+  }, [allDays, dayWidth]);
 
-    if (expandedChantiers[chantierItem.id]) {
-      let ligne1End = null;
-      let ligne2End = null;
-      
-      chantierItem.tasks.forEach((taskItem) => {
-        if (!isValidDate(taskItem.start) || !isValidDate(taskItem.end)) return;
+  const getDayPosition = (dayIndex) => {
+    return dayIndex * (dayWidth + DAY_GAP);
+  };
 
-        const taskStartAligned = startOfWeek(taskItem.start, { weekStartsOn: 1 });
-        const taskEndAligned = endOfWeek(taskItem.end, { weekStartsOn: 1 });
+  const totalWidth = getDayPosition(allDays.length);
+  const chartHeight = items.length * ROW_HEIGHT + 100;
 
-        const taskWeeks = eachWeekOfInterval(
-          { start: taskStartAligned, end: taskEndAligned },
-          { weekStartsOn: 1 }
-        );
-
-        const taskSegments = taskWeeks.map(weekStart => {
-          const weekIndex = differenceInWeeks(weekStart, overallStartDate);
-          return {
-            weekIndex,
-            left: getWeekPosition(weekIndex),
-            width: weekWidth,
-            color: taskItem.color // Utilise la couleur de la tâche
-          };
-        });
-
-        let rowOffset = 0;
+  // ✅ CENTRER SUR LE JOUR OUVRÉ LE PLUS PROCHE
+  useEffect(() => {
+    if (scrollContainerRef.current && allDays.length > 0 && !hasScrolledToToday.current) {
+      const scrollToToday = () => {
+        const todayIndex = allDays.findIndex(day => isSameDay(day, targetScrollDay));
         
-        if (!ligne1End || taskItem.start > ligne1End) {
-          rowOffset = 0;
-          ligne1End = taskItem.end;
-        } else if (!ligne2End || taskItem.start > ligne2End) {
-          rowOffset = TASK_ROW_HEIGHT;
-          ligne2End = taskItem.end;
+        console.log('🔍 Jour réel:', format(new Date(), 'dd/MM/yyyy (EEEE)', { locale: fr }));
+        console.log('🎯 Jour cible (ouvré):', format(targetScrollDay, 'dd/MM/yyyy (EEEE)', { locale: fr }));
+        console.log('📅 Index trouvé:', todayIndex);
+        console.log('📊 Nombre total de jours:', allDays.length);
+        
+        if (todayIndex !== -1) {
+          const todayPosition = getDayPosition(todayIndex);
+          const containerWidth = scrollContainerRef.current.offsetWidth;
+          const scrollPosition = todayPosition - (containerWidth / 2) + (dayWidth / 2);
+          
+          console.log('📍 Position du jour:', todayPosition);
+          console.log('🎯 Scroll vers:', Math.max(0, scrollPosition));
+          
+          scrollContainerRef.current.scrollLeft = Math.max(0, scrollPosition);
+          hasScrolledToToday.current = true;
         } else {
-          rowOffset = TASK_ROW_HEIGHT;
-          ligne2End = taskItem.end > ligne2End ? taskItem.end : ligne2End;
+          console.warn('⚠️ Jour cible non trouvé dans allDays');
         }
+      };
 
-        renderedItems.push({
-          ...taskItem,
-          segments: taskSegments,
-          displayProps: {
-            top: currentTopOffset + rowOffset,
-            height: TASK_ROW_HEIGHT - 4,
-          }
-        });
-      });
-      
-      currentTopOffset += TASK_ROW_HEIGHT * 2;
+      setTimeout(scrollToToday, 100);
+      setTimeout(scrollToToday, 300);
+      setTimeout(scrollToToday, 500);
     }
-  });
+  }, [allDays, dayWidth, targetScrollDay]);
 
-  const chartHeight = currentTopOffset + 50 + 20;
-  const totalWidth = getWeekPosition(totalWeeks);
+  const handleDayClick = (chantier, day) => {
+    const dayKey = format(day, 'yyyy-MM-dd');
+    
+    const tasksOfDay = chantier.tasks.filter(tache => {
+      const startDate = safeParseDate(tache.datedebut);
+      const endDate = safeParseDate(tache.datefin);
+      
+      if (!startDate || !endDate) return false;
+      
+      return day >= startOfDay(startDate) && day <= endOfDay(endDate);
+    });
+
+    if (tasksOfDay.length === 0) return;
+
+    setSelectedDayData({
+      chantierName: chantier.name,
+      day,
+      dayKey,
+      tasks: tasksOfDay,
+    });
+  };
+
+  const getArtisanNom = (soustraitantId) => {
+    if (!soustraitantId || !sousTraitants) return 'Non assigné';
+    const st = sousTraitants.find(s => s.id === soustraitantId);
+    return st ? (st.nomsocieteST || `${st.PrenomST} ${st.nomST}`) : 'Inconnu';
+  };
 
   return (
-    <div className="overflow-x-auto pb-4 bg-slate-50 p-1 rounded-lg shadow-inner relative">
-      <div className="absolute top-1 right-1 z-30 flex space-x-1">
-        <Button variant="outline" size="icon" onClick={handleZoomIn} disabled={weekWidth >= MAX_WEEK_WIDTH} className="h-7 w-7">
-          <ZoomIn className="h-3.5 w-3.5" />
-        </Button>
-        <Button variant="outline" size="icon" onClick={handleZoomOut} disabled={weekWidth <= MIN_WEEK_WIDTH} className="h-7 w-7">
-          <ZoomOut className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-
-      <div className="flex">
-        <div className="flex-shrink-0 bg-slate-200" style={{ width: chantierColWidth }}>
-          <div className="h-7 border-r border-slate-300 border-b border-slate-300 flex items-center justify-center bg-slate-200 sticky top-0 z-20">
-            <span className="text-[10px] font-semibold text-slate-700">CHANTIER</span>
-          </div>
-
-          <div className="h-5 border-r border-slate-300 border-b border-slate-300 bg-slate-200 sticky top-7 z-20"></div>
-
-          <div className="border-r border-slate-300">
-            {renderedItems.map((item) => {
-              if (item.type !== 'chantier') return null;
-              
-              const isExpanded = expandedChantiers[item.id];
-              
-              return (
-                <React.Fragment key={`label-group-${item.id}`}>
-                  <div
-                    className="flex items-center px-1 font-semibold text-slate-800 bg-slate-200 border-b border-slate-200/60"
-                    style={{ height: ROW_HEIGHT }}
-                  >
-                    <Button variant="ghost" size="icon" onClick={() => toggleChantierExpand(item.id)} className="mr-0.5 h-6 w-6 flex-shrink-0">
-                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    </Button>
-                    <Link
-                      to={`/chantiers/${item.id}`}
-                      className="truncate hover:underline text-[10px] sm:text-xs"
-                      title={item.name}
-                    >
-                      <span className="sm:hidden">
-                        {item.name.length > 12 ? item.name.substring(0, 10) + '...' : item.name}
-                      </span>
-                      <span className="hidden sm:inline">
-                        {item.name}
-                      </span>
-                    </Link>
-                  </div>
-
-                  {isExpanded && (
-                    <>
-                      <div style={{ height: TASK_ROW_HEIGHT }} className="bg-slate-200 border-b border-slate-200/60"></div>
-                      <div style={{ height: TASK_ROW_HEIGHT }} className="bg-slate-200 border-b border-slate-200/60"></div>
-                    </>
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </div>
+    <>
+      <div className="overflow-x-auto pb-4 bg-slate-50 p-1 rounded-lg shadow-inner relative">
+        <div className="absolute top-1 right-1 z-30 flex space-x-1">
+          <Button variant="outline" size="icon" onClick={handleZoomIn} disabled={dayWidth >= MAX_DAY_WIDTH} className="h-7 w-7">
+            <ZoomIn className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="outline" size="icon" onClick={handleZoomOut} disabled={dayWidth <= MIN_DAY_WIDTH} className="h-7 w-7">
+            <ZoomOut className="h-3.5 w-3.5" />
+          </Button>
         </div>
 
-        <div className="flex-1 overflow-x-auto">
-          <div style={{ minWidth: totalWidth }}>
-            <div className="flex sticky top-0 bg-slate-100 z-20 border-b border-slate-300">
-              {monthHeaders.map((month, index) => (
-                <div key={`month-${index}`} className="h-7 flex items-center justify-center border-r border-slate-300" style={{ width: month.width }}>
-                  <span className="text-[10px] font-medium text-slate-600">{month.name}</span>
-                </div>
-              ))}
+        <div className="flex">
+          {/* COLONNE CHANTIERS */}
+          <div className="flex-shrink-0 bg-slate-200" style={{ width: chantierColWidth }}>
+            <div className="h-7 border-r border-slate-300 border-b border-slate-300 flex items-center justify-center bg-slate-200 sticky top-0 z-20">
+              <span className="text-[10px] font-semibold text-slate-700">CHANTIER</span>
             </div>
 
-            <div className="flex sticky top-7 bg-slate-100 z-20 border-b border-slate-300" style={{ gap: `${WEEK_GAP}px` }}>
-              {weekHeaders.map((w, idx) => (
-                <div 
-                  key={`week-${idx}`} 
-                  className={`h-5 flex flex-col items-center justify-center border-r border-slate-200/80 ${
-                    w.isCurrentWeek ? 'bg-cyan-300' : 'bg-white'
-                  }`}
-                  style={{ width: weekWidth }}
+            <div className="h-6 border-r border-slate-300 border-b border-slate-300 bg-slate-200 sticky top-7 z-20"></div>
+            <div className="h-5 border-r border-slate-300 border-b border-slate-300 bg-slate-200 sticky top-13 z-20"></div>
+
+            <div className="border-r border-slate-300">
+              {items.map((chantier) => (
+                <div
+                  key={`label-${chantier.id}`}
+                  className="flex items-center px-2 font-semibold text-slate-800 bg-slate-100 border-b border-slate-200/60"
+                  style={{ height: ROW_HEIGHT }}
                 >
-                  <span className={`text-[10px] font-medium ${
-                    w.isCurrentWeek ? 'text-cyan-900 font-bold' : 'text-slate-700'
-                  }`}>
-                    {w.label}
-                  </span>
+                  <Link
+                    to={`/chantiers/${chantier.id}`}
+                    className="truncate hover:underline text-xs w-full"
+                    title={chantier.name}
+                  >
+                    {chantier.name}
+                  </Link>
                 </div>
               ))}
             </div>
+          </div>
 
-            <div className="relative pointer-events-none">
-              {weekHeaders.map((week, i) => (
-                <React.Fragment key={`gridline-v-${i}`}>
-                  {week.isCurrentWeek && (
-                    <div 
-                      className="absolute bg-cyan-200" 
-                      style={{ 
-                        left: getWeekPosition(i),
-                        top: 0,
-                        width: weekWidth,
-                        height: chartHeight - (50 + 20)
-                      }} 
-                    />
-                  )}
+          {/* ZONE DE PLANNING */}
+          <div className="flex-1 overflow-x-auto" ref={scrollContainerRef}>
+            <div style={{ minWidth: totalWidth }}>
+              {/* EN-TÊTE MOIS */}
+              <div className="flex sticky top-0 bg-slate-100 z-20 border-b border-slate-300">
+                {monthHeaders.map((month, index) => (
                   <div 
-                    className="absolute border-l border-slate-200/40" 
-                    style={{ 
-                      left: getWeekPosition(i),
-                      top: 0,
-                      bottom: 0,
-                      height: chartHeight - (50 + 20)
-                    }} 
-                  />
-                </React.Fragment>
-              ))}
-            </div>
+                    key={`month-${index}`} 
+                    className="h-7 flex items-center justify-center border-r border-slate-300" 
+                    style={{ width: month.width }}
+                  >
+                    <span className="text-[10px] font-medium text-slate-600">{month.name}</span>
+                  </div>
+                ))}
+              </div>
 
-            <div className="relative" style={{ height: chartHeight - (50 + 20) }}>
-              {renderedItems.map((item, index) => {
-                if (!isValidDate(item.start) || !isValidDate(item.end)) return null;
-                const itemTextColor = item.type === 'chantier' ? 'text-slate-800' : 'text-white';
-                
-                return (
-                  <React.Fragment key={item.id}>
-                    <div
-                      className="absolute left-0 right-0 border-b border-slate-200/60"
-                      style={{
-                        top: item.displayProps.top + (item.type === 'chantier' ? ROW_HEIGHT : TASK_ROW_HEIGHT) - 2,
-                        height: 1,
-                        zIndex: 0
-                      }}
-                    />
+              {/* EN-TÊTE SEMAINES */}
+              <div className="flex sticky top-7 bg-slate-100 z-20 border-b border-slate-300" style={{ gap: `${DAY_GAP}px` }}>
+                {weekHeaders.map((week, idx) => (
+                  <div 
+                    key={`week-${idx}`} 
+                    className="h-6 flex items-center justify-center border-r border-slate-200/80 bg-white"
+                    style={{ width: week.daysCount * (dayWidth + DAY_GAP) - DAY_GAP }}
+                  >
+                    <span className="text-[10px] font-medium text-slate-700">
+                      {week.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
 
-                    {item.segments && item.segments.map((segment, segIndex) => (
-                      <motion.div
-                        key={`${item.id}-seg-${segIndex}`}
-                        className={`absolute flex items-center px-1.5 ${itemTextColor} text-[10px] overflow-hidden rounded-sm ${item.hasConflict && item.type === 'task' ? 'ring-2 ring-offset-1 ring-red-500' : 'hover:ring-1 hover:ring-offset-1 hover:ring-indigo-300'}`}
-                        style={{
-                          left: segment.left,
-                          width: segment.width,
-                          top: item.displayProps.top + 2,
-                          height: item.displayProps.height,
-                          zIndex: 5
-                        }}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.2, delay: index * 0.02 }}
-                        title={`${item.name}\nDu ${format(item.start, 'dd/MM/yy')} au ${format(item.end, 'dd/MM/yy')}${item.hasConflict && item.type === 'task' ? `\nConflit` : ''}`}
-                      >
-                        <div className={`absolute inset-0 ${segment.color} ${item.type === 'task' ? 'opacity-80' : 'opacity-95'} rounded-sm`}></div>
-                        {segIndex === 0 && (
-                          <>
-                            <span className="relative z-10 truncate text-[9px] font-medium">{item.name}</span>
-                            {item.hasConflict && item.type === 'task' && <AlertTriangle className="h-3 w-3 ml-auto text-yellow-300 flex-shrink-0" />}
-                          </>
-                        )}
-                      </motion.div>
-                    ))}
-                  </React.Fragment>
-                );
-              })}
+              {/* EN-TÊTE JOURS (L M M J V uniquement) avec dates */}
+<div className="flex sticky top-13 bg-slate-50 z-20 border-b border-slate-300" style={{ gap: `${DAY_GAP}px` }}>
+  {allDays.map((day, idx) => {
+    const dayLetter = format(day, 'EEEEE', { locale: fr });
+    const dayNumber = format(day, 'd'); // ✅ Numéro du jour (1, 2, 3...)
+    const isTargetDay = isSameDay(day, targetScrollDay);
+    
+    return (
+      <div 
+        key={`day-header-${idx}`} 
+        className={`h-5 flex flex-col items-center justify-center text-[9px] font-medium ${
+          isTargetDay ? 'bg-blue-500 text-white font-bold' : 'bg-white text-slate-600'
+        }`}
+        style={{ width: dayWidth }}
+        title={format(day, 'dd MMM yyyy', { locale: fr })}
+      >
+        <span className="leading-none">{dayLetter}</span>
+        <span className="leading-none text-[8px] opacity-70">{dayNumber}</span>
+      </div>
+    );
+  })}
+</div>
+
+              {/* GRILLE DE FOND */}
+              <div className="relative pointer-events-none">
+                {allDays.map((day, i) => {
+                  const isTargetDay = isSameDay(day, targetScrollDay);
+                  
+                  return (
+                    <React.Fragment key={`gridline-v-${i}`}>
+                      {isTargetDay && (
+                        <div 
+                          className="absolute bg-blue-200 opacity-30" 
+                          style={{ 
+                            left: getDayPosition(i),
+                            top: 0,
+                            width: dayWidth,
+                            height: chartHeight - 100
+                          }} 
+                        />
+                      )}
+                      <div 
+                        className="absolute border-l border-slate-200/40" 
+                        style={{ 
+                          left: getDayPosition(i),
+                          top: 0,
+                          bottom: 0,
+                          height: chartHeight - 100
+                        }} 
+                      />
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+
+              {/* LIGNES DES CHANTIERS */}
+              <div className="relative" style={{ height: chartHeight - 100 }}>
+                {items.map((chantier, chantierIndex) => {
+                  const rowTop = chantierIndex * ROW_HEIGHT;
+
+                  return (
+                    <React.Fragment key={`chantier-row-${chantier.id}`}>
+                      <div
+                        className="absolute left-0 right-0 border-b border-slate-200/60"
+                        style={{ top: rowTop + ROW_HEIGHT - 1, height: 1, zIndex: 0 }}
+                      />
+
+                      {allDays.map((day, dayIndex) => {
+                        const dayKey = format(day, 'yyyy-MM-dd');
+                        const hasTask = chantier.daysWithTasks.has(dayKey);
+                        
+                        if (!hasTask) return null;
+
+                        const hasConflict = conflictsByDay[dayKey]?.has(chantier.id);
+                        const boxColor = hasConflict ? 'bg-red-500' : chantier.color;
+
+                        return (
+                          <motion.div
+                            key={`${chantier.id}-day-${dayIndex}`}
+                            className={`absolute ${boxColor} rounded-sm cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-slate-400 pointer-events-auto`}
+                            style={{
+                              left: getDayPosition(dayIndex),
+                              width: dayWidth,
+                              top: rowTop + 6,
+                              height: ROW_HEIGHT - 12,
+                              zIndex: 5
+                            }}
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.2, delay: chantierIndex * 0.02 + dayIndex * 0.001 }}
+                            onClick={() => handleDayClick(chantier, day)}
+                            title={`${chantier.name} - ${format(day, 'dd MMM yyyy', { locale: fr })}${hasConflict ? ' - CONFLIT ARTISAN' : ''}`}
+                          />
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* ✅ MODAL DÉTAILS DU JOUR */}
+      <AnimatePresence>
+        {selectedDayData && (
+          <Dialog open={!!selectedDayData} onOpenChange={() => setSelectedDayData(null)}>
+            <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  📅 {format(selectedDayData.day, 'EEEE dd MMMM yyyy', { locale: fr })} - {selectedDayData.chantierName}
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-3 mt-4">
+                <p className="font-semibold text-sm text-slate-700">
+                  Tâches du jour ({selectedDayData.tasks.length}) :
+                </p>
+
+                {selectedDayData.tasks.map(tache => (
+                  <motion.div
+                    key={tache.id}
+                    className="p-3 bg-slate-50 border border-slate-200 rounded-md hover:bg-slate-100 transition-colors"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="font-medium text-sm text-slate-800">{tache.nom}</p>
+                        
+                        {tache.description && (
+                          <p className="text-xs text-slate-600 mt-1">{tache.description}</p>
+                        )}
+
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-slate-500">
+                          <span>
+                            📅 Du {format(parseISO(tache.datedebut), 'dd/MM/yy', { locale: fr })} au {format(parseISO(tache.datefin), 'dd/MM/yy', { locale: fr })}
+                          </span>
+                          
+                          {tache.assignetype === 'soustraitant' && tache.assigneid && (
+                            <span className="text-orange-700 font-medium">
+                              👷 {getArtisanNom(tache.assigneid)}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="mt-2">
+                          {tache.constructeur_valide || tache.terminee ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                              ✅ Validée
+                            </span>
+                          ) : tache.artisan_termine ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+                              ⏳ En attente validation
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                              🚧 À faire
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
