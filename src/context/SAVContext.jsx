@@ -1,5 +1,5 @@
 // src/context/SAVContext.jsx
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -13,7 +13,7 @@ export function SAVProvider({ children }) {
   // -----------------------------
   // CHARGEMENT DES DEMANDES SAV
   // -----------------------------
-  const loadSAV = async () => {
+  const loadSAV = useCallback(async () => {
     if (!profile?.nomsociete) return;
 
     setLoading(true);
@@ -32,7 +32,7 @@ export function SAVProvider({ children }) {
     }
 
     setLoading(false);
-  };
+  }, [profile?.nomsociete]);
 
   // -----------------------------
   // AJOUTER UNE DEMANDE SAV
@@ -40,15 +40,17 @@ export function SAVProvider({ children }) {
   const addSAV = async (savData) => {
     if (!profile?.nomsociete || !user) return;
 
+    // ✅ Convertir les lignes en JSON
+    const descriptionsJSON = JSON.stringify(savData.descriptions || []);
+
     const payload = {
       nomClient: savData.nomClient,
-      description: savData.description || null,
-      responsable: savData.responsable || null,
+      description: descriptionsJSON, // ✅ Stocké en JSON
+      soustraitant_id: savData.soustraitant_id || null,
       dateOuverture: savData.dateOuverture || new Date().toISOString(),
       datePrevisionnelle: savData.datePrevisionnelle || null,
-      repriseValidee: savData.repriseValidee || false,
-      dateValidationReprise: savData.dateValidationReprise || null,
-      notes: savData.notes || null,
+      constructeur_valide: savData.constructeur_valide || false,
+      constructeur_valide_date: savData.constructeur_valide_date || null,
       nomsociete: profile.nomsociete,
     };
 
@@ -59,7 +61,7 @@ export function SAVProvider({ children }) {
       .single();
 
     if (error) {
-      console.error("Erreur insertion SAV Supabase :", error);
+      console.error("❌ Erreur insertion SAV Supabase :", error);
       throw error;
     }
 
@@ -71,6 +73,12 @@ export function SAVProvider({ children }) {
   // METTRE À JOUR UNE DEMANDE SAV
   // -----------------------------
   const updateSAV = async (id, updates) => {
+    // ✅ Si on met à jour les descriptions, les convertir en JSON
+    if (updates.descriptions) {
+      updates.description = JSON.stringify(updates.descriptions);
+      delete updates.descriptions;
+    }
+
     const { data, error } = await supabase
       .from("sav")
       .update(updates)
@@ -78,7 +86,10 @@ export function SAVProvider({ children }) {
       .select("*")
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error("❌ Erreur update SAV:", error);
+      throw error;
+    }
 
     setDemandesSAV((prev) =>
       prev.map((s) => (s.id === id ? { ...s, ...data } : s))
@@ -88,11 +99,43 @@ export function SAVProvider({ children }) {
   };
 
   // -----------------------------
+  // TOGGLE UNE LIGNE DE DESCRIPTION
+  // -----------------------------
+  const toggleDescriptionLigne = async (savId, ligneIndex) => {
+    try {
+      const sav = demandesSAV.find(s => s.id === savId);
+      if (!sav) return;
+
+      let descriptions = [];
+      try {
+        descriptions = typeof sav.description === 'string' 
+          ? JSON.parse(sav.description) 
+          : sav.description;
+      } catch {
+        descriptions = [{ texte: sav.description, checked: false }];
+      }
+
+      // Toggle la ligne
+      descriptions[ligneIndex].checked = !descriptions[ligneIndex].checked;
+
+      await updateSAV(savId, {
+        description: JSON.stringify(descriptions)
+      });
+    } catch (error) {
+      console.error('❌ Erreur toggle ligne:', error);
+      throw error;
+    }
+  };
+
+  // -----------------------------
   // SUPPRIMER UNE DEMANDE SAV
   // -----------------------------
   const deleteSAV = async (id) => {
     const { error } = await supabase.from("sav").delete().eq("id", id);
-    if (error) throw error;
+    if (error) {
+      console.error("❌ Erreur delete SAV:", error);
+      throw error;
+    }
 
     setDemandesSAV((prev) => prev.filter((s) => s.id !== id));
   };
@@ -103,7 +146,7 @@ export function SAVProvider({ children }) {
   useEffect(() => {
     if (!profile?.nomsociete) return;
     loadSAV();
-  }, [profile?.nomsociete]);
+  }, [profile?.nomsociete, loadSAV]);
 
   return (
     <SAVContext.Provider
@@ -114,6 +157,7 @@ export function SAVProvider({ children }) {
         addSAV,
         updateSAV,
         deleteSAV,
+        toggleDescriptionLigne,
       }}
     >
       {children}

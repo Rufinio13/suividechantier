@@ -7,11 +7,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Plus, Edit, Trash2, Wrench, Search, Filter, CheckCircle, Clock, Calendar } from "lucide-react";
+import { Plus, Edit, Trash2, Wrench, Search, Filter, CheckCircle, Calendar, X } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 
@@ -30,47 +29,54 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
   const [formData, setFormData] = useState({
     nomClient: "",
     dateOuverture: "",
-    description: "",
+    descriptions: [{ texte: '', checked: false }],
     soustraitant_id: "",
     datePrevisionnelle: "",
     constructeur_valide: false,
-    notes: "",
     constructeur_valide_date: null,
   });
 
   useEffect(() => {
     if (savItem) {
+      // ✅ Parser les descriptions
+      let descriptions = [];
+      try {
+        descriptions = typeof savItem.description === 'string' 
+          ? JSON.parse(savItem.description) 
+          : savItem.description;
+      } catch {
+        descriptions = [{ texte: savItem.description || '', checked: false }];
+      }
+
       setFormData({
         nomClient: savItem.nomClient || "",
         dateOuverture: savItem.dateOuverture
           ? format(parseISO(savItem.dateOuverture), "yyyy-MM-dd")
           : format(new Date(), "yyyy-MM-dd"),
-        description: savItem.description || "",
+        descriptions: descriptions,
         soustraitant_id: savItem.soustraitant_id || "",
         datePrevisionnelle: savItem.datePrevisionnelle
           ? format(parseISO(savItem.datePrevisionnelle), "yyyy-MM-dd")
           : "",
         constructeur_valide: savItem.constructeur_valide || false,
-        notes: savItem.notes || "",
         constructeur_valide_date: savItem.constructeur_valide_date || null,
       });
     } else {
       setFormData({
         nomClient: "",
         dateOuverture: format(new Date(), "yyyy-MM-dd"),
-        description: "",
+        descriptions: [{ texte: '', checked: false }],
         soustraitant_id: "",
         datePrevisionnelle: "",
         constructeur_valide: false,
-        notes: "",
         constructeur_valide_date: null,
       });
     }
   }, [savItem, isOpen]);
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleConstructeurValideChange = (checked) => {
@@ -81,15 +87,50 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
     }));
   };
 
+  // ✅ Gestion des lignes de description
+  const handleAddLigne = () => {
+    setFormData(prev => ({
+      ...prev,
+      descriptions: [...prev.descriptions, { texte: '', checked: false }]
+    }));
+  };
+
+  const handleRemoveLigne = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      descriptions: prev.descriptions.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleChangeLigneTexte = (index, texte) => {
+    setFormData(prev => ({
+      ...prev,
+      descriptions: prev.descriptions.map((ligne, i) => 
+        i === index ? { ...ligne, texte } : ligne
+      )
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    await onSubmit(formData);
+    
+    // ✅ Vérifier qu'au moins une ligne a du texte
+    const descriptionsValides = formData.descriptions.filter(d => d.texte.trim());
+    if (descriptionsValides.length === 0) {
+      alert('Veuillez ajouter au moins une ligne de description');
+      return;
+    }
+
+    await onSubmit({
+      ...formData,
+      descriptions: descriptionsValides
+    });
     onClose();
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{savItem ? "Modifier la demande SAV" : "Nouvelle demande SAV"}</DialogTitle>
           <DialogDescription>
@@ -97,27 +138,65 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-2 max-h-[70vh] overflow-y-auto pr-2">
+          {/* NOM CLIENT */}
           <div>
             <Label htmlFor="nomClient">Nom du Client <span className="text-red-500">*</span></Label>
             <Input id="nomClient" name="nomClient" value={formData.nomClient} onChange={handleChange} required />
           </div>
+
+          {/* DATE OUVERTURE */}
           <div>
             <Label htmlFor="dateOuverture">Date d'ouverture <span className="text-red-500">*</span></Label>
             <Input id="dateOuverture" name="dateOuverture" type="date" value={formData.dateOuverture} onChange={handleChange} required />
           </div>
+
+          {/* ✅ DESCRIPTIONS MULTI-LIGNES */}
           <div>
-            <Label htmlFor="description">Description du SAV <span className="text-red-500">*</span></Label>
-            <Textarea id="description" name="description" value={formData.description} onChange={handleChange} rows={3} required />
+            <div className="flex items-center justify-between mb-2">
+              <Label>Descriptions du SAV <span className="text-red-500">*</span></Label>
+              <Button 
+                type="button" 
+                variant="outline" 
+                size="sm" 
+                onClick={handleAddLigne}
+              >
+                <Plus className="mr-1 h-4 w-4" /> Ajouter une ligne
+              </Button>
+            </div>
+
+            <div className="space-y-2">
+              {formData.descriptions.map((ligne, index) => (
+                <div key={index} className="flex gap-2">
+                  <Input
+                    value={ligne.texte}
+                    onChange={(e) => handleChangeLigneTexte(index, e.target.value)}
+                    placeholder={`Description ${index + 1}...`}
+                    className="flex-1"
+                  />
+                  {formData.descriptions.length > 1 && (
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => handleRemoveLigne(index)}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <X size={18} />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
           
-          {/* ✅ Sélecteur Sous-traitant - SELECT HTML NATIF */}
+          {/* ✅ ARTISAN ASSIGNÉ */}
           <div>
             <Label htmlFor="soustraitant_id">Artisan assigné</Label>
             <select
               id="soustraitant_id"
               name="soustraitant_id"
               value={formData.soustraitant_id}
-              onChange={(e) => setFormData(prev => ({ ...prev, soustraitant_id: e.target.value }))}
+              onChange={handleChange}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <option value="">Aucun</option>
@@ -129,14 +208,13 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
             </select>
           </div>
 
+          {/* DATE PRÉVISIONNELLE */}
           <div>
             <Label htmlFor="datePrevisionnelle">Date prévisionnelle d'intervention</Label>
             <Input id="datePrevisionnelle" name="datePrevisionnelle" type="date" value={formData.datePrevisionnelle} onChange={handleChange} />
           </div>
-          <div>
-            <Label htmlFor="notes">Notes complémentaires</Label>
-            <Textarea id="notes" name="notes" value={formData.notes} onChange={handleChange} rows={2} />
-          </div>
+
+          {/* VALIDATION CONSTRUCTEUR */}
           <div className="flex items-center space-x-2">
             <Checkbox 
               id="constructeur_valide" 
@@ -150,6 +228,7 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
               Validé le: {format(parseISO(formData.constructeur_valide_date), 'dd MMMM yyyy à HH:mm', { locale: fr })}
             </p>
           )}
+
           <DialogFooter className="pt-4 border-t">
             <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
             <Button type="submit">{savItem ? "Enregistrer les modifications" : "Ajouter la demande"}</Button>
@@ -161,7 +240,7 @@ function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
 }
 
 export function SAVList() {
-  const { demandesSAV, addSAV, updateSAV, deleteSAV, loading } = useSAV();
+  const { demandesSAV, addSAV, updateSAV, deleteSAV, toggleDescriptionLigne, loading } = useSAV();
   const { sousTraitants } = useChantier();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSAV, setEditingSAV] = useState(null);
@@ -179,7 +258,6 @@ export function SAVList() {
   };
 
   const handleSubmitSAV = async (data) => {
-    // ✅ Convertir les chaînes vides en null pour les UUIDs
     const cleanedData = {
       ...data,
       soustraitant_id: data.soustraitant_id || null,
@@ -200,7 +278,6 @@ export function SAVList() {
 
   const handleToggleConstructeurValide = async (savItem, checked) => {
     await updateSAV(savItem.id, {
-      ...savItem,
       constructeur_valide: checked,
       constructeur_valide_date: checked ? new Date().toISOString() : null,
     });
@@ -227,24 +304,18 @@ export function SAVList() {
   const filteredSAV = useMemo(() => {
     return (demandesSAV || [])
       .filter(sav => {
-        const matchesSearch = sav.nomClient.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                              sav.description.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = sav.nomClient.toLowerCase().includes(searchTerm.toLowerCase());
         if (filterStatut === "tous") return matchesSearch;
         if (filterStatut === "ouvert") return matchesSearch && !sav.constructeur_valide;
         if (filterStatut === "valide") return matchesSearch && sav.constructeur_valide;
         return false;
       })
       .sort((a, b) => {
-        // ✅ Tri par date prévisionnelle (du plus proche au plus lointain)
-        // Si pas de date prévisionnelle, mettre à la fin
         if (!a.datePrevisionnelle && !b.datePrevisionnelle) {
-          // Si aucun n'a de date prévisionnelle, trier par date d'ouverture (le plus récent d'abord)
           return new Date(b.dateOuverture) - new Date(a.dateOuverture);
         }
-        if (!a.datePrevisionnelle) return 1; // a va à la fin
-        if (!b.datePrevisionnelle) return -1; // b va à la fin
-        
-        // Les deux ont une date prévisionnelle, trier du plus proche au plus lointain
+        if (!a.datePrevisionnelle) return 1;
+        if (!b.datePrevisionnelle) return -1;
         return new Date(a.datePrevisionnelle) - new Date(b.datePrevisionnelle);
       });
   }, [demandesSAV, searchTerm, filterStatut]);
@@ -298,125 +369,153 @@ export function SAVList() {
       {/* Liste des SAV */}
       <div className="space-y-4">
         {filteredSAV.length > 0 ? (
-          filteredSAV.map((sav) => (
-            <motion.div key={sav.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} layout>
-              <Card className={`hover:shadow-md transition-shadow ${
-                sav.constructeur_valide 
-                  ? 'bg-green-50 border-green-200' 
-                  : sav.artisan_termine 
-                    ? 'bg-yellow-50 border-yellow-200'
-                    : 'bg-orange-50 border-orange-200'
-              }`}>
-                <CardHeader className="pb-2 flex flex-row justify-between items-start">
-                  <div>
-                    <CardTitle className="text-lg">{sav.nomClient}</CardTitle>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Ouvert le {formatDate(sav.dateOuverture)}
-                    </p>
-                  </div>
-                  <div className="flex space-x-1">
-                    <Button variant="ghost" size="icon" onClick={() => handleOpenModal(sav)} className="h-8 w-8">
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDeleteSAV(sav.id)} className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="text-sm space-y-2">
-                  {/* ✅ Description avec sauts de ligne préservés */}
-                  <div>
-                    <p className="font-semibold mb-1">Description:</p>
-                    <p className="whitespace-pre-wrap text-slate-700">
-                      {sav.description || "Aucune description"}
-                    </p>
-                  </div>
-                  
-                  {/* ✅ Artisan assigné */}
-                  {sav.soustraitant_id && (
-                    <p className="text-orange-700 font-medium">
-                      👷 <strong>Artisan:</strong> {getArtisanNom(sav.soustraitant_id)}
-                    </p>
-                  )}
+          filteredSAV.map((sav) => {
+            // ✅ Parser les descriptions
+            let descriptions = [];
+            try {
+              descriptions = typeof sav.description === 'string' 
+                ? JSON.parse(sav.description) 
+                : sav.description;
+            } catch {
+              descriptions = [{ texte: sav.description || '', checked: false }];
+            }
 
-                  {/* Date prévisionnelle constructeur */}
-                  {sav.datePrevisionnelle && (
-                    <p><strong>Date prévisionnelle:</strong> {formatDate(sav.datePrevisionnelle)}</p>
-                  )}
+            const nbCoches = descriptions.filter(d => d.checked).length;
+            const nbTotal = descriptions.length;
+            const toutCoche = nbCoches === nbTotal;
 
-                  {/* ✅ Date intervention artisan (sous la date prévisionnelle) */}
-                  {sav.artisan_date_intervention && (
-                    <p className="flex items-center gap-2 text-blue-700">
-                      <Calendar className="h-4 w-4" />
-                      <strong>Intervention prévue (artisan):</strong> {formatDate(sav.artisan_date_intervention)}
-                    </p>
-                  )}
-
-                  {/* ✅ Statut artisan terminé */}
-                  {sav.artisan_termine && (
-                    <div className="p-2 bg-yellow-100 border border-yellow-300 rounded-md mt-2">
-                      <p className="flex items-center gap-2 text-yellow-800 font-semibold text-xs">
-                        <CheckCircle className="h-4 w-4" />
-                        Intervention terminée par l'artisan le {formatDateTime(sav.artisan_termine_date)}
+            return (
+              <motion.div key={sav.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} layout>
+                <Card className={`hover:shadow-md transition-shadow border-2 ${
+                  sav.constructeur_valide 
+                    ? 'bg-gradient-to-r from-green-50 to-green-100 border-green-300' 
+                    : toutCoche
+                      ? 'bg-gradient-to-r from-green-50 to-green-100 border-green-300'
+                      : 'bg-gradient-to-r from-blue-50 to-blue-100 border-blue-300'
+                }`}>
+                  <CardHeader className="pb-2 flex flex-row justify-between items-start">
+                    <div className="flex-1">
+                      <CardTitle className="text-lg">{sav.nomClient}</CardTitle>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Ouvert le {formatDate(sav.dateOuverture)}
                       </p>
-                      {sav.artisan_commentaire && (
-                        <p className="text-xs text-slate-700 mt-1 whitespace-pre-wrap">
-                          <strong>Commentaire:</strong> {sav.artisan_commentaire}
-                        </p>
-                      )}
                     </div>
-                  )}
-
-                  {/* ✅ Photos artisan */}
-                  {sav.artisan_photos && sav.artisan_photos.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-xs font-medium mb-1">📸 Photos intervention :</p>
-                      <div className="flex gap-2 flex-wrap">
-                        {sav.artisan_photos.map((photo, i) => (
-                          <img 
-                            key={i} 
-                            src={photo.url} 
-                            alt={`SAV ${i+1}`}
-                            className="h-16 w-16 object-cover rounded border cursor-pointer hover:opacity-80"
-                            onClick={() => window.open(photo.url, '_blank')}
-                          />
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-600 bg-white/50 px-2 py-1 rounded">
+                        {nbCoches}/{nbTotal} cochés
+                      </span>
+                      <Button variant="ghost" size="icon" onClick={() => handleOpenModal(sav)} className="h-8 w-8">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDeleteSAV(sav.id)} className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-3">
+                    {/* ✅ DESCRIPTIONS AVEC CHECKBOXES */}
+                    <div>
+                      <p className="font-semibold mb-2">Descriptions:</p>
+                      <ul className="space-y-2">
+                        {descriptions.map((desc, index) => (
+                          <li key={index} className="flex items-start gap-2">
+                            <Checkbox
+                              id={`desc-${sav.id}-${index}`}
+                              checked={desc.checked}
+                              onCheckedChange={() => toggleDescriptionLigne(sav.id, index)}
+                              className="mt-0.5"
+                            />
+                            <label
+                              htmlFor={`desc-${sav.id}-${index}`}
+                              className={`flex-1 text-sm cursor-pointer ${
+                                toutCoche ? 'text-green-800' : 'text-blue-800'
+                              }`}
+                            >
+                              {desc.texte}
+                            </label>
+                          </li>
                         ))}
+                      </ul>
+                    </div>
+                    
+                    {/* Artisan assigné */}
+                    {sav.soustraitant_id && (
+                      <p className="text-orange-700 font-medium">
+                        👷 <strong>Artisan:</strong> {getArtisanNom(sav.soustraitant_id)}
+                      </p>
+                    )}
+
+                    {/* Date prévisionnelle */}
+                    {sav.datePrevisionnelle && (
+                      <p><strong>Date prévisionnelle:</strong> {formatDate(sav.datePrevisionnelle)}</p>
+                    )}
+
+                    {/* Date intervention artisan */}
+                    {sav.artisan_date_intervention && (
+                      <p className="flex items-center gap-2 text-blue-700">
+                        <Calendar className="h-4 w-4" />
+                        <strong>Intervention prévue (artisan):</strong> {formatDate(sav.artisan_date_intervention)}
+                      </p>
+                    )}
+
+                    {/* Statut artisan terminé */}
+                    {sav.artisan_termine && (
+                      <div className="p-2 bg-yellow-100 border border-yellow-300 rounded-md">
+                        <p className="flex items-center gap-2 text-yellow-800 font-semibold text-xs">
+                          <CheckCircle className="h-4 w-4" />
+                          Intervention terminée par l'artisan le {formatDateTime(sav.artisan_termine_date)}
+                        </p>
+                        {sav.artisan_commentaire && (
+                          <p className="text-xs text-slate-700 mt-1 whitespace-pre-wrap">
+                            <strong>Commentaire:</strong> {sav.artisan_commentaire}
+                          </p>
+                        )}
                       </div>
+                    )}
+
+                    {/* Photos artisan */}
+                    {sav.artisan_photos && sav.artisan_photos.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium mb-1">📸 Photos intervention :</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {sav.artisan_photos.map((photo, i) => (
+                            <img 
+                              key={i} 
+                              src={photo.url} 
+                              alt={`SAV ${i+1}`}
+                              className="h-16 w-16 object-cover rounded border cursor-pointer hover:opacity-80"
+                              onClick={() => window.open(photo.url, '_blank')}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Validation constructeur */}
+                    <div className="flex items-center space-x-2 pt-2 border-t">
+                      <Checkbox 
+                        id={`valide-${sav.id}`} 
+                        checked={sav.constructeur_valide} 
+                        onCheckedChange={(checked) => handleToggleConstructeurValide(sav, checked)} 
+                      />
+                      <Label 
+                        htmlFor={`valide-${sav.id}`} 
+                        className={`${sav.constructeur_valide ? 'text-green-600' : 'text-orange-600'} font-semibold cursor-pointer`}
+                      >
+                        {sav.constructeur_valide ? '✅ SAV Validé' : '⏳ Valider le SAV'}
+                      </Label>
                     </div>
-                  )}
-                  
-                  {/* ✅ Notes avec sauts de ligne préservés */}
-                  {sav.notes && (
-                    <div className="text-xs text-muted-foreground">
-                      <strong>Notes:</strong>
-                      <p className="whitespace-pre-wrap mt-1">{sav.notes}</p>
-                    </div>
-                  )}
-                  
-                  {/* ✅ Validation constructeur */}
-                  <div className="flex items-center space-x-2 pt-2 border-t">
-                    <Checkbox 
-                      id={`valide-${sav.id}`} 
-                      checked={sav.constructeur_valide} 
-                      onCheckedChange={(checked) => handleToggleConstructeurValide(sav, checked)} 
-                    />
-                    <Label 
-                      htmlFor={`valide-${sav.id}`} 
-                      className={`${sav.constructeur_valide ? 'text-green-600' : 'text-orange-600'} font-semibold cursor-pointer`}
-                    >
-                      {sav.constructeur_valide ? '✅ SAV Validé' : '⏳ Valider le SAV'}
-                    </Label>
-                  </div>
-                  
-                  {sav.constructeur_valide && sav.constructeur_valide_date && (
-                    <p className="text-xs text-green-600">
-                      Validé le {formatDateTime(sav.constructeur_valide_date)}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))
+                    
+                    {sav.constructeur_valide && sav.constructeur_valide_date && (
+                      <p className="text-xs text-green-600">
+                        Validé le {formatDateTime(sav.constructeur_valide_date)}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            );
+          })
         ) : (
           <div className="text-center py-10">
             <Wrench className="mx-auto h-12 w-12 text-muted-foreground mb-4" />

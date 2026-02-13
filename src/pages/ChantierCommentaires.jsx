@@ -7,7 +7,7 @@ import { useCommentaires } from '@/context/CommentairesContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft, MessageSquare, Send, AlertTriangle, Edit2, Trash2, CheckSquare, Plus } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Send, AlertTriangle, Edit2, Trash2, Plus, X } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
@@ -25,7 +25,6 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
     addCommentaire, 
     updateCommentaire,
     deleteCommentaire,
-    togglePrisEnCompte,
     loading: loadingCommentaires 
   } = useCommentaires();
 
@@ -34,18 +33,17 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
 
   const chantier = useMemo(() => chantiers.find(c => c.id === chantierId), [chantiers, chantierId]);
   
-  // ✅ CORRIGÉ : Trier les commentaires par date décroissante (plus récent en premier)
-const commentaires = useMemo(() => {
-  const comments = getCommentairesByChantier(chantierId);
-  return comments.sort((a, b) => {
-    const dateA = a.date ? new Date(a.date) : new Date(0);
-    const dateB = b.date ? new Date(b.date) : new Date(0);
-    return dateA - dateB; // ✅ Ordre croissant (plus ancien en premier)
-  });
-}, [chantierId, getCommentairesByChantier]);
+  const commentaires = useMemo(() => {
+    const comments = getCommentairesByChantier(chantierId);
+    return comments.sort((a, b) => {
+      const dateA = a.date ? new Date(a.date) : new Date(0);
+      const dateB = b.date ? new Date(b.date) : new Date(0);
+      return dateA - dateB;
+    });
+  }, [chantierId, getCommentairesByChantier]);
 
   // =========================================
-  // ✅ CORRIGÉ : RÉCUPÉRER LES POINTS NC NON VALIDÉS (MODÈLE + SPÉCIFIQUES)
+  // ✅ RÉCUPÉRER LES POINTS NC NON VALIDÉS
   // =========================================
   const pointsNCNonValides = useMemo(() => {
     const points = [];
@@ -55,13 +53,11 @@ const commentaires = useMemo(() => {
       const modele = modelesCQ.find(m => m.id === ctrl.modele_cq_id);
       if (!modele) return;
 
-      // ✅ 1️⃣ NC DU MODÈLE DE BASE (ctrl.resultats)
       if (ctrl.resultats) {
         Object.entries(ctrl.resultats).forEach(([categorieId, resultatsCategorie]) => {
           const categorie = modele.categories?.find(c => c.id === categorieId);
           if (!categorie) return;
 
-          // ✅ Vérifier si la catégorie n'est pas supprimée
           const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
           if (categoriesSupprimees.includes(categorieId)) return;
 
@@ -69,12 +65,10 @@ const commentaires = useMemo(() => {
             const sousCategorie = categorie.sousCategories?.find(sc => sc.id === sousCategorieId);
             if (!sousCategorie) return;
 
-            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
             const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
             if (sousCategoriesSupprimees.includes(sousCategorieId)) return;
 
             Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
-              // ✅ Vérifier si le point n'est pas supprimé
               const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieId] || [];
               if (pointsSupprimes.includes(pointControleId)) return;
 
@@ -100,12 +94,10 @@ const commentaires = useMemo(() => {
         });
       }
 
-      // ✅ 2️⃣ NC DES POINTS SPÉCIFIQUES CHANTIER (ctrl.points_specifiques)
       if (ctrl.points_specifiques) {
         Object.entries(ctrl.points_specifiques).forEach(([categorieId, categoriePoints]) => {
           const categorie = modele.categories?.find(c => c.id === categorieId);
           
-          // ✅ Vérifier si la catégorie n'est pas supprimée
           const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
           if (categoriesSupprimees.includes(categorieId)) return;
           
@@ -116,12 +108,10 @@ const commentaires = useMemo(() => {
             
             if (!sousCategorie) return;
 
-            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
             const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
             if (sousCategoriesSupprimees.includes(sousCategorieKey)) return;
 
             Object.entries(pointsMap).forEach(([pointControleId, pointData]) => {
-              // ✅ Vérifier si le point n'est pas supprimé
               const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieKey] || [];
               if (pointsSupprimes.includes(pointControleId)) return;
 
@@ -157,20 +147,29 @@ const commentaires = useMemo(() => {
   }, [controles, modelesCQ, chantierId]);
 
   // =========================================
-  // GESTION DES COMMENTAIRES
+  // ✅ GESTION DES COMMENTAIRES MULTI-LIGNES
   // =========================================
   const handleOpenCommentaireModal = (commentaire = null) => {
     if (commentaire) {
+      let lignes = [];
+      try {
+        lignes = typeof commentaire.texte === 'string' 
+          ? JSON.parse(commentaire.texte) 
+          : commentaire.texte;
+      } catch {
+        lignes = [{ texte: commentaire.texte, checked: false }];
+      }
+
       setEditingCommentaire({
         id: commentaire.id,
         titre: commentaire.titre,
-        texte: commentaire.texte
+        lignes: lignes
       });
     } else {
       setEditingCommentaire({
         id: null,
         titre: '',
-        texte: ''
+        lignes: [{ texte: '', checked: false }]
       });
     }
     setIsCommentaireModalOpen(true);
@@ -181,25 +180,56 @@ const commentaires = useMemo(() => {
     setEditingCommentaire(null);
   };
 
+  const handleAddLigne = () => {
+    setEditingCommentaire(prev => ({
+      ...prev,
+      lignes: [...prev.lignes, { texte: '', checked: false }]
+    }));
+  };
+
+  const handleRemoveLigne = (index) => {
+    setEditingCommentaire(prev => ({
+      ...prev,
+      lignes: prev.lignes.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleChangeLigneTexte = (index, texte) => {
+    setEditingCommentaire(prev => ({
+      ...prev,
+      lignes: prev.lignes.map((ligne, i) => 
+        i === index ? { ...ligne, texte } : ligne
+      )
+    }));
+  };
+
   const handleSaveCommentaire = async () => {
     if (!editingCommentaire) return;
     
-    if (!editingCommentaire.titre.trim() || !editingCommentaire.texte.trim()) {
-      alert('Veuillez remplir le titre et le texte');
+    if (!editingCommentaire.titre.trim()) {
+      alert('Veuillez remplir le titre');
+      return;
+    }
+
+    const lignesValides = editingCommentaire.lignes.filter(l => l.texte.trim());
+    if (lignesValides.length === 0) {
+      alert('Veuillez ajouter au moins une ligne de commentaire');
       return;
     }
 
     try {
+      const texteJSON = JSON.stringify(lignesValides);
+
       if (editingCommentaire.id) {
         await updateCommentaire(editingCommentaire.id, {
           titre: editingCommentaire.titre,
-          texte: editingCommentaire.texte
+          texte: texteJSON
         });
       } else {
         await addCommentaire(
           chantierId, 
           editingCommentaire.titre.trim(), 
-          editingCommentaire.texte.trim()
+          texteJSON
         );
       }
       handleCloseCommentaireModal();
@@ -220,18 +250,31 @@ const commentaires = useMemo(() => {
     }
   };
 
-  const handleTogglePrisEnCompte = async (commentaireId) => {
+  const handleToggleLigne = async (commentaireId, ligneIndex) => {
     try {
-      await togglePrisEnCompte(commentaireId);
+      const commentaire = commentaires.find(c => c.id === commentaireId);
+      if (!commentaire) return;
+
+      let lignes = [];
+      try {
+        lignes = typeof commentaire.texte === 'string' 
+          ? JSON.parse(commentaire.texte) 
+          : commentaire.texte;
+      } catch {
+        lignes = [{ texte: commentaire.texte, checked: false }];
+      }
+
+      lignes[ligneIndex].checked = !lignes[ligneIndex].checked;
+
+      await updateCommentaire(commentaireId, {
+        texte: JSON.stringify(lignes)
+      });
     } catch (error) {
       console.error('Erreur lors du toggle:', error);
       alert('Erreur lors de la mise à jour');
     }
   };
 
-  // =========================================
-  // ✅ VALIDATION REPRISE NC
-  // =========================================
   const handleValiderReprise = async (pointNC) => {
     try {
       const controle = controles.find(c => c.id === pointNC.controleId);
@@ -242,10 +285,9 @@ const commentaires = useMemo(() => {
 
       const updatedResultats = { ...controle.resultats };
       if (updatedResultats[pointNC.categorieId]?.[pointNC.sousCategorieId]?.[pointNC.pointControleId]) {
-        // ✅ Passer en CONFORME + garder l'historique
         updatedResultats[pointNC.categorieId][pointNC.sousCategorieId][pointNC.pointControleId] = {
           ...updatedResultats[pointNC.categorieId][pointNC.sousCategorieId][pointNC.pointControleId],
-          resultat: 'C', // ✅ Passe en Conforme
+          resultat: 'C',
           repriseValidee: true
         };
       }
@@ -263,9 +305,6 @@ const commentaires = useMemo(() => {
     }
   };
 
-  // =========================================
-  // FORMATAGE DES DATES
-  // =========================================
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     try { 
@@ -361,7 +400,6 @@ const commentaires = useMemo(() => {
                           Explication: {pnc.explicationNC}
                         </p>
                       )}
-                      {/* Statut artisan repris */}
                       {pnc.artisan_repris && (
                         <p className="text-xs text-yellow-700 mt-1 font-medium bg-yellow-100 px-2 py-1 rounded inline-block">
                           ✅ Reprise marquée par l'artisan le {formatDateTime(pnc.artisan_repris_date)}
@@ -369,7 +407,6 @@ const commentaires = useMemo(() => {
                       )}
                     </div>
                     
-                    {/* ✅ CHECKBOX VALIDATION */}
                     <div className="flex items-center space-x-2 ml-3">
                       <Checkbox
                         id={`valider-${pnc.modeleId}-${pnc.pointControleId}`}
@@ -385,7 +422,6 @@ const commentaires = useMemo(() => {
                     </div>
                   </div>
 
-                  {/* Photos reprise artisan */}
                   {pnc.artisan_repris_photos && pnc.artisan_repris_photos.length > 0 && (
                     <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
                       <p className="text-xs font-medium text-green-700 mb-1">📸 Photos de reprise (artisan) :</p>
@@ -403,7 +439,6 @@ const commentaires = useMemo(() => {
                     </div>
                   )}
 
-                  {/* Commentaire reprise artisan */}
                   {pnc.artisan_repris_commentaire && (
                     <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-md">
                       <p className="text-xs font-medium text-green-700 mb-1">💬 Commentaire reprise (artisan) :</p>
@@ -431,7 +466,6 @@ const commentaires = useMemo(() => {
                       </div>
                     </div>
                     
-                    {/* Artisan concerné */}
                     {pnc.soustraitant_id && (
                       <div className="text-xs">
                         <span className="font-medium text-slate-600">Artisan concerné: </span>
@@ -443,7 +477,6 @@ const commentaires = useMemo(() => {
                       </div>
                     )}
                     
-                    {/* Date intervention artisan */}
                     {pnc.date_intervention_artisan && (
                       <div className="text-xs">
                         <span className="font-medium text-slate-600">Intervention prévue le: </span>
@@ -483,58 +516,91 @@ const commentaires = useMemo(() => {
         <CardContent>
           {commentaires.length > 0 ? (
             <ul className="space-y-3">
-              {commentaires.map(commentaire => (
-                <li 
-                  key={commentaire.id} 
-                  className={`p-3 border rounded-md ${
-                    commentaire.pris_en_compte 
-                      ? 'bg-green-50 border-green-200' 
-                      : 'bg-slate-50'
-                  }`}
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-medium text-sm text-slate-800">{commentaire.titre}</h4>
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap mt-1">
-                        {commentaire.texte}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1.5">
-                        Par {commentaire.auteur} - {formatDate(commentaire.date)}
-                      </p>
+              {commentaires.map(commentaire => {
+                let lignes = [];
+                try {
+                  lignes = typeof commentaire.texte === 'string' 
+                    ? JSON.parse(commentaire.texte) 
+                    : commentaire.texte;
+                } catch {
+                  lignes = [{ texte: commentaire.texte, checked: false }];
+                }
+
+                const nbCoches = lignes.filter(l => l.checked).length;
+                const nbTotal = lignes.length;
+                const toutCoche = nbCoches === nbTotal;
+
+                return (
+                  <li 
+                    key={commentaire.id} 
+                    className={`p-4 border-2 rounded-lg shadow-sm ${
+                      toutCoche
+                        ? 'bg-gradient-to-r from-green-50 to-green-100 border-green-300' 
+                        : 'bg-gradient-to-r from-blue-50 to-blue-100 border-blue-300'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className={`font-semibold text-base ${
+                            toutCoche ? 'text-green-900' : 'text-blue-900'
+                          }`}>
+                            {commentaire.titre}
+                          </h4>
+                          <span className="text-xs text-slate-600 bg-white/50 px-2 py-1 rounded">
+                            {nbCoches}/{nbTotal} cochés
+                          </span>
+                        </div>
+
+                        {/* ✅ LIGNES AVEC CHECKBOXES (SANS BARRÉ) */}
+                        <ul className="space-y-2">
+                          {lignes.map((ligne, index) => (
+                            <li key={index} className="flex items-start gap-2">
+                              <Checkbox
+                                id={`ligne-${commentaire.id}-${index}`}
+                                checked={ligne.checked}
+                                onCheckedChange={() => handleToggleLigne(commentaire.id, index)}
+                                className="mt-0.5"
+                              />
+                              <label
+                                htmlFor={`ligne-${commentaire.id}-${index}`}
+                                className={`flex-1 text-sm cursor-pointer ${
+                                  toutCoche ? 'text-green-800' : 'text-blue-800'
+                                }`}
+                              >
+                                {ligne.texte}
+                              </label>
+                            </li>
+                          ))}
+                        </ul>
+
+                        <p className="text-xs text-slate-600 mt-3 italic">
+                          Par {commentaire.auteur} - {formatDate(commentaire.date)}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col space-y-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleOpenCommentaireModal(commentaire)} 
+                          className="h-8 w-8 text-slate-600 hover:text-slate-800 hover:bg-white/50"
+                        >
+                          <Edit2 size={16} />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleDeleteCommentaire(commentaire.id)} 
+                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-100"
+                        >
+                          <Trash2 size={16} />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex flex-col items-end space-y-1">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => handleOpenCommentaireModal(commentaire)} 
-                        className="h-7 w-7 text-slate-500 hover:text-slate-700"
-                      >
-                        <Edit2 size={14} />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => handleDeleteCommentaire(commentaire.id)} 
-                        className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 size={14} />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        onClick={() => handleTogglePrisEnCompte(commentaire.id)} 
-                        className={`h-7 w-7 ${
-                          commentaire.pris_en_compte 
-                            ? 'text-green-600 hover:text-green-700' 
-                            : 'text-slate-500 hover:text-slate-700'
-                        }`}
-                      >
-                        <CheckSquare size={16} />
-                      </Button>
-                    </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <p className="text-muted-foreground text-center py-4">
@@ -544,7 +610,7 @@ const commentaires = useMemo(() => {
         </CardContent>
       </Card>
 
-      {/* MODALE COMMENTAIRE (Création / Édition) */}
+      {/* ✅ MODALE COMMENTAIRE MULTI-LIGNES */}
       {isCommentaireModalOpen && editingCommentaire && (
         <motion.div 
           initial={{ opacity: 0 }} 
@@ -552,7 +618,7 @@ const commentaires = useMemo(() => {
           className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4"
           onClick={handleCloseCommentaireModal}
         >
-          <Card className="w-full max-w-md z-50" onClick={(e) => e.stopPropagation()}>
+          <Card className="w-full max-w-2xl z-50 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <CardHeader>
               <CardTitle>
                 {editingCommentaire.id ? 'Modifier le commentaire' : 'Nouveau commentaire'}
@@ -571,20 +637,46 @@ const commentaires = useMemo(() => {
                   placeholder="Sujet du commentaire..."
                 />
               </div>
+
               <div>
-                <Label htmlFor="commentaire-texte">Commentaire</Label>
-                <Textarea
-                  id="commentaire-texte"
-                  rows={4}
-                  value={editingCommentaire.texte}
-                  onChange={(e) => setEditingCommentaire(prev => ({ 
-                    ...prev, 
-                    texte: e.target.value 
-                  }))}
-                  placeholder="Ajouter un commentaire détaillé..."
-                />
+                <div className="flex items-center justify-between mb-2">
+                  <Label>Lignes de commentaire</Label>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleAddLigne}
+                  >
+                    <Plus className="mr-1 h-4 w-4" /> Ajouter une ligne
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  {editingCommentaire.lignes.map((ligne, index) => (
+                    <div key={index} className="flex gap-2">
+                      <Input
+                        value={ligne.texte}
+                        onChange={(e) => handleChangeLigneTexte(index, e.target.value)}
+                        placeholder={`Ligne ${index + 1}...`}
+                        className="flex-1"
+                      />
+                      {editingCommentaire.lignes.length > 1 && (
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleRemoveLigne(index)}
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <X size={18} />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="flex justify-end space-x-2">
+
+              <div className="flex justify-end space-x-2 pt-4">
                 <Button variant="outline" onClick={handleCloseCommentaireModal}>
                   Annuler
                 </Button>
