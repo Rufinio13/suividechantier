@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
@@ -9,7 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Calendar, CheckCircle, Camera, Upload } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ArrowLeft, Calendar, CheckCircle, Camera } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabaseClient';
@@ -20,7 +21,7 @@ export function SAVArtisanDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { profile } = useAuth();
-  const { demandesSAV, updateSAV } = useSAV();
+  const { demandesSAV, updateSAV, toggleDescriptionLigne } = useSAV();
   const { sousTraitants } = useSousTraitant();
   const { toast } = useToast();
 
@@ -29,7 +30,6 @@ export function SAVArtisanDetails() {
   const [photos, setPhotos] = useState([]);
   const [uploading, setUploading] = useState(false);
 
-  // Trouver l'ID du sous-traitant
   const monSousTraitantId = useMemo(() => {
     if (!profile?.id || !sousTraitants?.length) return null;
     const myST = sousTraitants.find(st => st.user_id === profile.id);
@@ -41,22 +41,43 @@ export function SAVArtisanDetails() {
     [demandesSAV, id]
   );
 
-  // Vérifier accès
+  const descriptions = useMemo(() => {
+    if (!sav) return [];
+    try {
+      return typeof sav.description === 'string' 
+        ? JSON.parse(sav.description) 
+        : sav.description;
+    } catch {
+      return [{ texte: sav.description || '', checked: false }];
+    }
+  }, [sav]);
+
+  const nbCoches = useMemo(() => descriptions.filter(d => d.checked).length, [descriptions]);
+  const nbTotal = descriptions.length;
+
   const hasAccess = useMemo(() => {
     if (!sav || !monSousTraitantId) return false;
     return sav.soustraitant_id === monSousTraitantId && !sav.constructeur_valide;
   }, [sav, monSousTraitantId]);
 
-  // Init date intervention si déjà définie
-  React.useEffect(() => {
+  // ✅ Synchroniser les données depuis sav
+  useEffect(() => {
     if (sav?.artisan_date_intervention) {
       setDateIntervention(format(parseISO(sav.artisan_date_intervention), 'yyyy-MM-dd'));
+    } else {
+      setDateIntervention('');
     }
+    
     if (sav?.artisan_commentaire) {
       setCommentaire(sav.artisan_commentaire);
+    } else {
+      setCommentaire('');
     }
+    
     if (sav?.artisan_photos) {
       setPhotos(sav.artisan_photos);
+    } else {
+      setPhotos([]);
     }
   }, [sav]);
 
@@ -80,7 +101,7 @@ export function SAVArtisanDetails() {
       for (const file of files) {
         const fileExt = file.name.split('.').pop();
         const fileName = `sav_${id}_${uuidv4()}.${fileExt}`;
-        const filePath = fileName; // ✅ Directement à la racine
+        const filePath = fileName;
 
         const { data, error } = await supabase.storage
           .from('photos-reprises')
@@ -113,33 +134,28 @@ export function SAVArtisanDetails() {
     }
   };
 
-  const handleSaveDateIntervention = async () => {
-    if (!dateIntervention) {
-      toast({
-        title: 'Erreur',
-        description: 'Veuillez sélectionner une date',
-        variant: 'destructive',
-      });
-      return;
-    }
+  // ✅ Enregistrement automatique de la date
+  const handleDateChange = async (newDate) => {
+    setDateIntervention(newDate);
 
-    try {
-      await updateSAV(id, {
-        ...sav,
-        artisan_date_intervention: dateIntervention,
-      });
+    if (newDate) {
+      try {
+        await updateSAV(id, {
+          artisan_date_intervention: newDate,
+        });
 
-      toast({
-        title: 'Date enregistrée',
-        description: 'Date d\'intervention sauvegardée',
-      });
-    } catch (error) {
-      console.error('Erreur sauvegarde date:', error);
-      toast({
-        title: 'Erreur',
-        description: 'Impossible de sauvegarder la date',
-        variant: 'destructive',
-      });
+        toast({
+          title: 'Date enregistrée',
+          description: 'Date d\'intervention sauvegardée automatiquement',
+        });
+      } catch (error) {
+        console.error('Erreur sauvegarde date:', error);
+        toast({
+          title: 'Erreur',
+          description: 'Impossible de sauvegarder la date',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
@@ -155,7 +171,6 @@ export function SAVArtisanDetails() {
 
     try {
       await updateSAV(id, {
-        ...sav,
         artisan_termine: true,
         artisan_termine_date: new Date().toISOString(),
         artisan_commentaire: commentaire,
@@ -227,7 +242,16 @@ export function SAVArtisanDetails() {
       {/* INFO SAV */}
       <Card className="bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200">
         <CardHeader>
-          <CardTitle>Informations</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Informations</CardTitle>
+            <span className={`text-sm font-medium px-3 py-1 rounded ${
+              nbCoches === nbTotal 
+                ? 'bg-green-100 text-green-700'
+                : 'bg-blue-100 text-blue-700'
+            }`}>
+              {nbCoches}/{nbTotal} terminé{nbTotal > 1 ? 's' : ''}
+            </span>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
           <div>
@@ -236,16 +260,32 @@ export function SAVArtisanDetails() {
           <div>
             <span className="font-medium">Date ouverture :</span> {formatDate(sav.dateOuverture)}
           </div>
+          
+          {/* DESCRIPTIONS AVEC CHECKBOXES */}
           <div>
-            <span className="font-medium">Description :</span>
-            <p className="mt-1 text-slate-700">{sav.description}</p>
+            <span className="font-medium">Descriptions à traiter :</span>
+            <ul className="mt-2 space-y-2">
+              {descriptions.map((desc, index) => (
+                <li key={index} className="flex items-start gap-2 p-2 bg-white rounded border">
+                  <Checkbox
+                    id={`desc-${index}`}
+                    checked={desc.checked}
+                    onCheckedChange={() => toggleDescriptionLigne(sav.id, index)}
+                    className="mt-0.5"
+                    disabled={sav.artisan_termine}
+                  />
+                  <label
+                    htmlFor={`desc-${index}`}
+                    className={`flex-1 text-sm cursor-pointer ${
+                      desc.checked ? 'text-green-700 font-medium' : 'text-slate-700'
+                    }`}
+                  >
+                    {desc.texte}
+                  </label>
+                </li>
+              ))}
+            </ul>
           </div>
-          {sav.notes && (
-            <div>
-              <span className="font-medium">Notes :</span>
-              <p className="mt-1 text-slate-600 text-xs">{sav.notes}</p>
-            </div>
-          )}
         </CardContent>
       </Card>
 
@@ -264,7 +304,7 @@ export function SAVArtisanDetails() {
         </Card>
       )}
 
-      {/* PLANIFIER INTERVENTION */}
+      {/* ✅ PLANIFIER INTERVENTION - ENREGISTREMENT AUTO */}
       {!sav.artisan_termine && (
         <Card>
           <CardHeader>
@@ -276,18 +316,13 @@ export function SAVArtisanDetails() {
           <CardContent className="space-y-4">
             <div>
               <Label htmlFor="dateIntervention">Date d'intervention prévue</Label>
-              <div className="flex gap-2 mt-2">
-                <Input
-                  id="dateIntervention"
-                  type="date"
-                  value={dateIntervention}
-                  onChange={(e) => setDateIntervention(e.target.value)}
-                  className="flex-1"
-                />
-                <Button onClick={handleSaveDateIntervention}>
-                  Enregistrer
-                </Button>
-              </div>
+              <Input
+                id="dateIntervention"
+                type="date"
+                value={dateIntervention}
+                onChange={(e) => handleDateChange(e.target.value)}
+                className="mt-2"
+              />
             </div>
 
             {sav.artisan_date_intervention && (
