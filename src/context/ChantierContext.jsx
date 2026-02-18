@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase, supabaseWithSessionCheck } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
 import { parseISO, format, eachDayOfInterval, startOfDay } from "date-fns";
 
@@ -17,7 +17,7 @@ export function ChantierProvider({ children }) {
   const [lots, setLots] = useState([]);
 
   // ==========================================
-  // CHARGEMENT INITIAL DES DONNÉES
+  // CHARGEMENT INITIAL (inchangé)
   // ==========================================
   useEffect(() => {
     if (!profile?.nomsociete) {
@@ -30,7 +30,6 @@ export function ChantierProvider({ children }) {
     
     async function loadAll() {
       try {
-        // 1️⃣ Chantiers
         console.log("1️⃣ loadChantiers...");
         const { data: chantiersData, error: errorChantiers } = await supabase
           .from("chantiers")
@@ -41,7 +40,6 @@ export function ChantierProvider({ children }) {
         setChantiers(chantiersData || []);
         console.log("✅ loadChantiers OK -", chantiersData?.length, "chantiers");
         
-        // 2️⃣ Sous-traitants
         console.log("2️⃣ loadSousTraitants...");
         const { data: stData, error: errorST } = await supabase
           .from("soustraitants")
@@ -52,7 +50,6 @@ export function ChantierProvider({ children }) {
         setSousTraitants(stData || []);
         console.log("✅ loadSousTraitants OK -", stData?.length);
         
-        // 3️⃣ Fournisseurs
         console.log("3️⃣ loadFournisseurs...");
         const { data: fData, error: errorF } = await supabase
           .from("fournisseurs")
@@ -63,7 +60,6 @@ export function ChantierProvider({ children }) {
         setFournisseurs(fData || []);
         console.log("✅ loadFournisseurs OK -", fData?.length);
         
-        // 4️⃣ SAV
         console.log("4️⃣ loadSAV...");
         const { data: savData, error: errorSAV } = await supabase
           .from("sav")
@@ -73,7 +69,6 @@ export function ChantierProvider({ children }) {
         setSav((savData || []).filter(s => s.chantiers?.nomsociete === profile.nomsociete));
         console.log("✅ loadSAV OK");
         
-        // 5️⃣ Tâches
         console.log("5️⃣ loadTaches...");
         const { data: tData, error: errorT } = await supabase
           .from("taches")
@@ -87,7 +82,6 @@ export function ChantierProvider({ children }) {
           console.log("✅ loadTaches OK -", tData?.length);
         }
         
-        // 6️⃣ Lots
         console.log("6️⃣ loadLots...");
         const { data: lotsData, error: errorLots } = await supabase
           .from("lots")
@@ -109,7 +103,6 @@ export function ChantierProvider({ children }) {
     loadAll();
   }, [profile?.nomsociete]);
 
-  // ✅ ÉCOUTER LES MISES À JOUR DE LOTS DEPUIS LotsContext
   useEffect(() => {
     const handleLotsUpdate = () => {
       console.log('🔔 ChantierContext : Lots mis à jour, rechargement...');
@@ -124,7 +117,7 @@ export function ChantierProvider({ children }) {
   }, [profile?.nomsociete]);
 
   // ==========================================
-  // FONCTIONS DE RECHARGEMENT MANUEL
+  // FONCTIONS DE RECHARGEMENT (inchangées)
   // ==========================================
   const loadChantiers = async () => {
     if (!profile?.nomsociete) return;
@@ -193,7 +186,7 @@ export function ChantierProvider({ children }) {
   };
 
   // ==========================================
-  // CONFLITS ARTISANS
+  // CONFLITS (inchangé)
   // ==========================================
   const conflictsByChantier = useMemo(() => {
     const conflicts = {};
@@ -204,7 +197,6 @@ export function ChantierProvider({ children }) {
       try {
         const start = startOfDay(parseISO(t.datedebut));
         const end = startOfDay(parseISO(t.datefin));
-        
         const days = eachDayOfInterval({ start, end });
         
         days.forEach(day => {
@@ -239,13 +231,12 @@ export function ChantierProvider({ children }) {
   }, [taches]);
 
   // ==========================================
-  // CRUD TÂCHES
+  // ✅ CRUD TÂCHES (AVEC WRAPPER)
   // ==========================================
   const addTache = async (tache) => {
-    console.log('🔵 addTache DÉBUT - Payload reçu:', tache);
-    
-    try {
-      // Vérification des UUID
+    return await supabaseWithSessionCheck(async () => {
+      console.log('🔵 addTache DÉBUT - Payload reçu:', tache);
+      
       if (!tache.chantierid || typeof tache.chantierid !== "string") {
         console.error('❌ chantierid invalide:', tache.chantierid);
         throw new Error("chantierid doit être un UUID valide.");
@@ -288,7 +279,6 @@ export function ChantierProvider({ children }) {
 
       console.log('✅ Tâche insérée en BDD:', data);
       
-      // Créer notification si tâche assignée à un artisan
       if (data.assigneid && data.assignetype === 'soustraitant') {
         console.log('📬 Création notification nouvelle tâche pour artisan:', data.assigneid);
         
@@ -312,122 +302,121 @@ export function ChantierProvider({ children }) {
       
       console.log('✅ addTache TERMINÉ');
       return data;
-    } catch (error) {
-      console.error('❌ Exception dans addTache:', error);
-      alert(`Erreur lors de la création de la tâche: ${error.message}`);
-      throw error;
-    }
+    });
   };
 
   const updateTache = async (id, updates) => {
-    if (updates.lotid && typeof updates.lotid !== "string") {
-      throw new Error("lotid doit être un UUID valide.");
-    }
-    
-    // Ne jamais envoyer les colonnes artisan
-    const { artisan_termine, artisan_termine_date, artisan_photos, artisan_commentaire, ...safeUpdates } = updates;
-    
-    // Vérifier si dates modifiées
-    const ancienneTache = taches.find(t => t.id === id);
-    const dateDebutChangee = ancienneTache && ancienneTache.datedebut !== safeUpdates.datedebut;
-    const dateFinChangee = ancienneTache && ancienneTache.datefin !== safeUpdates.datefin;
-    const datesModifiees = (dateDebutChangee || dateFinChangee) && 
-                           ancienneTache.assigneid && 
-                           ancienneTache.assignetype === 'soustraitant';
-    
-    const { data, error } = await supabase
-      .from("taches")
-      .update({
-        nom: safeUpdates.nom,
-        description: safeUpdates.description ?? null,
-        chantierid: safeUpdates.chantierid ?? null,
-        lotid: safeUpdates.lotid ?? null,
-        assigneid: safeUpdates.assigneid ?? null,
-        assignetype: safeUpdates.assignetype ?? null,
-        datedebut: safeUpdates.datedebut ?? null,
-        datefin: safeUpdates.datefin ?? null,
-        terminee: safeUpdates.terminee ?? false,
-        constructeur_valide: safeUpdates.constructeur_valide ?? null,
-        constructeur_valide_date: safeUpdates.constructeur_valide_date ?? null,
-      })
-      .eq("id", id)
-      .select("*")
-      .single();
-      
-    if (error) throw error;
-    
-    // Créer notification si dates modifiées
-    if (datesModifiees) {
-      console.log('📬 Création notification dates modifiées pour artisan:', ancienneTache.assigneid);
-      
-      await supabase
-        .from('notifications_taches_artisan')
-        .delete()
-        .eq('tache_id', id)
-        .eq('type', 'date_modifiee');
-      
-      const { error: notifError } = await supabase
-        .from('notifications_taches_artisan')
-        .insert({
-          tache_id: id,
-          soustraitant_id: ancienneTache.assigneid,
-          type: 'date_modifiee',
-          vu: false
-        });
-      
-      if (notifError) {
-        console.error('⚠️ Erreur création notification (non bloquant):', notifError);
-      } else {
-        console.log('✅ Notification dates modifiées créée');
+    return await supabaseWithSessionCheck(async () => {
+      if (updates.lotid && typeof updates.lotid !== "string") {
+        throw new Error("lotid doit être un UUID valide.");
       }
-    }
-    
-    setTaches(prev => prev.map(t => t.id === id ? data : t));
-    return data;
+      
+      const { artisan_termine, artisan_termine_date, artisan_photos, artisan_commentaire, ...safeUpdates } = updates;
+      
+      const ancienneTache = taches.find(t => t.id === id);
+      const dateDebutChangee = ancienneTache && ancienneTache.datedebut !== safeUpdates.datedebut;
+      const dateFinChangee = ancienneTache && ancienneTache.datefin !== safeUpdates.datefin;
+      const datesModifiees = (dateDebutChangee || dateFinChangee) && 
+                             ancienneTache.assigneid && 
+                             ancienneTache.assignetype === 'soustraitant';
+      
+      const { data, error } = await supabase
+        .from("taches")
+        .update({
+          nom: safeUpdates.nom,
+          description: safeUpdates.description ?? null,
+          chantierid: safeUpdates.chantierid ?? null,
+          lotid: safeUpdates.lotid ?? null,
+          assigneid: safeUpdates.assigneid ?? null,
+          assignetype: safeUpdates.assignetype ?? null,
+          datedebut: safeUpdates.datedebut ?? null,
+          datefin: safeUpdates.datefin ?? null,
+          terminee: safeUpdates.terminee ?? false,
+          constructeur_valide: safeUpdates.constructeur_valide ?? null,
+          constructeur_valide_date: safeUpdates.constructeur_valide_date ?? null,
+        })
+        .eq("id", id)
+        .select("*")
+        .single();
+        
+      if (error) throw error;
+      
+      if (datesModifiees) {
+        console.log('📬 Création notification dates modifiées pour artisan:', ancienneTache.assigneid);
+        
+        await supabase
+          .from('notifications_taches_artisan')
+          .delete()
+          .eq('tache_id', id)
+          .eq('type', 'date_modifiee');
+        
+        const { error: notifError } = await supabase
+          .from('notifications_taches_artisan')
+          .insert({
+            tache_id: id,
+            soustraitant_id: ancienneTache.assigneid,
+            type: 'date_modifiee',
+            vu: false
+          });
+        
+        if (notifError) {
+          console.error('⚠️ Erreur création notification (non bloquant):', notifError);
+        } else {
+          console.log('✅ Notification dates modifiées créée');
+        }
+      }
+      
+      setTaches(prev => prev.map(t => t.id === id ? data : t));
+      return data;
+    });
   };
 
   const deleteTache = async (id) => {
-    console.log("🗑️ Tentative de suppression tâche:", id);
-    
-    const { data, error } = await supabase
-      .from("taches")
-      .delete()
-      .eq("id", id)
-      .select();
-    
-    console.log("🗑️ Résultat suppression:", { data, error });
-    
-    if (error) {
-      console.error("❌ Erreur suppression tâche:", error);
-      throw error;
-    }
-    
-    setTaches(prev => prev.filter(t => t.id !== id));
-    console.log("✅ Tâche supprimée du state local");
-    return data;
+    return await supabaseWithSessionCheck(async () => {
+      console.log("🗑️ Tentative de suppression tâche:", id);
+      
+      const { data, error } = await supabase
+        .from("taches")
+        .delete()
+        .eq("id", id)
+        .select();
+      
+      console.log("🗑️ Résultat suppression:", { data, error });
+      
+      if (error) {
+        console.error("❌ Erreur suppression tâche:", error);
+        throw error;
+      }
+      
+      setTaches(prev => prev.filter(t => t.id !== id));
+      console.log("✅ Tâche supprimée du state local");
+      return data;
+    });
   };
 
   // ==========================================
-  // CRUD CHANTIERS
+  // ✅ CRUD CHANTIERS (AVEC WRAPPER)
   // ==========================================
   const addChantier = async (chantier) => {
-    const { data, error } = await supabase
-      .from("chantiers")
-      .insert([{ ...chantier, nomsociete: profile.nomsociete }])
-      .select()
-      .single();
-    
-    if (error) throw error;
-    
-    setChantiers(prev => [data, ...prev]);
-    return data;
+    return await supabaseWithSessionCheck(async () => {
+      const { data, error } = await supabase
+        .from("chantiers")
+        .insert([{ ...chantier, nomsociete: profile.nomsociete }])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      setChantiers(prev => [data, ...prev]);
+      return data;
+    });
   };
 
   const updateChantier = async (id, updates) => {
-    console.log('📤 updateChantier - ID:', id);
-    console.log('📤 updateChantier - Updates:', updates);
-    
-    try {
+    return await supabaseWithSessionCheck(async () => {
+      console.log('📤 updateChantier - ID:', id);
+      console.log('📤 updateChantier - Updates:', updates);
+      
       const { data, error } = await supabase
         .from("chantiers")
         .update(updates)
@@ -447,17 +436,13 @@ export function ChantierProvider({ children }) {
       setChantiers(prev => prev.map(c => c.id === id ? data : c));
       
       return data;
-    } catch (error) {
-      console.error('❌ Exception updateChantier:', error);
-      throw error;
-    }
+    });
   };
 
   const deleteChantier = async (id) => {
-    console.log('🗑️ Suppression chantier:', id);
-    
-    try {
-      // 1️⃣ Supprimer d'abord les tâches liées
+    return await supabaseWithSessionCheck(async () => {
+      console.log('🗑️ Suppression chantier:', id);
+      
       const { error: tachesError } = await supabase
         .from("taches")
         .delete()
@@ -470,7 +455,6 @@ export function ChantierProvider({ children }) {
       
       console.log('✅ Tâches supprimées');
       
-      // 2️⃣ Supprimer les SAV liés (si la colonne s'appelle chantier_id)
       const { error: savError } = await supabase
         .from("sav")
         .delete()
@@ -480,7 +464,6 @@ export function ChantierProvider({ children }) {
         console.warn('⚠️ Erreur suppression SAV:', savError);
       }
       
-      // 3️⃣ Supprimer les commentaires liés
       const { error: commentairesError } = await supabase
         .from("commentaires_chantier")
         .delete()
@@ -490,7 +473,6 @@ export function ChantierProvider({ children }) {
         console.warn('⚠️ Erreur suppression commentaires:', commentairesError);
       }
       
-      // 4️⃣ Supprimer les documents liés
       const { error: documentsError } = await supabase
         .from("documents_chantier")
         .delete()
@@ -500,7 +482,6 @@ export function ChantierProvider({ children }) {
         console.warn('⚠️ Erreur suppression documents:', documentsError);
       }
       
-      // 5️⃣ Supprimer le chantier
       const { error: chantierError } = await supabase
         .from("chantiers")
         .delete()
@@ -513,138 +494,151 @@ export function ChantierProvider({ children }) {
       
       console.log('✅ Chantier supprimé');
       
-      // 6️⃣ Mettre à jour le state
       setChantiers(prev => prev.filter(c => c.id !== id));
       setTaches(prev => prev.filter(t => t.chantierid !== id));
       setSav(prev => prev.filter(s => s.chantier_id !== id));
-      
-    } catch (error) {
-      console.error('❌ Erreur deleteChantier:', error);
-      throw error;
-    }
+    });
   };
 
   // ==========================================
-  // ✅ CRUD SOUS-TRAITANTS (CORRIGÉ)
+  // ✅ CRUD SOUS-TRAITANTS (AVEC WRAPPER)
   // ==========================================
   const addSousTraitant = async (st) => {
-    const { data, error } = await supabase
-      .from("soustraitants")
-      .insert([{ ...st, nomsociete: profile.nomsociete }])
-      .select()
-      .single();
-    
-    if (error) throw error;
-    
-    setSousTraitants(prev => [data, ...prev]);
-    return data;
+    return await supabaseWithSessionCheck(async () => {
+      const { data, error } = await supabase
+        .from("soustraitants")
+        .insert([{ ...st, nomsociete: profile.nomsociete }])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      setSousTraitants(prev => [data, ...prev]);
+      return data;
+    });
   };
 
   const updateSousTraitant = async (id, updates) => {
-    const { data, error } = await supabase
-      .from("soustraitants")
-      .update(updates)
-      .eq("id", id)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    
-    setSousTraitants(prev => prev.map(s => s.id === id ? data : s));
-    return data;
+    return await supabaseWithSessionCheck(async () => {
+      const { data, error } = await supabase
+        .from("soustraitants")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      setSousTraitants(prev => prev.map(s => s.id === id ? data : s));
+      return data;
+    });
   };
 
   const deleteSousTraitant = async (id) => {
-    const { error } = await supabase
-      .from("soustraitants")
-      .delete()
-      .eq("id", id);
-    
-    if (error) throw error;
-    
-    setSousTraitants(prev => prev.filter(s => s.id !== id));
+    return await supabaseWithSessionCheck(async () => {
+      const { error } = await supabase
+        .from("soustraitants")
+        .delete()
+        .eq("id", id);
+      
+      if (error) throw error;
+      
+      setSousTraitants(prev => prev.filter(s => s.id !== id));
+    });
   };
 
   // ==========================================
-  // ✅ CRUD FOURNISSEURS (CORRIGÉ)
+  // ✅ CRUD FOURNISSEURS (AVEC WRAPPER)
   // ==========================================
   const addFournisseur = async (f) => {
-    const { data, error } = await supabase
-      .from("fournisseurs")
-      .insert([{ ...f, nomsociete: profile.nomsociete }])
-      .select()
-      .single();
-    
-    if (error) throw error;
-    
-    setFournisseurs(prev => [data, ...prev]);
-    return data;
+    return await supabaseWithSessionCheck(async () => {
+      const { data, error } = await supabase
+        .from("fournisseurs")
+        .insert([{ ...f, nomsociete: profile.nomsociete }])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      setFournisseurs(prev => [data, ...prev]);
+      return data;
+    });
   };
 
   const updateFournisseur = async (id, updates) => {
-    const { data, error } = await supabase
-      .from("fournisseurs")
-      .update(updates)
-      .eq("id", id)
-      .select()
-      .single();
-    
-    if (error) throw error;
-    
-    setFournisseurs(prev => prev.map(f => f.id === id ? data : f));
-    return data;
+    return await supabaseWithSessionCheck(async () => {
+      const { data, error } = await supabase
+        .from("fournisseurs")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      setFournisseurs(prev => prev.map(f => f.id === id ? data : f));
+      return data;
+    });
   };
 
   const deleteFournisseur = async (id) => {
-    const { error } = await supabase
-      .from("fournisseurs")
-      .delete()
-      .eq("id", id);
-    
-    if (error) throw error;
-    
-    setFournisseurs(prev => prev.filter(f => f.id !== id));
+    return await supabaseWithSessionCheck(async () => {
+      const { error } = await supabase
+        .from("fournisseurs")
+        .delete()
+        .eq("id", id);
+      
+      if (error) throw error;
+      
+      setFournisseurs(prev => prev.filter(f => f.id !== id));
+    });
   };
 
   // ==========================================
-  // ✅ CRUD SAV (CORRIGÉ)
+  // ✅ CRUD SAV (AVEC WRAPPER)
   // ==========================================
   const addSAV = async (s) => {
-    const { data, error } = await supabase
-      .from("sav")
-      .insert([s])
-      .select("*, chantiers(nomchantier, nomsociete)")
-      .single();
-    
-    if (error) throw error;
-    
-    setSav(prev => [data, ...prev]);
-    return data;
+    return await supabaseWithSessionCheck(async () => {
+      const { data, error } = await supabase
+        .from("sav")
+        .insert([s])
+        .select("*, chantiers(nomchantier, nomsociete)")
+        .single();
+      
+      if (error) throw error;
+      
+      setSav(prev => [data, ...prev]);
+      return data;
+    });
   };
 
   const updateSAV = async (id, updates) => {
-    const { data, error } = await supabase
-      .from("sav")
-      .update(updates)
-      .eq("id", id)
-      .select("*, chantiers(nomchantier, nomsociete)")
-      .single();
-    
-    if (error) throw error;
-    
-    setSav(prev => prev.map(s => s.id === id ? data : s));
-    return data;
+    return await supabaseWithSessionCheck(async () => {
+      const { data, error } = await supabase
+        .from("sav")
+        .update(updates)
+        .eq("id", id)
+        .select("*, chantiers(nomchantier, nomsociete)")
+        .single();
+      
+      if (error) throw error;
+      
+      setSav(prev => prev.map(s => s.id === id ? data : s));
+      return data;
+    });
   };
 
   const deleteSAV = async (id) => {
-    const { error } = await supabase
-      .from("sav")
-      .delete()
-      .eq("id", id);
-    
-    if (error) throw error;
-    
-    setSav(prev => prev.filter(s => s.id !== id));
+    return await supabaseWithSessionCheck(async () => {
+      const { error } = await supabase
+        .from("sav")
+        .delete()
+        .eq("id", id);
+      
+      if (error) throw error;
+      
+      setSav(prev => prev.filter(s => s.id !== id));
+    });
   };
 
   return (
