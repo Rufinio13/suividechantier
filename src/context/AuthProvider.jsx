@@ -12,7 +12,7 @@ export function AuthProvider({ children }) {
   const refreshIntervalRef = useRef(null);
   const isLoadingProfileRef = useRef(false);
 
-  // ✅ Charger le profil SANS déconnexion automatique
+  // ✅ Charger le profil avec timeout et logs détaillés
   const loadProfile = async (userId) => {
     // Éviter les appels simultanés
     if (isLoadingProfileRef.current) {
@@ -24,12 +24,33 @@ export function AuthProvider({ children }) {
     console.log('🔍 loadProfile START pour userId:', userId);
     
     try {
-      // ✅ Requête Supabase SANS timeout artificiel
-      const { data, error } = await supabase
+      console.log('📡 Envoi requête Supabase...');
+      
+      // ✅ Timeout de 10 secondes
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => {
+          console.error('⏱️ TIMEOUT atteint après 10s');
+          reject(new Error('Timeout après 10s'));
+        }, 10000)
+      );
+      
+      // Requête Supabase avec logs
+      const fetchPromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .single()
+        .then(result => {
+          console.log('📥 Réponse Supabase reçue:', {
+            hasData: !!result.data,
+            hasError: !!result.error,
+            errorCode: result.error?.code,
+            errorMessage: result.error?.message
+          });
+          return result;
+        });
+      
+      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
       
       console.log('📡 loadProfile RESPONSE:', { 
         hasData: !!data, 
@@ -42,7 +63,6 @@ export function AuthProvider({ children }) {
         console.error('❌ Erreur loadProfile:', error);
         
         // ✅ NE JAMAIS déconnecter automatiquement
-        // Juste signaler l'erreur
         console.warn('⚠️ Impossible de charger le profil, mais session conservée');
         setProfile(null);
         setLoading(false);
@@ -51,14 +71,20 @@ export function AuthProvider({ children }) {
       }
       
       if (!data) {
-        console.error('❌ Pas de profil');
+        console.error('❌ Pas de profil trouvé pour userId:', userId);
         setProfile(null);
         setLoading(false);
         isLoadingProfileRef.current = false;
         return;
       }
       
-      console.log('✅ Profil chargé:', data.nomsociete);
+      console.log('✅ Profil chargé avec succès:', {
+        id: data.id,
+        email: data.email,
+        nomsociete: data.nomsociete,
+        prenom: data.prenom,
+        nom: data.nom
+      });
       
       // ✅ Définir le contexte RLS
       if (data?.nomsociete) {
@@ -70,15 +96,20 @@ export function AuthProvider({ children }) {
       setLoading(false);
       
     } catch (err) {
-      console.error("❌ EXCEPTION loadProfile:", err);
+      console.error("❌ EXCEPTION loadProfile:", {
+        name: err.name,
+        message: err.message,
+        stack: err.stack
+      });
       
-      // ✅ NE JAMAIS déconnecter automatiquement, quelle que soit l'erreur
+      // ✅ NE JAMAIS déconnecter automatiquement
       console.warn('⚠️ Erreur chargement profil, mais session conservée');
       setProfile(null);
       setLoading(false);
       
     } finally {
       isLoadingProfileRef.current = false;
+      console.log('🏁 loadProfile TERMINÉ');
     }
   };
 
@@ -109,6 +140,8 @@ export function AuthProvider({ children }) {
       clearInterval(refreshIntervalRef.current);
     }
     
+    console.log('🔄 Démarrage auto-refresh session (vérification toutes les 5min)');
+    
     refreshIntervalRef.current = setInterval(async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -122,6 +155,8 @@ export function AuthProvider({ children }) {
         const now = Date.now();
         const timeUntilExpiry = expiresAt - now;
         
+        console.log(`⏱️ Session expire dans ${Math.floor(timeUntilExpiry / 60000)} minutes`);
+        
         // Rafraîchir 10 minutes avant expiration
         if (timeUntilExpiry < 10 * 60 * 1000 && timeUntilExpiry > 0) {
           console.log('🔄 Rafraîchissement automatique de la session');
@@ -129,7 +164,6 @@ export function AuthProvider({ children }) {
           
           if (error) {
             console.error('❌ Erreur refresh session:', error);
-            // ✅ NE PAS déconnecter, juste logger
             console.warn('⚠️ Impossible de rafraîchir la session, mais on continue');
           } else {
             console.log('✅ Session rafraîchie avec succès');
@@ -137,7 +171,6 @@ export function AuthProvider({ children }) {
         }
       } catch (err) {
         console.error('❌ Erreur auto-refresh:', err);
-        // ✅ NE PAS déconnecter
       }
     }, 5 * 60 * 1000); // Vérifier toutes les 5 minutes
   };
@@ -150,15 +183,17 @@ export function AuthProvider({ children }) {
 
     const initAuth = async () => {
       try {
+        console.log('🔍 Vérification session initiale...');
         const { data, error } = await supabase.auth.getSession();
         
-        console.log('🔍 Session check:', { 
+        console.log('📊 Session check:', { 
           hasSession: !!data?.session, 
           hasError: !!error,
-          userId: data?.session?.user?.id
+          userId: data?.session?.user?.id,
+          email: data?.session?.user?.email
         });
         
-        // ✅ Erreur de session : juste logger, ne pas bloquer
+        // ✅ Erreur de session
         if (error) {
           console.error('❌ Erreur session:', error);
           
@@ -172,7 +207,7 @@ export function AuthProvider({ children }) {
 
         // Pas de session
         if (!data?.session) {
-          console.log('ℹ️ Pas de session');
+          console.log('ℹ️ Pas de session active');
           if (isMounted) {
             setUser(null);
             setProfile(null);
@@ -181,7 +216,7 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        // ✅ Session expirée : essayer de rafraîchir au lieu de déconnecter
+        // ✅ Session expirée : essayer de rafraîchir
         const session = data.session;
         const expiresAt = session.expires_at * 1000;
         const now = Date.now();
@@ -192,7 +227,7 @@ export function AuthProvider({ children }) {
           const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
           
           if (refreshError || !refreshData.session) {
-            console.error('❌ Impossible de rafraîchir la session');
+            console.error('❌ Impossible de rafraîchir la session:', refreshError);
             if (isMounted) {
               setUser(null);
               setProfile(null);
@@ -202,7 +237,6 @@ export function AuthProvider({ children }) {
           }
           
           console.log('✅ Session rafraîchie avec succès');
-          // Utiliser la nouvelle session
           if (isMounted) {
             setUser(refreshData.session.user);
             await loadProfile(refreshData.session.user.id);
@@ -212,7 +246,11 @@ export function AuthProvider({ children }) {
         }
 
         // Session valide
-        console.log('✅ Session valide:', session.user.id);
+        console.log('✅ Session valide:', {
+          userId: session.user.id,
+          email: session.user.email,
+          expiresIn: Math.floor((expiresAt - now) / 60000) + ' minutes'
+        });
         
         if (isMounted) {
           setUser(session.user);
@@ -235,7 +273,10 @@ export function AuthProvider({ children }) {
     // Listener auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('🔔 Auth event:', event);
+        console.log('🔔 Auth event:', event, {
+          hasSession: !!session,
+          userId: session?.user?.id
+        });
         
         if (!isMounted) return;
 
@@ -264,7 +305,6 @@ export function AuthProvider({ children }) {
 
           case "TOKEN_REFRESHED":
             console.log('🔄 TOKEN_REFRESHED');
-            // Recharger le profil si nécessaire
             if (session?.user && !profile && !isLoadingProfileRef.current) {
               await loadProfile(session.user.id);
             }
