@@ -24,20 +24,12 @@ export function AuthProvider({ children }) {
     console.log('🔍 loadProfile START pour userId:', userId);
     
     try {
-      // ✅ Timeout de 20 secondes (plus généreux)
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Timeout')), 1000);
-      });
-      
-      // Requête Supabase
-      const fetchPromise = supabase
+      // ✅ Requête Supabase SANS timeout artificiel
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
-      
-      // Race entre timeout et requête
-      const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
       
       console.log('📡 loadProfile RESPONSE:', { 
         hasData: !!data, 
