@@ -1,19 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-// ✅ Récupère les variables d'environnement
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
-// ✅ Crée le client Supabase avec configuration optimale
+// ✅ Utiliser sessionStorage au lieu de localStorage
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    storage: window.localStorage,        // ✅ Utilise localStorage pour persister même après fermeture
-    autoRefreshToken: true,              // ✅ Rafraîchir automatiquement le token
-    persistSession: true,                // ✅ Persister la session
-    detectSessionInUrl: true,            // ✅ Détecter la session dans l'URL
-    flowType: 'pkce',                    // ✅ Utiliser PKCE pour plus de sécurité
-    storageKey: 'supabase.auth.token',   // ✅ Clé de stockage
-    debug: false,                        // ✅ Mettre à true pour debug
+    storage: window.sessionStorage,        // ✅ Session effacée à la fermeture du navigateur
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce',
+    storageKey: 'supabase.auth.token',
+    debug: false,
   },
   realtime: {
     params: {
@@ -27,10 +26,6 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   },
 });
 
-/**
- * Configure le paramètre RLS pour le multi-tenant
- * Doit être appelé après la connexion de l'utilisateur
- */
 export async function setSupabaseRLSContext(nomsociete) {
   if (!nomsociete) {
     console.warn('⚠️ setSupabaseRLSContext appelé sans nomsociete');
@@ -38,7 +33,6 @@ export async function setSupabaseRLSContext(nomsociete) {
   }
 
   try {
-    // Définir le paramètre de session pour RLS
     const { error } = await supabase.rpc('set_config', {
       parameter: 'app.current_user_nomsociete',
       value: nomsociete
@@ -54,9 +48,6 @@ export async function setSupabaseRLSContext(nomsociete) {
   }
 }
 
-/**
- * ✅ NOUVEAU : Vérifier et rafraîchir la session si nécessaire
- */
 export async function ensureValidSession() {
   try {
     const { data: { session }, error } = await supabase.auth.getSession();
@@ -71,8 +62,7 @@ export async function ensureValidSession() {
       return false;
     }
     
-    // Vérifier si le token expire bientôt (dans moins de 5 minutes)
-    const expiresAt = session.expires_at * 1000; // Convertir en millisecondes
+    const expiresAt = session.expires_at * 1000;
     const now = Date.now();
     const timeUntilExpiry = expiresAt - now;
     
