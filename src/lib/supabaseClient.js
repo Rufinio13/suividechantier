@@ -3,10 +3,9 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
-// ✅ Utiliser sessionStorage au lieu de localStorage
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    storage: window.sessionStorage,        // ✅ Session effacée à la fermeture du navigateur
+    storage: window.sessionStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
@@ -48,6 +47,7 @@ export async function setSupabaseRLSContext(nomsociete) {
   }
 }
 
+// ✅ NOUVELLE FONCTION : Vérifier et rafraîchir la session si nécessaire
 export async function ensureValidSession() {
   try {
     const { data: { session }, error } = await supabase.auth.getSession();
@@ -66,16 +66,20 @@ export async function ensureValidSession() {
     const now = Date.now();
     const timeUntilExpiry = expiresAt - now;
     
-    if (timeUntilExpiry < 5 * 60 * 1000) {
-      console.log('🔄 Token expire bientôt, rafraîchissement...');
-      const { error: refreshError } = await supabase.auth.refreshSession();
+    console.log(`⏱️ Session expire dans ${Math.floor(timeUntilExpiry / 60000)} minutes`);
+    
+    // ✅ Rafraîchir si expire dans moins de 10 minutes
+    if (timeUntilExpiry < 10 * 60 * 1000) {
+      console.log('🔄 Rafraîchissement préventif de la session...');
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
       
       if (refreshError) {
         console.error('❌ Erreur rafraîchissement:', refreshError);
         return false;
       }
       
-      console.log('✅ Session rafraîchie');
+      console.log('✅ Session rafraîchie avec succès');
+      return true;
     }
     
     return true;
