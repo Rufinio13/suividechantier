@@ -22,6 +22,15 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     headers: {
       'X-Client-Info': 'suivi-chantier-app',
     },
+    fetch: (url, options = {}) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      
+      return fetch(url, {
+        ...options,
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
+    },
   },
 });
 
@@ -47,7 +56,6 @@ export async function setSupabaseRLSContext(nomsociete) {
   }
 }
 
-// ✅ Vérifier et rafraîchir la session si nécessaire
 export async function ensureValidSession() {
   try {
     const { data: { session }, error } = await supabase.auth.getSession();
@@ -66,7 +74,6 @@ export async function ensureValidSession() {
     const now = Date.now();
     const timeUntilExpiry = expiresAt - now;
     
-    // ✅ Rafraîchir si expire dans moins de 10 minutes
     if (timeUntilExpiry < 10 * 60 * 1000) {
       console.log('🔄 Session expire bientôt, rafraîchissement...');
       const { error: refreshError } = await supabase.auth.refreshSession();
@@ -86,15 +93,41 @@ export async function ensureValidSession() {
   }
 }
 
-// ✅ WRAPPER : Vérifie la session avant toute opération
-export async function supabaseWithSessionCheck(operation) {
-  const sessionValid = await ensureValidSession();
-  
-  if (!sessionValid) {
-    const error = new Error('Session expirée. Veuillez vous reconnecter.');
-    console.error('❌', error.message);
-    throw error;
+export async function supabaseWithSessionCheck(operation, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      if (attempt > 1) {
+        console.log(`🔄 Tentative ${attempt}/${retries}`);
+      }
+      
+      const sessionValid = await ensureValidSession();
+      
+      if (!sessionValid) {
+        throw new Error('Session expirée. Veuillez vous reconnecter.');
+      }
+      
+      const result = await operation();
+      
+      if (attempt > 1) {
+        console.log(`✅ Opération réussie (tentative ${attempt})`);
+      }
+      
+      return result;
+      
+    } catch (err) {
+      console.error(`❌ Erreur tentative ${attempt}:`, err.message);
+      
+      if (attempt === retries) {
+        throw err;
+      }
+      
+      if (err.message?.includes('Session expirée')) {
+        throw err;
+      }
+      
+      const waitTime = attempt * 1000;
+      console.log(`⏳ Attente ${waitTime}ms avant retry...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
   }
-  
-  return await operation();
 }
