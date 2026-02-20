@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase, supabaseWithSessionCheck } from "@/lib/supabaseClient";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -50,7 +50,7 @@ export function LotsProvider({ children }) {
     loadLotsInitial();
   }, [profile?.nomsociete]);
 
-  // 🎯 Rafraîchir les lots
+  // 🎯 Rafraîchir les lots (sans wrapper - c'est une lecture)
   const loadLots = async () => {
     if (!profile?.nomsociete) return;
 
@@ -71,9 +71,9 @@ export function LotsProvider({ children }) {
     }
   };
 
-  // 🎯 Ajouter un lot
+  // ✅ Ajouter un lot (AVEC wrapper)
   const addLot = async (lotData) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       if (!profile?.nomsociete) throw new Error("Société non définie");
 
       console.log('🔵 addLot - Début');
@@ -82,7 +82,6 @@ export function LotsProvider({ children }) {
       console.log('📦 Payload:', payload);
       console.log('🚀 Appel Supabase.from("lots").insert()...');
       
-      // ✅ Appel direct - Supabase est rapide
       const { data, error } = await supabase
         .from("lots")
         .insert([payload])
@@ -98,23 +97,19 @@ export function LotsProvider({ children }) {
 
       console.log("✅ Lot ajouté :", data);
       
-      // ✅ Recharger IMMÉDIATEMENT
+      // Recharger immédiatement
       await loadLots();
       
-      // ✅ Notifier ChantierContext
+      // Notifier ChantierContext
       window.dispatchEvent(new CustomEvent('lots-updated'));
       
       return data;
-    } catch (error) {
-      console.error('❌ Exception addLot:', error);
-      alert(`Erreur lors de la création du lot: ${error.message}`);
-      throw error;
-    }
+    });
   };
 
-  // 🎯 Mettre à jour un lot
+  // ✅ Mettre à jour un lot (AVEC wrapper)
   const updateLot = async (id, lotData) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const { data, error } = await supabase
         .from("lots")
         .update({ ...lotData })
@@ -133,16 +128,12 @@ export function LotsProvider({ children }) {
       window.dispatchEvent(new CustomEvent('lots-updated'));
       
       return data;
-    } catch (error) {
-      console.error('❌ Exception updateLot:', error);
-      alert(`Erreur lors de la modification du lot: ${error.message}`);
-      throw error;
-    }
+    });
   };
 
-  // 🎯 Supprimer un lot
+  // ✅ Supprimer un lot (AVEC wrapper)
   const deleteLot = async (id) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const { error } = await supabase
         .from("lots")
         .delete()
@@ -157,14 +148,7 @@ export function LotsProvider({ children }) {
       console.log("✅ Lot supprimé");
       await loadLots();
       window.dispatchEvent(new CustomEvent('lots-updated'));
-    } catch (error) {
-      console.error('❌ Exception deleteLot:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de supprimer le lot",
-        variant: "destructive",
-      });
-    }
+    });
   };
 
   return (

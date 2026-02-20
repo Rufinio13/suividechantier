@@ -4,20 +4,21 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Upload, X, Image as ImageIcon, FileText, Loader2 } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
 export function ImageUploadCQ({ 
-  type = 'photo', // 'photo' ou 'plan'
-  images = [], // Array d'objets {url, nom, uploadedAt}
+  type = 'photo',
+  images = [],
   chantierId,
   onImagesChange 
 }) {
   const { profile } = useAuth();
   const [uploading, setUploading] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null); // ✅ NOUVEAU : Image en mode fullscreen
+  const [selectedImage, setSelectedImage] = useState(null);
   const fileInputRef = useRef(null);
 
+  // ✅ Upload images (AVEC wrapper)
   const handleFileSelect = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -25,93 +26,94 @@ export function ImageUploadCQ({
     setUploading(true);
 
     try {
-      const uploadedImages = [];
+      await supabaseWithSessionCheck(async () => {
+        const uploadedImages = [];
 
-      for (const file of files) {
-        // Validation
-        if (!file.type.startsWith('image/')) {
-          alert(`${file.name} n'est pas une image`);
-          continue;
-        }
+        for (const file of files) {
+          // Validation
+          if (!file.type.startsWith('image/')) {
+            alert(`${file.name} n'est pas une image`);
+            continue;
+          }
 
-        // Nom du fichier avec timestamp
-        const timestamp = Date.now();
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${timestamp}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        
-        // Path dans Storage
-        const filePath = `${profile.nomsociete}/${chantierId}/${type}s/${fileName}`;
+          // Nom du fichier avec timestamp
+          const timestamp = Date.now();
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${timestamp}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+          
+          // Path dans Storage
+          const filePath = `${profile.nomsociete}/${chantierId}/${type}s/${fileName}`;
 
-        console.log('📤 Upload vers:', filePath);
+          console.log('📤 Upload vers:', filePath);
 
-        // Upload vers Supabase Storage
-        const { data, error } = await supabase.storage
-          .from('controle-qualite-images')
-          .upload(filePath, file, {
-            cacheControl: '3600',
-            upsert: false
+          // Upload vers Supabase Storage
+          const { data, error } = await supabase.storage
+            .from('controle-qualite-images')
+            .upload(filePath, file, {
+              cacheControl: '3600',
+              upsert: false
+            });
+
+          if (error) {
+            console.error('❌ Erreur upload:', error);
+            alert(`Erreur lors de l'upload de ${file.name}: ${error.message}`);
+            continue;
+          }
+
+          console.log('✅ Upload réussi:', data);
+
+          // Récupérer l'URL publique
+          const { data: { publicUrl } } = supabase.storage
+            .from('controle-qualite-images')
+            .getPublicUrl(filePath);
+
+          console.log('🔗 URL publique:', publicUrl);
+
+          uploadedImages.push({
+            url: publicUrl,
+            nom: file.name,
+            uploadedAt: new Date().toISOString()
           });
-
-        if (error) {
-          console.error('❌ Erreur upload:', error);
-          alert(`Erreur lors de l'upload de ${file.name}: ${error.message}`);
-          continue;
         }
 
-        console.log('✅ Upload réussi:', data);
-
-        // Récupérer l'URL publique
-        const { data: { publicUrl } } = supabase.storage
-          .from('controle-qualite-images')
-          .getPublicUrl(filePath);
-
-        console.log('🔗 URL publique:', publicUrl);
-
-        uploadedImages.push({
-          url: publicUrl,
-          nom: file.name,
-          uploadedAt: new Date().toISOString()
-        });
-      }
-
-      if (uploadedImages.length > 0) {
-        // Ajouter aux images existantes
-        onImagesChange([...images, ...uploadedImages]);
-        console.log('✅ Images ajoutées:', uploadedImages.length);
-      }
-
+        if (uploadedImages.length > 0) {
+          onImagesChange([...images, ...uploadedImages]);
+          console.log('✅ Images ajoutées:', uploadedImages.length);
+        }
+      });
     } catch (error) {
       console.error('❌ Erreur upload images:', error);
       alert('Erreur lors de l\'upload des images');
     } finally {
       setUploading(false);
-      // ✅ CORRIGÉ : Reset l'input après upload réussi ou échoué
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     }
   };
 
+  // ✅ Suppression image (AVEC wrapper)
   const handleDelete = async (imageToDelete) => {
     try {
-      // Extraire le path depuis l'URL
-      const urlParts = imageToDelete.url.split('/controle-qualite-images/');
-      if (urlParts.length > 1) {
-        const filePath = urlParts[1];
-        
-        // Supprimer de Storage
-        const { error } = await supabase.storage
-          .from('controle-qualite-images')
-          .remove([filePath]);
+      await supabaseWithSessionCheck(async () => {
+        // Extraire le path depuis l'URL
+        const urlParts = imageToDelete.url.split('/controle-qualite-images/');
+        if (urlParts.length > 1) {
+          const filePath = urlParts[1];
+          
+          // Supprimer de Storage
+          const { error } = await supabase.storage
+            .from('controle-qualite-images')
+            .remove([filePath]);
 
-        if (error) {
-          console.error('Erreur suppression Storage:', error);
+          if (error) {
+            console.error('Erreur suppression Storage:', error);
+          }
         }
-      }
 
-      // Retirer de la liste
-      onImagesChange(images.filter(img => img.url !== imageToDelete.url));
-
+        // Retirer de la liste
+        onImagesChange(images.filter(img => img.url !== imageToDelete.url));
+      });
     } catch (error) {
       console.error('Erreur suppression image:', error);
       alert('Erreur lors de la suppression de l\'image');
@@ -185,7 +187,7 @@ export function ImageUploadCQ({
             <Card 
               key={index} 
               className="relative group overflow-hidden cursor-pointer"
-              onClick={() => setSelectedImage(image)} // ✅ NOUVEAU : Ouvrir en grand
+              onClick={() => setSelectedImage(image)}
             >
               <img
                 src={image.url}
@@ -200,7 +202,7 @@ export function ImageUploadCQ({
                   variant="destructive"
                   size="icon"
                   onClick={(e) => {
-                    e.stopPropagation(); // ✅ Empêcher l'ouverture de l'image
+                    e.stopPropagation();
                     handleDelete(image);
                   }}
                   className="h-8 w-8"
@@ -221,11 +223,10 @@ export function ImageUploadCQ({
         </p>
       )}
 
-      {/* ✅ NOUVEAU : Modal image en grand */}
+      {/* Modal image en grand */}
       <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
         <DialogContent className="max-w-4xl p-0 overflow-hidden">
           <div className="relative">
-            {/* Bouton fermer en haut à gauche */}
             <Button
               variant="ghost"
               size="icon"
@@ -235,7 +236,6 @@ export function ImageUploadCQ({
               <X className="h-5 w-5" />
             </Button>
 
-            {/* Image en grand */}
             {selectedImage && (
               <img
                 src={selectedImage.url}
@@ -244,7 +244,6 @@ export function ImageUploadCQ({
               />
             )}
 
-            {/* Nom du fichier en bas */}
             {selectedImage && (
               <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-3 text-sm">
                 {selectedImage.nom}

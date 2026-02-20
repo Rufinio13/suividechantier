@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
 const CommandesContext = createContext();
@@ -19,7 +19,7 @@ export function CommandesProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   // =========================================
-  // CHARGER LES COMMANDES
+  // CHARGER LES COMMANDES (sans wrapper - lecture)
   // =========================================
   useEffect(() => {
     const fetchCommandes = async () => {
@@ -68,11 +68,9 @@ export function CommandesProvider({ children }) {
     return commandes.filter(c => c.chantier_id === chantierId);
   };
 
-  // =========================================
-  // AJOUTER UNE COMMANDE
-  // =========================================
+  // ✅ AJOUTER UNE COMMANDE (AVEC wrapper)
   const addCommande = async (commandeData) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const dataToInsert = {
         ...commandeData,
         nomsociete: profile?.nomsociete,
@@ -97,17 +95,12 @@ export function CommandesProvider({ children }) {
       console.log('✅ Commande ajoutée:', data);
       setCommandes(prev => [...prev, data]);
       return { success: true, data };
-    } catch (error) {
-      console.error('❌ Erreur addCommande:', error);
-      throw error;
-    }
+    });
   };
 
-  // =========================================
-  // METTRE À JOUR UNE COMMANDE
-  // =========================================
+  // ✅ METTRE À JOUR UNE COMMANDE (AVEC wrapper)
   const updateCommande = async (id, updates) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const dataToUpdate = {
         ...updates,
         updated_at: new Date().toISOString()
@@ -132,17 +125,12 @@ export function CommandesProvider({ children }) {
       console.log('✅ Commande mise à jour:', data);
       setCommandes(prev => prev.map(c => c.id === id ? data : c));
       return { success: true, data };
-    } catch (error) {
-      console.error('❌ Erreur updateCommande:', error);
-      throw error;
-    }
+    });
   };
 
-  // =========================================
-  // SUPPRIMER UNE COMMANDE
-  // =========================================
+  // ✅ SUPPRIMER UNE COMMANDE (AVEC wrapper)
   const deleteCommande = async (id) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       console.log('📤 Delete commande:', id);
 
       const { error } = await supabase
@@ -156,29 +144,17 @@ export function CommandesProvider({ children }) {
       console.log('✅ Commande supprimée');
       setCommandes(prev => prev.filter(c => c.id !== id));
       return { success: true };
-    } catch (error) {
-      console.error('❌ Erreur deleteCommande:', error);
-      throw error;
-    }
+    });
   };
 
-  // =========================================
-  // VALIDER UNE COMMANDE (définir date_commande_reelle)
-  // =========================================
+  // ✅ VALIDER UNE COMMANDE (AVEC wrapper via updateCommande)
   const validerCommande = async (id, dateCommandeReelle) => {
-    try {
-      return await updateCommande(id, {
-        date_commande_reelle: dateCommandeReelle || new Date().toISOString().split('T')[0]
-      });
-    } catch (error) {
-      console.error('❌ Erreur validerCommande:', error);
-      throw error;
-    }
+    return await updateCommande(id, {
+      date_commande_reelle: dateCommandeReelle || new Date().toISOString().split('T')[0]
+    });
   };
 
-  // =========================================
-  // RAFRAÎCHIR LES COMMANDES
-  // =========================================
+  // RAFRAÎCHIR LES COMMANDES (sans wrapper - lecture)
   const refreshCommandes = async () => {
     if (!profile?.nomsociete) return;
     
@@ -207,7 +183,7 @@ export function CommandesProvider({ children }) {
 
   const value = {
     commandes,
-    setCommandes, // ✅ NOUVEAU : Exposer setCommandes pour mise à jour optimiste
+    setCommandes,
     loading,
     nomsociete: profile?.nomsociete,
     addCommande,

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
 import { UserPlus, Mail, Lock, Loader2 } from 'lucide-react';
 
 export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuccess }) {
@@ -26,7 +26,7 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
     
     if (isSavingRef.current) return;
     
-    // ✅ Validation
+    // Validation
     if (!formData.email || !formData.password) {
       toast({ 
         title: "Erreur", 
@@ -57,112 +57,112 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
     isSavingRef.current = true;
 
     try {
-      console.log('🔐 Création compte artisan pour:', formData.email);
+      // ✅ WRAPPER autour de toute la logique de création
+      await supabaseWithSessionCheck(async () => {
+        console.log('🔐 Création compte artisan pour:', formData.email);
 
-      // ✅ 1️⃣ Créer l'utilisateur dans auth.users
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
-        password: formData.password,
-        options: {
-          data: {
+        // 1️⃣ Créer l'utilisateur dans auth.users
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: {
+              nom: sousTraitant.nomST || '',
+              prenom: sousTraitant.PrenomST || '',
+              nomsociete: sousTraitant.nomsocieteST,
+              role: 'artisan'
+            }
+          }
+        });
+
+        if (authError) {
+          console.error('❌ Erreur auth.signUp:', authError);
+          
+          if (authError.message.includes('User already registered')) {
+            throw new Error('Cet email est déjà utilisé');
+          }
+          
+          throw authError;
+        }
+        
+        const userId = authData.user?.id;
+        
+        if (!userId) {
+          throw new Error('Impossible de récupérer l\'ID utilisateur');
+        }
+
+        console.log('✅ Utilisateur créé:', userId);
+
+        // 2️⃣ Attendre création dans auth.users
+        console.log('⏳ Attente création utilisateur dans auth.users...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 3️⃣ Créer le profil
+        console.log('📝 Création du profil...');
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: userId,
             nom: sousTraitant.nomST || '',
             prenom: sousTraitant.PrenomST || '',
             nomsociete: sousTraitant.nomsocieteST,
-            role: 'artisan'
+            email: formData.email,
+            role: 'artisan',
+            telephone: sousTraitant.telephone || null,
+            adresse: sousTraitant.adresseST || null
+          });
+
+        if (profileError) {
+          console.error('❌ Erreur création profil:', profileError);
+          
+          if (!profileError.message.includes('duplicate key')) {
+            console.warn('⚠️ Erreur profil mais on continue');
+          }
+        } else {
+          console.log('✅ Profil créé');
+        }
+
+        // 4️⃣ Lier au sous-traitant avec retry
+        console.log('🔗 Liaison du compte au sous-traitant...');
+        let retries = 3;
+        let updateError = null;
+        
+        while (retries > 0) {
+          const { error } = await supabase
+            .from('soustraitants')
+            .update({ 
+              user_id: userId,
+              email: formData.email
+            })
+            .eq('id', sousTraitant.id);
+
+          if (!error) {
+            console.log('✅ Sous-traitant lié au compte');
+            updateError = null;
+            break;
+          }
+
+          updateError = error;
+          retries--;
+          
+          if (retries > 0) {
+            console.log(`⚠️ Erreur liaison (${error.code}), retry dans 1s... (${retries} restants)`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
         }
+
+        if (updateError) {
+          console.error('❌ Erreur finale liaison:', updateError);
+          
+          if (updateError.code === '23503') {
+            throw new Error('Le compte a été créé mais la liaison au sous-traitant a échoué. Vérifiez vos paramètres Supabase (confirmation email désactivée ?)');
+          }
+          
+          throw new Error(`Impossible de lier le compte: ${updateError.message}`);
+        }
+
+        console.log('🎉 Création compte terminée avec succès');
       });
-
-      if (authError) {
-        console.error('❌ Erreur auth.signUp:', authError);
-        
-        // Messages d'erreur personnalisés
-        if (authError.message.includes('User already registered')) {
-          throw new Error('Cet email est déjà utilisé');
-        }
-        
-        throw authError;
-      }
-      
-      const userId = authData.user?.id;
-      
-      if (!userId) {
-        throw new Error('Impossible de récupérer l\'ID utilisateur');
-      }
-
-      console.log('✅ Utilisateur créé:', userId);
-
-      // ✅ 2️⃣ Attendre que Supabase crée bien l'entrée dans auth.users
-      console.log('⏳ Attente création utilisateur dans auth.users...');
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // ✅ 3️⃣ Créer le profil dans la table profiles
-      console.log('📝 Création du profil...');
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: userId,
-          nom: sousTraitant.nomST || '',
-          prenom: sousTraitant.PrenomST || '',
-          nomsociete: sousTraitant.nomsocieteST,
-          email: formData.email,
-          role: 'artisan',
-          telephone: sousTraitant.telephone || null,
-          adresse: sousTraitant.adresseST || null
-        });
-
-      if (profileError) {
-        console.error('❌ Erreur création profil:', profileError);
-        
-        // Si le profil existe déjà, on continue quand même
-        if (!profileError.message.includes('duplicate key')) {
-          console.warn('⚠️ Erreur profil mais on continue');
-        }
-      } else {
-        console.log('✅ Profil créé');
-      }
-
-      // ✅ 4️⃣ Lier au sous-traitant avec système de retry
-      console.log('🔗 Liaison du compte au sous-traitant...');
-      let retries = 3;
-      let updateError = null;
-      
-      while (retries > 0) {
-        const { error } = await supabase
-          .from('soustraitants')
-          .update({ 
-            user_id: userId,
-            email: formData.email
-          })
-          .eq('id', sousTraitant.id);
-
-        if (!error) {
-          console.log('✅ Sous-traitant lié au compte');
-          updateError = null;
-          break;
-        }
-
-        updateError = error;
-        retries--;
-        
-        if (retries > 0) {
-          console.log(`⚠️ Erreur liaison (${error.code}), retry dans 1s... (${retries} restants)`);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-
-      if (updateError) {
-        console.error('❌ Erreur finale liaison:', updateError);
-        
-        // Message d'erreur selon le code
-        if (updateError.code === '23503') {
-          throw new Error('Le compte a été créé mais la liaison au sous-traitant a échoué. Vérifiez vos paramètres Supabase (confirmation email désactivée ?)');
-        }
-        
-        throw new Error(`Impossible de lier le compte: ${updateError.message}`);
-      }
-
-      console.log('🎉 Création compte terminée avec succès');
 
       toast({ 
         title: "Compte créé ✅", 
@@ -172,7 +172,6 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
       onSuccess?.();
       onClose();
       
-      // Réinitialiser le formulaire
       setFormData({
         email: '',
         password: '',

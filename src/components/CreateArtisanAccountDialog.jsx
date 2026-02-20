@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Eye, EyeOff, UserPlus } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase, supabaseWithSessionCheck } from "@/lib/supabaseClient";
 
 export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess }) {
   const { toast } = useToast();
@@ -17,6 +17,7 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
 
   if (!artisan) return null;
 
+  // ✅ Création compte (AVEC wrapper)
   const handleCreateAccount = async () => {
     // Validations
     if (!artisan.email) {
@@ -49,66 +50,66 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
     setIsCreating(true);
 
     try {
-      console.log('👤 Création compte pour artisan:', artisan.id);
+      await supabaseWithSessionCheck(async () => {
+        console.log('👤 Création compte pour artisan:', artisan.id);
 
-      // 1️⃣ Créer le compte auth (génère un nouveau user_id)
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: artisan.email,
-        password: password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/login`,
+        // 1️⃣ Créer le compte auth
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email: artisan.email,
+          password: password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/login`,
+          }
+        });
+
+        if (authError) {
+          throw new Error(`Erreur création auth: ${authError.message}`);
         }
+
+        const newUserId = authData.user.id;
+        console.log('✅ Compte auth créé avec ID:', newUserId);
+
+        // 2️⃣ Mettre à jour le profil (créé automatiquement par trigger)
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            nom: artisan.nomST || '',
+            prenom: artisan.PrenomST || '',
+            mail: artisan.email,
+            tel: artisan.telephone || '',
+            nomsociete: artisan.nomsociete,
+            user_type: 'artisan',
+          })
+          .eq('id', newUserId);
+
+        if (profileError) {
+          throw new Error(`Erreur création profil: ${profileError.message}`);
+        }
+
+        console.log('✅ Profil artisan créé');
+
+        // 3️⃣ Mettre à jour le sous-traitant avec le nouveau user_id
+        const { error: updateError } = await supabase
+          .from('soustraitants')
+          .update({ user_id: newUserId })
+          .eq('id', artisan.id);
+
+        if (updateError) {
+          console.error('⚠️ Erreur mise à jour user_id du sous-traitant:', updateError);
+          throw new Error(`Erreur liaison compte: ${updateError.message}`);
+        }
+
+        console.log('✅ Sous-traitant mis à jour avec nouveau user_id');
+
+        toast({
+          title: "Compte créé ✅",
+          description: `Un email de confirmation a été envoyé à ${artisan.email}`,
+          duration: 5000
+        });
+
+        onSuccess?.();
+        onClose();
       });
-
-      if (authError) {
-        throw new Error(`Erreur création auth: ${authError.message}`);
-      }
-
-      const newUserId = authData.user.id;
-      console.log('✅ Compte auth créé avec ID:', newUserId);
-
-      // 2️⃣ Le profil a été créé automatiquement par un trigger Supabase
-      // On le met à jour au lieu de l'insérer
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          nom: artisan.nomST || '',
-          prenom: artisan.PrenomST || '',
-          mail: artisan.email,
-          tel: artisan.telephone || '',
-          nomsociete: artisan.nomsociete, // ✅ EVABOIS
-          user_type: 'artisan', // ✅ Type artisan
-        })
-        .eq('id', newUserId);
-
-      if (profileError) {
-        throw new Error(`Erreur création profil: ${profileError.message}`);
-      }
-
-      console.log('✅ Profil artisan créé');
-
-      // 3️⃣ ✅ IMPORTANT : Mettre à jour le sous-traitant avec le nouveau user_id
-      const { error: updateError } = await supabase
-        .from('soustraitants')
-        .update({ user_id: newUserId })
-        .eq('id', artisan.id);
-
-      if (updateError) {
-        console.error('⚠️ Erreur mise à jour user_id du sous-traitant:', updateError);
-        throw new Error(`Erreur liaison compte: ${updateError.message}`);
-      }
-
-      console.log('✅ Sous-traitant mis à jour avec nouveau user_id');
-
-      toast({
-        title: "Compte créé ✅",
-        description: `Un email de confirmation a été envoyé à ${artisan.email}`,
-        duration: 5000
-      });
-
-      onSuccess?.();
-      onClose();
-      
     } catch (err) {
       console.error('❌ Erreur création compte:', err);
       toast({ 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabase, supabaseWithSessionCheck } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
 
 export const SousTraitantContext = createContext();
@@ -60,9 +60,9 @@ export function SousTraitantProvider({ children }) {
     }
   }, [profile?.nomsociete]);
 
-  // ---- Ajouter un sous-traitant ----
+  // ✅ Ajouter un sous-traitant (AVEC wrapper)
   const addSousTraitant = async (st) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       console.log("🔵 addSousTraitant - Début");
       
       if (!user || !profile?.nomsociete) {
@@ -76,7 +76,6 @@ export function SousTraitantProvider({ children }) {
         telephone: st.telephone || null,
         adresseST: st.adresseST || null,
         assigned_lots: st.assigned_lots || [],
-        // ✅ user_id sera NULL par défaut (rempli uniquement si compte créé)
         nomsociete: profile.nomsociete,
         nomsocieteST: st.nomsocieteST,
       };
@@ -84,7 +83,6 @@ export function SousTraitantProvider({ children }) {
       console.log("📦 Payload ST:", payload);
       console.log('🚀 Appel Supabase.from("soustraitants").insert()...');
 
-      // ✅ Appel direct - Supabase est rapide
       const { data, error } = await supabase
         .from("soustraitants")
         .insert([payload])
@@ -101,19 +99,14 @@ export function SousTraitantProvider({ children }) {
       console.log("✅ Sous-traitant inséré :", data);
       setSousTraitants((prev) => [data, ...(prev || [])]);
       return data;
-    } catch (err) {
-      console.error("❌ Exception addSousTraitant:", err);
-      alert(`Erreur lors de la création du sous-traitant: ${err.message}`);
-      throw err;
-    }
+    });
   };
 
-  // ---- Mise à jour d'un sous-traitant ----
+  // ✅ Mise à jour d'un sous-traitant (AVEC wrapper)
   const updateSousTraitant = async (id, updates) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       console.log('📤 updateSousTraitant - ID:', id);
       
-      // ✅ NETTOYER les updates
       const cleanUpdates = { ...updates };
       delete cleanUpdates.id;
       delete cleanUpdates.created_at;
@@ -141,16 +134,12 @@ export function SousTraitantProvider({ children }) {
       );
 
       return data;
-    } catch (error) {
-      console.error('❌ Exception updateSousTraitant:', error);
-      alert(`Erreur lors de la modification: ${error.message}`);
-      throw error;
-    }
+    });
   };
 
-  // ---- Suppression d'un ST ----
+  // ✅ Suppression d'un ST (AVEC wrapper)
   const deleteSousTraitant = async (id) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       console.log("📤 Delete ST :", id);
 
       const { error } = await supabase
@@ -167,14 +156,10 @@ export function SousTraitantProvider({ children }) {
       setSousTraitants((prev) => (prev || []).filter((s) => s.id !== id));
       console.log("✅ ST supprimé du state local");
       return true;
-    } catch (error) {
-      console.error('❌ Exception deleteSousTraitant:', error);
-      alert(`Erreur lors de la suppression: ${error.message}`);
-      throw error;
-    }
+    });
   };
 
-  // ---- Rafraîchir manuellement ----
+  // ---- Rafraîchir manuellement (sans wrapper - c'est juste une lecture)
   const loadSousTraitants = async () => {
     if (!profile?.nomsociete) return;
 

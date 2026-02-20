@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
 const CommentairesContext = createContext();
@@ -20,15 +20,12 @@ export function CommentairesProvider({ children }) {
   const [commentaires, setCommentaires] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // =========================================
-  // CHARGER LES COMMENTAIRES ---
-  // =========================================
+  // CHARGER LES COMMENTAIRES (sans wrapper - lecture)
   const fetchCommentaires = useCallback(async () => {
     if (!nomsociete) return;
 
     try {
       setLoading(true);
-      // ✅ CORRIGÉ : Pas de .eq('nomsociete') car RLS le gère
       const { data, error } = await supabase
         .from('commentaires_chantier')
         .select('*')
@@ -49,21 +46,17 @@ export function CommentairesProvider({ children }) {
     }
   }, [nomsociete, fetchCommentaires]);
 
-  // =========================================
   // RÉCUPÉRER LES COMMENTAIRES D'UN CHANTIER
-  // =========================================
   const getCommentairesByChantier = useCallback((chantierId) => {
     return commentaires
       .filter(c => c.chantier_id === chantierId)
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [commentaires]);
 
-  // =========================================
-  // AJOUTER UN COMMENTAIRE
-  // =========================================
+  // ✅ AJOUTER UN COMMENTAIRE (AVEC wrapper)
   const addCommentaire = async (chantierId, titre, texte) => {
-    try {
-      // ✅ NOUVEAU : Récupérer le nomsociete du chantier
+    return await supabaseWithSessionCheck(async () => {
+      // Récupérer le nomsociete du chantier
       const { data: chantier, error: chantierError } = await supabase
         .from('chantiers')
         .select('nomsociete')
@@ -83,7 +76,7 @@ export function CommentairesProvider({ children }) {
         .from('commentaires_chantier')
         .insert([{
           chantier_id: chantierId,
-          nomsociete: chantier.nomsociete, // ✅ Utiliser le nomsociete du chantier
+          nomsociete: chantier.nomsociete,
           titre,
           texte,
           auteur,
@@ -100,18 +93,12 @@ export function CommentairesProvider({ children }) {
 
       setCommentaires(prev => [data, ...prev]);
       return { success: true, data };
-    } catch (error) {
-      console.error('❌ Erreur addCommentaire:', error);
-      throw error;
-    }
+    });
   };
 
-  // =========================================
-  // METTRE À JOUR UN COMMENTAIRE
-  // =========================================
+  // ✅ METTRE À JOUR UN COMMENTAIRE (AVEC wrapper)
   const updateCommentaire = async (commentaireId, updates) => {
-    try {
-      // ✅ CORRIGÉ : Pas de .eq('nomsociete') car RLS le gère
+    return await supabaseWithSessionCheck(async () => {
       const { data, error } = await supabase
         .from('commentaires_chantier')
         .update({
@@ -126,18 +113,12 @@ export function CommentairesProvider({ children }) {
 
       setCommentaires(prev => prev.map(c => c.id === commentaireId ? data : c));
       return { success: true, data };
-    } catch (error) {
-      console.error('Erreur updateCommentaire:', error);
-      throw error;
-    }
+    });
   };
 
-  // =========================================
-  // SUPPRIMER UN COMMENTAIRE
-  // =========================================
+  // ✅ SUPPRIMER UN COMMENTAIRE (AVEC wrapper)
   const deleteCommentaire = async (commentaireId) => {
-    try {
-      // ✅ CORRIGÉ : Pas de .eq('nomsociete') car RLS le gère
+    return await supabaseWithSessionCheck(async () => {
       const { error } = await supabase
         .from('commentaires_chantier')
         .delete()
@@ -147,21 +128,15 @@ export function CommentairesProvider({ children }) {
 
       setCommentaires(prev => prev.filter(c => c.id !== commentaireId));
       return { success: true };
-    } catch (error) {
-      console.error('Erreur deleteCommentaire:', error);
-      throw error;
-    }
+    });
   };
 
-  // =========================================
-  // TOGGLE PRIS EN COMPTE
-  // =========================================
+  // ✅ TOGGLE PRIS EN COMPTE (AVEC wrapper)
   const togglePrisEnCompte = async (commentaireId) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const commentaire = commentaires.find(c => c.id === commentaireId);
       if (!commentaire) throw new Error('Commentaire non trouvé');
 
-      // ✅ CORRIGÉ : Pas de .eq('nomsociete') car RLS le gère
       const { data, error } = await supabase
         .from('commentaires_chantier')
         .update({
@@ -176,10 +151,7 @@ export function CommentairesProvider({ children }) {
 
       setCommentaires(prev => prev.map(c => c.id === commentaireId ? data : c));
       return { success: true, data };
-    } catch (error) {
-      console.error('Erreur togglePrisEnCompte:', error);
-      throw error;
-    }
+    });
   };
 
   const value = {

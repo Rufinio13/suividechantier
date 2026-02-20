@@ -7,21 +7,21 @@ import { Camera, X, CheckCircle, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
 
 export function TacheDetailModalArtisan({ 
   isOpen, 
   onClose, 
   tache, 
   lot,
-  chantier, // ✅ NOUVEAU
+  chantier,
   onSuccess 
 }) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [photos, setPhotos] = useState(tache?.artisan_photos || []);
   const [uploadingPhotos, setUploadingPhotos] = useState([]);
-  const [commentaire, setCommentaire] = useState(tache?.artisan_commentaire || ''); // ✅ NOUVEAU
+  const [commentaire, setCommentaire] = useState(tache?.artisan_commentaire || '');
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -32,7 +32,7 @@ export function TacheDetailModalArtisan({
     }
   };
 
-  // Upload photo vers Supabase Storage
+  // ✅ Upload photo (AVEC wrapper)
   const handlePhotoUpload = async (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
@@ -40,45 +40,46 @@ export function TacheDetailModalArtisan({
     setUploadingPhotos(prev => [...prev, ...files.map(f => f.name)]);
 
     try {
-      const uploadedUrls = [];
+      await supabaseWithSessionCheck(async () => {
+        const uploadedUrls = [];
 
-      for (const file of files) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${tache.id}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const filePath = `taches/${fileName}`;
+        for (const file of files) {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${tache.id}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+          const filePath = `taches/${fileName}`;
 
-        // Upload vers Supabase Storage
-        const { data, error } = await supabase.storage
-          .from('photos-taches')
-          .upload(filePath, file, {
-            cacheControl: '3600',
-            upsert: false
+          // Upload vers Supabase Storage
+          const { data, error } = await supabase.storage
+            .from('photos-taches')
+            .upload(filePath, file, {
+              cacheControl: '3600',
+              upsert: false
+            });
+
+          if (error) {
+            console.error('❌ Erreur upload:', error);
+            throw error;
+          }
+
+          // Récupérer URL publique
+          const { data: urlData } = supabase.storage
+            .from('photos-taches')
+            .getPublicUrl(filePath);
+
+          uploadedUrls.push({
+            url: urlData.publicUrl,
+            name: file.name,
+            uploaded_at: new Date().toISOString()
           });
-
-        if (error) {
-          console.error('❌ Erreur upload:', error);
-          throw error;
         }
 
-        // Récupérer URL publique
-        const { data: urlData } = supabase.storage
-          .from('photos-taches')
-          .getPublicUrl(filePath);
+        setPhotos(prev => [...prev, ...uploadedUrls]);
 
-        uploadedUrls.push({
-          url: urlData.publicUrl,
-          name: file.name,
-          uploaded_at: new Date().toISOString()
+        toast({
+          title: "Photos ajoutées ✅",
+          description: `${uploadedUrls.length} photo(s) ajoutée(s)`,
         });
-      }
-
-      setPhotos(prev => [...prev, ...uploadedUrls]);
-
-      toast({
-        title: "Photos ajoutées ✅",
-        description: `${uploadedUrls.length} photo(s) ajoutée(s)`,
       });
-
     } catch (error) {
       console.error('❌ Erreur upload photos:', error);
       toast({
@@ -95,32 +96,34 @@ export function TacheDetailModalArtisan({
     setPhotos(prev => prev.filter((_, i) => i !== index));
   };
 
+  // ✅ Marquer terminée (AVEC wrapper)
   const handleMarquerTerminee = async () => {
     if (isSubmitting) return;
 
     setIsSubmitting(true);
 
     try {
-      const { error } = await supabase
-        .from('taches')
-        .update({
-          artisan_termine: true,
-          artisan_termine_date: new Date().toISOString(),
-          artisan_photos: photos,
-          artisan_commentaire: commentaire || null // ✅ NOUVEAU
-        })
-        .eq('id', tache.id);
+      await supabaseWithSessionCheck(async () => {
+        const { error } = await supabase
+          .from('taches')
+          .update({
+            artisan_termine: true,
+            artisan_termine_date: new Date().toISOString(),
+            artisan_photos: photos,
+            artisan_commentaire: commentaire || null
+          })
+          .eq('id', tache.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: "Tâche marquée terminée ✅",
-        description: "Le constructeur sera notifié pour validation",
+        toast({
+          title: "Tâche marquée terminée ✅",
+          description: "Le constructeur sera notifié pour validation",
+        });
+
+        onSuccess?.();
+        onClose();
       });
-
-      onSuccess?.();
-      onClose();
-
     } catch (error) {
       console.error('❌ Erreur:', error);
       toast({
@@ -145,7 +148,7 @@ export function TacheDetailModalArtisan({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Infos tâche - Ordre modifié */}
+          {/* Infos tâche */}
           <div>
             {chantier && (
               <h2 className="text-xl font-bold text-slate-900 mb-2">
@@ -222,7 +225,7 @@ export function TacheDetailModalArtisan({
             </div>
           )}
 
-          {/* Upload photos (seulement si pas encore terminé) */}
+          {/* Upload photos */}
           {!isDejaTermine && (
             <div>
               <Label htmlFor="photo-upload" className="cursor-pointer">
@@ -248,7 +251,7 @@ export function TacheDetailModalArtisan({
             </div>
           )}
 
-          {/* ✅ NOUVEAU : Commentaire artisan */}
+          {/* Commentaire artisan */}
           {!isDejaTermine && (
             <div>
               <Label htmlFor="commentaire">Commentaire (optionnel)</Label>
@@ -263,7 +266,7 @@ export function TacheDetailModalArtisan({
             </div>
           )}
 
-          {/* Afficher commentaire existant si déjà terminé */}
+          {/* Afficher commentaire existant */}
           {isDejaTermine && commentaire && (
             <div>
               <Label className="text-sm text-muted-foreground">Votre commentaire</Label>

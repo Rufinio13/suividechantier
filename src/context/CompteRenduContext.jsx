@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
 const CompteRenduContext = createContext();
@@ -19,9 +19,7 @@ export function CompteRenduProvider({ children }) {
   const [comptesRendus, setComptesRendus] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // =========================================
-  // CHARGER LES COMPTES RENDUS
-  // =========================================
+  // CHARGER LES COMPTES RENDUS (sans wrapper - lecture)
   const fetchComptesRendus = useCallback(async () => {
     if (!nomsociete) return;
 
@@ -47,20 +45,16 @@ export function CompteRenduProvider({ children }) {
     }
   }, [nomsociete, fetchComptesRendus]);
 
-  // =========================================
   // RÉCUPÉRER LES COMPTES RENDUS D'UN CHANTIER
-  // =========================================
   const getComptesRendusByChantier = useCallback((chantierId) => {
     return comptesRendus
       .filter(cr => cr.chantier_id === chantierId)
       .sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [comptesRendus]);
 
-  // =========================================
-  // AJOUTER UN COMPTE RENDU
-  // =========================================
+  // ✅ AJOUTER UN COMPTE RENDU (AVEC wrapper)
   const addCompteRendu = async (chantierId, compteRenduData) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const { data, error } = await supabase
         .from('comptes_rendus')
         .insert([{
@@ -76,17 +70,12 @@ export function CompteRenduProvider({ children }) {
 
       setComptesRendus(prev => [data, ...prev]);
       return { success: true, data };
-    } catch (error) {
-      console.error('Erreur addCompteRendu:', error);
-      throw error;
-    }
+    });
   };
 
-  // =========================================
-  // METTRE À JOUR UN COMPTE RENDU
-  // =========================================
+  // ✅ METTRE À JOUR UN COMPTE RENDU (AVEC wrapper)
   const updateCompteRendu = async (compteRenduId, updates) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const { data, error } = await supabase
         .from('comptes_rendus')
         .update({
@@ -101,17 +90,12 @@ export function CompteRenduProvider({ children }) {
 
       setComptesRendus(prev => prev.map(cr => cr.id === compteRenduId ? data : cr));
       return { success: true, data };
-    } catch (error) {
-      console.error('Erreur updateCompteRendu:', error);
-      throw error;
-    }
+    });
   };
 
-  // =========================================
-  // SUPPRIMER UN COMPTE RENDU
-  // =========================================
+  // ✅ SUPPRIMER UN COMPTE RENDU (AVEC wrapper)
   const deleteCompteRendu = async (compteRenduId) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const { error } = await supabase
         .from('comptes_rendus')
         .delete()
@@ -121,15 +105,12 @@ export function CompteRenduProvider({ children }) {
 
       setComptesRendus(prev => prev.filter(cr => cr.id !== compteRenduId));
       return { success: true };
-    } catch (error) {
-      console.error('Erreur deleteCompteRendu:', error);
-      throw error;
-    }
+    });
   };
 
   const value = {
     comptesRendus,
-    setComptesRendus, // ✅ NOUVEAU : Exposer pour update optimiste
+    setComptesRendus,
     loading,
     nomsociete,
     getComptesRendusByChantier,

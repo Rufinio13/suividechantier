@@ -47,7 +47,7 @@ export async function setSupabaseRLSContext(nomsociete) {
   }
 }
 
-// ✅ NOUVELLE FONCTION : Vérifier et rafraîchir la session si nécessaire
+// ✅ Vérifier et rafraîchir la session si nécessaire
 export async function ensureValidSession() {
   try {
     const { data: { session }, error } = await supabase.auth.getSession();
@@ -66,12 +66,10 @@ export async function ensureValidSession() {
     const now = Date.now();
     const timeUntilExpiry = expiresAt - now;
     
-    console.log(`⏱️ Session expire dans ${Math.floor(timeUntilExpiry / 60000)} minutes`);
-    
     // ✅ Rafraîchir si expire dans moins de 10 minutes
     if (timeUntilExpiry < 10 * 60 * 1000) {
-      console.log('🔄 Rafraîchissement préventif de la session...');
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      console.log('🔄 Session expire bientôt, rafraîchissement...');
+      const { error: refreshError } = await supabase.auth.refreshSession();
       
       if (refreshError) {
         console.error('❌ Erreur rafraîchissement:', refreshError);
@@ -79,7 +77,6 @@ export async function ensureValidSession() {
       }
       
       console.log('✅ Session rafraîchie avec succès');
-      return true;
     }
     
     return true;
@@ -87,4 +84,17 @@ export async function ensureValidSession() {
     console.error('❌ Exception ensureValidSession:', err);
     return false;
   }
+}
+
+// ✅ WRAPPER : Vérifie la session avant toute opération
+export async function supabaseWithSessionCheck(operation) {
+  const sessionValid = await ensureValidSession();
+  
+  if (!sessionValid) {
+    const error = new Error('Session expirée. Veuillez vous reconnecter.');
+    console.error('❌', error.message);
+    throw error;
+  }
+  
+  return await operation();
 }

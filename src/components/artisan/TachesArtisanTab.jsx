@@ -8,7 +8,7 @@ import { ListChecks, CheckCircle, Camera, X, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
 
 export function TachesArtisanTab({ chantierId, soustraitantId }) {
   const { taches, lots, loadTaches } = useChantier();
@@ -57,49 +57,51 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
 
   const getTacheKey = (tacheId) => tacheId;
 
+  // ✅ Upload photos (AVEC wrapper)
   const handlePhotoUpload = async (tacheId, files) => {
     if (!files || files.length === 0) return;
 
     setUploadingPhotos(prev => ({ ...prev, [tacheId]: true }));
 
     try {
-      const uploadedUrls = [];
+      await supabaseWithSessionCheck(async () => {
+        const uploadedUrls = [];
 
-      for (const file of files) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${tacheId}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const filePath = `taches/${fileName}`;
+        for (const file of files) {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${tacheId}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+          const filePath = `taches/${fileName}`;
 
-        const { data, error } = await supabase.storage
-          .from('photos-taches')
-          .upload(filePath, file, {
-            cacheControl: '3600',
-            upsert: false
+          const { data, error } = await supabase.storage
+            .from('photos-taches')
+            .upload(filePath, file, {
+              cacheControl: '3600',
+              upsert: false
+            });
+
+          if (error) throw error;
+
+          const { data: urlData } = supabase.storage
+            .from('photos-taches')
+            .getPublicUrl(filePath);
+
+          uploadedUrls.push({
+            url: urlData.publicUrl,
+            name: file.name,
+            uploaded_at: new Date().toISOString()
           });
+        }
 
-        if (error) throw error;
+        setPhotos(prev => ({
+          ...prev,
+          [tacheId]: [...(prev[tacheId] || []), ...uploadedUrls]
+        }));
 
-        const { data: urlData } = supabase.storage
-          .from('photos-taches')
-          .getPublicUrl(filePath);
-
-        uploadedUrls.push({
-          url: urlData.publicUrl,
-          name: file.name,
-          uploaded_at: new Date().toISOString()
+        toast({
+          title: 'Photos ajoutées',
+          description: `${uploadedUrls.length} photo(s) ajoutée(s)`,
         });
-      }
-
-      setPhotos(prev => ({
-        ...prev,
-        [tacheId]: [...(prev[tacheId] || []), ...uploadedUrls]
-      }));
-
-      toast({
-        title: 'Photos ajoutées',
-        description: `${uploadedUrls.length} photo(s) ajoutée(s)`,
       });
-
     } catch (error) {
       console.error('❌ Erreur upload photos:', error);
       toast({
@@ -119,6 +121,7 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
     }));
   };
 
+  // ✅ Marquer tâche terminée (AVEC wrapper)
   const handleMarquerTerminee = async (tache) => {
     const tacheId = tache.id;
     
@@ -127,25 +130,26 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
     setSubmitting(prev => ({ ...prev, [tacheId]: true }));
 
     try {
-      const { error } = await supabase
-        .from('taches')
-        .update({
-          artisan_termine: true,
-          artisan_termine_date: new Date().toISOString(),
-          artisan_photos: photos[tacheId] || [],
-          artisan_commentaire: commentaires[tacheId] || null
-        })
-        .eq('id', tacheId);
+      await supabaseWithSessionCheck(async () => {
+        const { error } = await supabase
+          .from('taches')
+          .update({
+            artisan_termine: true,
+            artisan_termine_date: new Date().toISOString(),
+            artisan_photos: photos[tacheId] || [],
+            artisan_commentaire: commentaires[tacheId] || null
+          })
+          .eq('id', tacheId);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: 'Tâche marquée terminée',
-        description: 'Le constructeur sera notifié pour validation',
+        toast({
+          title: 'Tâche marquée terminée',
+          description: 'Le constructeur sera notifié pour validation',
+        });
+
+        await loadTaches();
       });
-
-      await loadTaches();
-
     } catch (error) {
       console.error('❌ Erreur:', error);
       toast({
@@ -176,29 +180,26 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
         const lot = lots.find(l => l.id === tache.lotid);
         const isDejaTermine = tache.artisan_termine || tache.constructeur_valide;
 
-        // ✅ LOGIQUE CODE COULEUR
+        // LOGIQUE CODE COULEUR
         const maintenant = new Date();
         const dateFinPassee = tache.datefin && new Date(tache.datefin) < maintenant;
         
-        let cardClass = 'bg-white border-slate-200'; // 4. Par défaut (aucune couleur)
+        let cardClass = 'bg-white border-slate-200';
         let badgeColor = null;
         let badgeText = '';
         let badgeIcon = null;
         
         if (tache.constructeur_valide) {
-          // 3. Validée par constructeur → BLEU
           cardClass = 'bg-blue-50 border-blue-300';
           badgeColor = 'bg-blue-500';
           badgeText = 'Validée';
           badgeIcon = <CheckCircle className="inline h-3 w-3 mr-1" />;
         } else if (tache.artisan_termine) {
-          // 2. Terminée par artisan → JAUNE
           cardClass = 'bg-yellow-50 border-yellow-300';
           badgeColor = 'bg-yellow-500';
           badgeText = 'En attente validation';
           badgeIcon = <CheckCircle className="inline h-3 w-3 mr-1" />;
         } else if (dateFinPassee) {
-          // 1. En retard → ROUGE
           cardClass = 'bg-red-50 border-red-300';
         }
 

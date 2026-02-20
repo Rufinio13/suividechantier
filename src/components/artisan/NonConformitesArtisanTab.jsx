@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { AlertTriangle, CheckCircle, Camera, Calendar } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -22,7 +22,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
   const [uploading, setUploading] = useState({});
   const [saving, setSaving] = useState({});
 
-  // ✅ CORRIGÉ : Récupérer NC avec vérification des suppressions
+  // Récupérer NC avec vérification des suppressions (inchangé)
   const mesNC = useMemo(() => {
     const points = [];
     const controlesChantier = controles.filter(c => c.chantier_id === chantierId);
@@ -31,13 +31,12 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
       const modele = modelesCQ.find(m => m.id === ctrl.modele_cq_id);
       if (!modele) return;
 
-      // ✅ 1️⃣ RÉCUPÉRER NC DU MODÈLE DE BASE (ctrl.resultats)
+      // 1️⃣ NC DU MODÈLE DE BASE
       if (ctrl.resultats) {
         Object.entries(ctrl.resultats).forEach(([categorieId, resultatsCategorie]) => {
           const categorie = modele.categories?.find(c => c.id === categorieId);
           if (!categorie) return;
 
-          // ✅ Vérifier si la catégorie n'est pas supprimée
           const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
           if (categoriesSupprimees.includes(categorieId)) return;
 
@@ -45,12 +44,10 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
             const sousCategorie = categorie.sousCategories?.find(sc => sc.id === sousCategorieId);
             if (!sousCategorie) return;
 
-            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
             const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
             if (sousCategoriesSupprimees.includes(sousCategorieId)) return;
 
             Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
-              // ✅ Vérifier si le point n'est pas supprimé
               const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieId] || [];
               if (pointsSupprimes.includes(pointControleId)) return;
 
@@ -80,33 +77,28 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
         });
       }
 
-      // ✅ 2️⃣ RÉCUPÉRER NC DES POINTS SPÉCIFIQUES CHANTIER (ctrl.points_specifiques)
+      // 2️⃣ NC DES POINTS SPÉCIFIQUES
       if (ctrl.points_specifiques) {
         Object.entries(ctrl.points_specifiques).forEach(([categorieId, categoriePoints]) => {
           const categorie = modele.categories?.find(c => c.id === categorieId);
           
-          // ✅ Vérifier si la catégorie n'est pas supprimée
           const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
           if (categoriesSupprimees.includes(categorieId)) return;
           
           Object.entries(categoriePoints).forEach(([sousCategorieKey, pointsMap]) => {
-            // Trouver la sous-catégorie (peut être '_global' ou un ID réel)
             const sousCategorie = sousCategorieKey === '_global' 
               ? { id: '_global', nom: 'Points spécifiques' }
               : categorie?.sousCategories?.find(sc => sc.id === sousCategorieKey);
             
             if (!sousCategorie) return;
 
-            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
             const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
             if (sousCategoriesSupprimees.includes(sousCategorieKey)) return;
 
             Object.entries(pointsMap).forEach(([pointControleId, pointData]) => {
-              // ✅ Vérifier si le point n'est pas supprimé
               const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieKey] || [];
               if (pointsSupprimes.includes(pointControleId)) return;
 
-              // Vérifier si ce point a un résultat NC dans ctrl.resultats
               const resultatPoint = ctrl.resultats?.[categorieId]?.[sousCategorieKey]?.[pointControleId];
               
               if (
@@ -142,7 +134,6 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
     });
   }, [controles, modelesCQ, chantierId, soustraitantId]);
 
-  // Fonction pour télécharger une image
   const handleDownloadImage = (imageUrl, fileName = 'photo.jpg') => {
     const a = document.createElement('a');
     a.href = imageUrl;
@@ -174,7 +165,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
 
   const getNCKey = (nc) => `${nc.modeleId}-${nc.categorieId}-${nc.sousCategorieId}-${nc.pointControleId}`;
 
-  // ✅ Planifier l'intervention
+  // Planifier l'intervention (saveControleFromModele est déjà protégé dans le Context)
   const handlePlanifier = async (nc) => {
     const ncKey = getNCKey(nc);
     const date = dateIntervention[ncKey];
@@ -229,40 +220,43 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
     }
   };
 
+  // ✅ Upload photos (AVEC wrapper)
   const handlePhotoUpload = async (ncKey, files) => {
     if (!files || files.length === 0) return;
 
     setUploading(prev => ({ ...prev, [ncKey]: true }));
 
     try {
-      const uploadedUrls = [];
+      await supabaseWithSessionCheck(async () => {
+        const uploadedUrls = [];
 
-      for (const file of files) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `nc_${chantierId}_${uuidv4()}.${fileExt}`;
-        const filePath = fileName;
+        for (const file of files) {
+          const fileExt = file.name.split('.').pop();
+          const fileName = `nc_${chantierId}_${uuidv4()}.${fileExt}`;
+          const filePath = fileName;
 
-        const { data, error } = await supabase.storage
-          .from('photos-reprises')
-          .upload(filePath, file);
+          const { data, error } = await supabase.storage
+            .from('photos-reprises')
+            .upload(filePath, file);
 
-        if (error) throw error;
+          if (error) throw error;
 
-        const { data: urlData } = supabase.storage
-          .from('photos-reprises')
-          .getPublicUrl(filePath);
+          const { data: urlData } = supabase.storage
+            .from('photos-reprises')
+            .getPublicUrl(filePath);
 
-        uploadedUrls.push({ url: urlData.publicUrl, name: file.name });
-      }
+          uploadedUrls.push({ url: urlData.publicUrl, name: file.name });
+        }
 
-      setPhotosReprise(prev => ({
-        ...prev,
-        [ncKey]: [...(prev[ncKey] || []), ...uploadedUrls]
-      }));
+        setPhotosReprise(prev => ({
+          ...prev,
+          [ncKey]: [...(prev[ncKey] || []), ...uploadedUrls]
+        }));
 
-      toast({
-        title: 'Photos ajoutées',
-        description: `${uploadedUrls.length} photo(s) uploadée(s)`,
+        toast({
+          title: 'Photos ajoutées',
+          description: `${uploadedUrls.length} photo(s) uploadée(s)`,
+        });
       });
     } catch (error) {
       console.error('Erreur upload photos:', error);
@@ -276,6 +270,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
     }
   };
 
+  // Marquer reprise (saveControleFromModele est déjà protégé dans le Context)
   const handleMarquerReprise = async (nc) => {
     const ncKey = getNCKey(nc);
     
@@ -312,7 +307,6 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
         description: 'Le constructeur sera notifié',
       });
 
-      // Reset
       setCommentaireReprise(prev => ({ ...prev, [ncKey]: '' }));
       setPhotosReprise(prev => ({ ...prev, [ncKey]: [] }));
 
@@ -377,7 +371,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
               </CardHeader>
 
               <CardContent className="space-y-4">
-                {/* ✅ INFORMATIONS NC */}
+                {/* INFORMATIONS NC */}
                 <div className="p-3 bg-white rounded-md border space-y-2 text-sm">
                   <div className="font-medium text-slate-900">Informations</div>
                   
@@ -397,7 +391,6 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                     </div>
                   )}
 
-                  {/* ✅ Date intervention artisan */}
                   {pnc.date_intervention_artisan && (
                     <div>
                       <span className="text-xs font-medium text-slate-600">Date intervention prévue :</span>
@@ -407,7 +400,6 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                     </div>
                   )}
 
-                  {/* Photos NC originales */}
                   {pnc.photos && pnc.photos.length > 0 && (
                     <div>
                       <span className="text-xs font-medium text-slate-600">Photos NC :</span>
@@ -429,7 +421,6 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                     </div>
                   )}
 
-                  {/* Plans NC originaux */}
                   {pnc.plans && pnc.plans.length > 0 && (
                     <div>
                       <span className="text-xs font-medium text-slate-600">Plans annotés :</span>
@@ -452,7 +443,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                   )}
                 </div>
 
-                {/* ✅ PLANIFIER L'INTERVENTION */}
+                {/* PLANIFIER L'INTERVENTION */}
                 {!pnc.date_intervention_artisan && !pnc.artisan_repris && (
                   <div className="p-3 bg-white rounded-md border">
                     <div className="font-medium text-sm text-slate-900 mb-3 flex items-center gap-2">
@@ -489,7 +480,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                   </div>
                 )}
 
-                {/* ✅ REPRISE MARQUÉE */}
+                {/* REPRISE MARQUÉE */}
                 {pnc.artisan_repris && (
                   <div className="p-3 bg-yellow-100 border border-yellow-300 rounded-md">
                     <div className="flex items-center gap-2 mb-2">
@@ -502,7 +493,6 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                       En attente de validation par le constructeur
                     </p>
 
-                    {/* Commentaire reprise */}
                     {pnc.artisan_repris_commentaire && (
                       <div className="mt-3 p-2 bg-white/50 rounded">
                         <p className="text-xs font-medium text-slate-700">💬 Commentaire :</p>
@@ -510,7 +500,6 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                       </div>
                     )}
 
-                    {/* Photos reprise */}
                     {pnc.artisan_repris_photos && pnc.artisan_repris_photos.length > 0 && (
                       <div className="mt-3">
                         <p className="text-xs font-medium text-slate-700 mb-2">📸 Photos de reprise :</p>
@@ -531,7 +520,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                   </div>
                 )}
 
-                {/* ✅ TERMINER L'INTERVENTION */}
+                {/* TERMINER L'INTERVENTION */}
                 {pnc.date_intervention_artisan && !pnc.artisan_repris && (
                   <div className="p-3 bg-white rounded-md border">
                     <div className="font-medium text-sm text-slate-900 mb-3 flex items-center gap-2">

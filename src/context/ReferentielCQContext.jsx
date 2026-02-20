@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
 const ReferentielCQContext = createContext();
@@ -21,7 +21,6 @@ export function ReferentielCQProvider({ children }) {
   const [modelesLoaded, setModelesLoaded] = useState(false);
   const [controlesLoaded, setControlesLoaded] = useState(false);
   
-  // ✅ NOUVEAU : Ref pour bloquer les doubles appels lors de l'ajout de points
   const isAddingPointRef = useRef(false);
 
   useEffect(() => {
@@ -30,6 +29,7 @@ export function ReferentielCQProvider({ children }) {
     }
   }, [modelesLoaded, controlesLoaded]);
 
+  // Chargement initial (sans wrapper - lectures)
   useEffect(() => {
     const fetchModelesCQ = async () => {
       if (!profile?.nomsociete) {
@@ -94,8 +94,9 @@ export function ReferentielCQProvider({ children }) {
     fetchControles();
   }, [profile?.nomsociete]);
 
+  // ✅ CRUD Modèles (AVEC wrapper)
   const addModeleCQ = async (modeleData) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const dataToInsert = {
         ...modeleData,
         nomsociete: profile?.nomsociete,
@@ -113,14 +114,11 @@ export function ReferentielCQProvider({ children }) {
 
       setModelesCQ(prev => [...prev, data]);
       return { success: true, data };
-    } catch (error) {
-      console.error('Erreur addModeleCQ:', error);
-      throw error;
-    }
+    });
   };
 
   const updateModeleCQ = async (id, updates) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const dataToUpdate = {
         ...updates,
         updated_at: new Date().toISOString()
@@ -138,14 +136,11 @@ export function ReferentielCQProvider({ children }) {
 
       setModelesCQ(prev => prev.map(m => m.id === id ? data : m));
       return { success: true, data };
-    } catch (error) {
-      console.error('Erreur updateModeleCQ:', error);
-      throw error;
-    }
+    });
   };
 
   const deleteModeleCQ = async (id) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const { error } = await supabase
         .from('referentiels_controle_qualite')
         .delete()
@@ -156,14 +151,12 @@ export function ReferentielCQProvider({ children }) {
 
       setModelesCQ(prev => prev.filter(m => m.id !== id));
       return { success: true };
-    } catch (error) {
-      console.error('Erreur deleteModeleCQ:', error);
-      throw error;
-    }
+    });
   };
 
+  // ✅ Sauvegarde contrôle (AVEC wrapper)
   const saveControleFromModele = async (chantierId, modeleCQId, resultats, pointsSpecifiques) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       console.log('💾 saveControleFromModele:', { chantierId, modeleCQId });
       
       const { data: existingControle, error: fetchError } = await supabase
@@ -219,100 +212,92 @@ export function ReferentielCQProvider({ children }) {
         setControles(prev => [...prev, data]);
         return { success: true, data };
       }
-    } catch (error) {
-      console.error('❌ Erreur saveControleFromModele:', error);
-      throw error;
-    }
+    });
   };
 
   const getControlesByChantier = (chantierId) => {
     return controles.filter(c => c.chantier_id === chantierId);
   };
 
-  // ✅ CORRIGÉ : Protection contre les doubles appels
+  // ✅ Points de contrôle (AVEC wrapper)
   const addPointControleChantierSpecific = async (chantierId, modeleId, domaineId, sousCategorieId, pointData) => {
-    // ✅ PROTECTION : Si déjà en cours, rejeter
-    if (isAddingPointRef.current) {
-      console.log('⚠️ addPointControleChantierSpecific déjà en cours, ignoré');
-      return { success: false, message: 'Déjà en cours' };
-    }
-
-    isAddingPointRef.current = true;
-    console.log('🔵 addPointControleChantierSpecific - Début', pointData.id);
-
-    try {
-      const existingControle = controles.find(
-        c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
-      );
-
-      const scKey = sousCategorieId || '_global';
-      let updatedPointsSpecifiques = existingControle?.points_specifiques || {};
-      
-      if (!updatedPointsSpecifiques[domaineId]) {
-        updatedPointsSpecifiques[domaineId] = {};
+    return await supabaseWithSessionCheck(async () => {
+      if (isAddingPointRef.current) {
+        console.log('⚠️ addPointControleChantierSpecific déjà en cours, ignoré');
+        return { success: false, message: 'Déjà en cours' };
       }
-      if (!updatedPointsSpecifiques[domaineId][scKey]) {
-        updatedPointsSpecifiques[domaineId][scKey] = {};
-      }
-      
-      // ✅ VÉRIFIER SI LE POINT EXISTE DÉJÀ
-      if (updatedPointsSpecifiques[domaineId][scKey][pointData.id]) {
-        console.error('❌ Point déjà existant dans BDD avec ID:', pointData.id);
-        isAddingPointRef.current = false;
-        return { success: false, message: 'Point déjà existant' };
-      }
-      
-      updatedPointsSpecifiques[domaineId][scKey][pointData.id] = pointData;
 
-      if (existingControle) {
-        const { data, error } = await supabase
-          .from('controles_qualite')
-          .update({
-            points_specifiques: updatedPointsSpecifiques,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingControle.id)
-          .select()
-          .single();
+      isAddingPointRef.current = true;
+      console.log('🔵 addPointControleChantierSpecific - Début', pointData.id);
 
-        if (error) throw error;
+      try {
+        const existingControle = controles.find(
+          c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
+        );
+
+        const scKey = sousCategorieId || '_global';
+        let updatedPointsSpecifiques = existingControle?.points_specifiques || {};
         
-        console.log('✅ Point sauvegardé en BDD:', pointData.id);
-        setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
-      } else {
-        const { data, error } = await supabase
-          .from('controles_qualite')
-          .insert([{
-            chantier_id: chantierId,
-            modele_cq_id: modeleId,
-            nomsociete: profile?.nomsociete,
-            points_specifiques: updatedPointsSpecifiques,
-            statut: 'en_cours'
-          }])
-          .select()
-          .single();
-
-        if (error) throw error;
+        if (!updatedPointsSpecifiques[domaineId]) {
+          updatedPointsSpecifiques[domaineId] = {};
+        }
+        if (!updatedPointsSpecifiques[domaineId][scKey]) {
+          updatedPointsSpecifiques[domaineId][scKey] = {};
+        }
         
-        console.log('✅ Contrôle créé avec point:', pointData.id);
-        setControles(prev => [...prev, data]);
-      }
+        if (updatedPointsSpecifiques[domaineId][scKey][pointData.id]) {
+          console.error('❌ Point déjà existant dans BDD avec ID:', pointData.id);
+          return { success: false, message: 'Point déjà existant' };
+        }
+        
+        updatedPointsSpecifiques[domaineId][scKey][pointData.id] = pointData;
 
-      return { success: true };
-    } catch (error) {
-      console.error('❌ Erreur addPointControleChantierSpecific:', error);
-      throw error;
-    } finally {
-      // Réinitialiser après un délai
-      setTimeout(() => {
-        isAddingPointRef.current = false;
-        console.log('✅ addPointControleChantierSpecific - Protection désactivée');
-      }, 1000);
-    }
+        if (existingControle) {
+          const { data, error } = await supabase
+            .from('controles_qualite')
+            .update({
+              points_specifiques: updatedPointsSpecifiques,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingControle.id)
+            .select()
+            .single();
+
+          if (error) throw error;
+          
+          console.log('✅ Point sauvegardé en BDD:', pointData.id);
+          setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
+        } else {
+          const { data, error } = await supabase
+            .from('controles_qualite')
+            .insert([{
+              chantier_id: chantierId,
+              modele_cq_id: modeleId,
+              nomsociete: profile?.nomsociete,
+              points_specifiques: updatedPointsSpecifiques,
+              statut: 'en_cours'
+            }])
+            .select()
+            .single();
+
+          if (error) throw error;
+          
+          console.log('✅ Contrôle créé avec point:', pointData.id);
+          setControles(prev => [...prev, data]);
+        }
+
+        return { success: true };
+      } finally {
+        setTimeout(() => {
+          isAddingPointRef.current = false;
+          console.log('✅ addPointControleChantierSpecific - Protection désactivée');
+        }, 1000);
+      }
+    });
   };
 
   const updatePointControleChantierSpecific = async (chantierId, modeleId, domaineId, sousCategorieId, pointId, updates) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const existingControle = controles.find(
         c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
       );
@@ -343,14 +328,11 @@ export function ReferentielCQProvider({ children }) {
       setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
 
       return { success: true };
-    } catch (error) {
-      console.error('Erreur updatePointControleChantierSpecific:', error);
-      throw error;
-    }
+    });
   };
 
   const deletePointControleChantierSpecific = async (chantierId, modeleId, domaineId, sousCategorieId, pointId) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const existingControle = controles.find(
         c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
       );
@@ -394,14 +376,12 @@ export function ReferentielCQProvider({ children }) {
       setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
 
       return { success: true };
-    } catch (error) {
-      console.error('Erreur deletePointControleChantierSpecific:', error);
-      throw error;
-    }
+    });
   };
 
+  // ✅ Suppression catégories (AVEC wrapper)
   const supprimerCategorie = async (chantierId, modeleId, categorieId) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const existingControle = controles.find(
         c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
       );
@@ -433,14 +413,11 @@ export function ReferentielCQProvider({ children }) {
       setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
 
       return { success: true };
-    } catch (error) {
-      console.error('Erreur supprimerCategorie:', error);
-      throw error;
-    }
+    });
   };
 
   const supprimerSousCategorie = async (chantierId, modeleId, categorieId, sousCategorieId) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const existingControle = controles.find(
         c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
       );
@@ -475,14 +452,12 @@ export function ReferentielCQProvider({ children }) {
       setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
 
       return { success: true };
-    } catch (error) {
-      console.error('Erreur supprimerSousCategorie:', error);
-      throw error;
-    }
+    });
   };
 
+  // ✅ Ajout catégories/sous-catégories (AVEC wrapper)
   const ajouterCategorieChantier = async (chantierId, modeleId, categorieData) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const existingControle = controles.find(
         c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
       );
@@ -513,14 +488,11 @@ export function ReferentielCQProvider({ children }) {
       setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
 
       return { success: true, data: nouvelleCategorie };
-    } catch (error) {
-      console.error('Erreur ajouterCategorieChantier:', error);
-      throw error;
-    }
+    });
   };
 
   const ajouterSousCategorieChantier = async (chantierId, modeleId, categorieId, sousCategorieData) => {
-    try {
+    return await supabaseWithSessionCheck(async () => {
       const existingControle = controles.find(
         c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
       );
@@ -579,12 +551,10 @@ export function ReferentielCQProvider({ children }) {
 
         return { success: true, data: nouvelleSousCategorie };
       }
-    } catch (error) {
-      console.error('Erreur ajouterSousCategorieChantier:', error);
-      throw error;
-    }
+    });
   };
 
+  // Refresh (sans wrapper - lectures)
   const refreshModeles = async () => {
     if (!profile?.nomsociete) return;
 

@@ -26,7 +26,6 @@ export function Login() {
     const { data, error: signInError } = await signIn(email, password);
 
     if (signInError) {
-      // ✅ Messages d'erreur personnalisés
       if (signInError.message.includes('Invalid login credentials')) {
         setError('Email ou mot de passe incorrect. Veuillez réessayer.');
       } else if (signInError.message.includes('Email not confirmed')) {
@@ -69,7 +68,6 @@ export function Login() {
             />
           ) : (
             <form onSubmit={handleLogin} className="space-y-4">
-              {/* ✅ MESSAGE D'ERREUR (sans composant Alert) */}
               {error && (
                 <div className="bg-red-50 border border-red-200 rounded-md p-3 flex items-start gap-2">
                   <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -122,7 +120,7 @@ export function Login() {
   );
 }
 
-// ✅ COMPOSANT MOT DE PASSE OUBLIÉ
+// ✅ COMPOSANT MOT DE PASSE OUBLIÉ (AVEC wrapper)
 function ForgotPasswordForm({ onBack }) {
   const { toast } = useToast();
   const [email, setEmail] = useState('');
@@ -134,19 +132,22 @@ function ForgotPasswordForm({ onBack }) {
     setLoading(true);
 
     try {
-      const { supabase } = await import('@/lib/supabaseClient');
+      const { supabase, supabaseWithSessionCheck } = await import('@/lib/supabaseClient');
       
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
+      // ✅ Wrapper pour resetPasswordForEmail
+      await supabaseWithSessionCheck(async () => {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      setSent(true);
-      toast({
-        title: 'Email envoyé ✅',
-        description: 'Vérifiez votre boîte mail pour réinitialiser votre mot de passe.',
-        duration: 5000
+        setSent(true);
+        toast({
+          title: 'Email envoyé ✅',
+          description: 'Vérifiez votre boîte mail pour réinitialiser votre mot de passe.',
+          duration: 5000
+        });
       });
     } catch (error) {
       toast({
@@ -162,7 +163,6 @@ function ForgotPasswordForm({ onBack }) {
   if (sent) {
     return (
       <div className="space-y-4">
-        {/* Message sans composant Alert */}
         <div className="bg-blue-50 border border-blue-200 rounded-md p-3 flex items-start gap-2">
           <Mail className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-blue-800">
