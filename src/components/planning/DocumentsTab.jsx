@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Plus, FileText, Download, Trash2, Users, User, FileSignature, CheckCircle } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useChantier } from '@/context/ChantierContext';
 import { format } from 'date-fns';
@@ -16,6 +16,7 @@ export function DocumentsTab({ chantierId }) {
   const [loading, setLoading] = useState(true);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
+  // Chargement documents (sans wrapper - lecture)
   const loadDocuments = async () => {
     try {
       setLoading(true);
@@ -43,27 +44,31 @@ export function DocumentsTab({ chantierId }) {
     loadDocuments();
   }, [chantierId]);
 
+  // ✅ Suppression document (AVEC wrapper)
   const handleDelete = async (doc) => {
     if (!window.confirm(`Supprimer "${doc.nom_fichier}" ?`)) return;
 
     try {
-      const filePath = doc.url_fichier.split('/').pop();
-      await supabase.storage.from('documents-chantiers').remove([`chantiers/${filePath}`]);
-      
-      // Supprimer aussi le PDF signé si existe
-      if (doc.document_signe_url) {
-        await supabase.storage.from('documents-chantiers').remove([doc.document_signe_url]);
-      }
-      
-      await supabase.from('documents_chantier').delete().eq('id', doc.id);
+      await supabaseWithSessionCheck(async () => {
+        const filePath = doc.url_fichier.split('/').pop();
+        await supabase.storage.from('documents-chantiers').remove([`chantiers/${filePath}`]);
+        
+        // Supprimer aussi le PDF signé si existe
+        if (doc.document_signe_url) {
+          await supabase.storage.from('documents-chantiers').remove([doc.document_signe_url]);
+        }
+        
+        await supabase.from('documents_chantier').delete().eq('id', doc.id);
 
-      toast({ title: 'Document supprimé ✅' });
-      loadDocuments();
+        toast({ title: 'Document supprimé ✅' });
+        loadDocuments();
+      });
     } catch (error) {
       toast({ title: 'Erreur ❌', variant: 'destructive' });
     }
   };
 
+  // Téléchargement document signé (sans wrapper - lecture seule)
   const handleDownloadSigned = async (doc) => {
     if (!doc.document_signe_url) {
       toast({
@@ -186,7 +191,7 @@ export function DocumentsTab({ chantierId }) {
                           </div>
                         )}
 
-                        {/* ✅ Statut signature */}
+                        {/* Statut signature */}
                         {doc.necessite_signature && (
                           <>
                             {doc.signature_statut === 'signe' ? (
@@ -217,7 +222,7 @@ export function DocumentsTab({ chantierId }) {
                       <Download className="h-4 w-4" />
                     </Button>
 
-                    {/* ✅ Télécharger document signé */}
+                    {/* Télécharger document signé */}
                     {doc.signature_statut === 'signe' && doc.document_signe_url && (
                       <Button 
                         variant="outline" 

@@ -1,262 +1,278 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Plus, FileText, Download, Trash2, Users, User, FileSignature, CheckCircle } from 'lucide-react';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Upload, X, FileSignature } from 'lucide-react';
+import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { useChantier } from '@/context/ChantierContext';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
-import { DocumentUploadModal } from './DocumentUploadModal';
 
-export function DocumentsTab({ chantierId }) {
+export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) {
   const { toast } = useToast();
-  const { sousTraitants } = useChantier();
-  const [documents, setDocuments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const { user } = useAuth();
+  const { taches, sousTraitants } = useChantier();
+  
+  const [file, setFile] = useState(null);
+  const [partageType, setPartageType] = useState('tous');
+  const [artisanId, setArtisanId] = useState('');
+  const [necessiteSignature, setNecessiteSignature] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  // Chargement documents (sans wrapper - lecture)
-  const loadDocuments = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('documents_chantier')
-        .select('*')
-        .eq('chantier_id', chantierId)
-        .order('created_at', { ascending: false });
+  // Artisans qui ont au moins 1 tâche sur ce chantier
+  const artisansDuChantier = useMemo(() => {
+    const tachesChantier = taches.filter(t => t.chantierid === chantierId && t.assignetype === 'soustraitant');
+    const artisanIds = [...new Set(tachesChantier.map(t => t.assigneid))];
+    return sousTraitants.filter(st => artisanIds.includes(st.id));
+  }, [taches, sousTraitants, chantierId]);
 
-      if (error) throw error;
-      setDocuments(data || []);
-    } catch (error) {
-      console.error('Erreur:', error);
-      toast({
-        title: 'Erreur',
-        description: 'Impossible de charger les documents',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
     }
   };
 
-  useEffect(() => {
-    loadDocuments();
-  }, [chantierId]);
-
-  // ✅ Suppression document (AVEC wrapper)
-  const handleDelete = async (doc) => {
-    if (!window.confirm(`Supprimer "${doc.nom_fichier}" ?`)) return;
-
-    try {
-      await supabaseWithSessionCheck(async () => {
-        const filePath = doc.url_fichier.split('/').pop();
-        await supabase.storage.from('documents-chantiers').remove([`chantiers/${filePath}`]);
-        
-        // Supprimer aussi le PDF signé si existe
-        if (doc.document_signe_url) {
-          await supabase.storage.from('documents-chantiers').remove([doc.document_signe_url]);
-        }
-        
-        await supabase.from('documents_chantier').delete().eq('id', doc.id);
-
-        toast({ title: 'Document supprimé ✅' });
-        loadDocuments();
-      });
-    } catch (error) {
-      toast({ title: 'Erreur ❌', variant: 'destructive' });
-    }
-  };
-
-  // Téléchargement document signé (sans wrapper - lecture seule)
-  const handleDownloadSigned = async (doc) => {
-    if (!doc.document_signe_url) {
-      toast({
-        title: 'Erreur',
-        description: 'Document signé non disponible',
-        variant: 'destructive',
-      });
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!file) {
+      toast({ title: 'Erreur', description: 'Veuillez sélectionner un fichier', variant: 'destructive' });
       return;
     }
 
-    console.log('📥 Téléchargement document signé:', doc.document_signe_url);
+    if (partageType === 'specifique' && !artisanId) {
+      toast({ title: 'Erreur', description: 'Veuillez sélectionner un artisan', variant: 'destructive' });
+      return;
+    }
+
+    // ✅ Si signature requise, vérifier qu'un artisan spécifique est sélectionné
+    if (necessiteSignature) {
+      if (partageType !== 'specifique' || !artisanId) {
+        toast({ 
+          title: 'Erreur', 
+          description: 'Pour demander une signature, vous devez sélectionner un artisan spécifique', 
+          variant: 'destructive' 
+        });
+        return;
+      }
+    }
+
+    setUploading(true);
 
     try {
-      const { data, error } = await supabase.storage
+      // 1. Upload vers Storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${chantierId}_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `chantiers/${fileName}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('documents-chantiers')
-        .download(doc.document_signe_url);
+        .upload(filePath, file);
 
-      if (error) {
-        console.error('❌ Erreur téléchargement:', error);
-        throw error;
-      }
+      if (uploadError) throw uploadError;
 
-      const url = URL.createObjectURL(data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `signed_${doc.nom_fichier}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // 2. Récupérer URL publique
+      const { data: urlData } = supabase.storage
+        .from('documents-chantiers')
+        .getPublicUrl(filePath);
+
+      // 3. Insérer en BDD
+      const { error: dbError } = await supabase
+        .from('documents_chantier')
+        .insert({
+          chantier_id: chantierId,
+          nom_fichier: file.name,
+          url_fichier: urlData.publicUrl,
+          storage_path: filePath,
+          type_fichier: fileExt,
+          taille_fichier: file.size,
+          partage_type: partageType,
+          artisan_id: partageType === 'specifique' ? artisanId : null,
+          uploaded_by: user.id,
+          // ✅ Signature : utilise artisanId si artisan spécifique + signature requise
+          necessite_signature: necessiteSignature,
+          artisan_assigne_signature: (necessiteSignature && partageType === 'specifique') ? artisanId : null,
+          signature_statut: necessiteSignature ? 'en_attente' : 'non_requis',
+        });
+
+      if (dbError) throw dbError;
 
       toast({
-        title: 'Téléchargement réussi',
-        description: 'Document signé téléchargé',
+        title: 'Document ajouté ✅',
+        description: `${file.name} a été partagé${necessiteSignature ? ' et attend signature' : ''}`,
       });
+
+      onSuccess?.();
+      onClose();
+      
+      // Reset
+      setFile(null);
+      setPartageType('tous');
+      setArtisanId('');
+      setNecessiteSignature(false);
 
     } catch (error) {
-      console.error('Erreur téléchargement:', error);
+      console.error('Erreur upload:', error);
       toast({
-        title: 'Erreur',
-        description: 'Impossible de télécharger le document signé',
+        title: 'Erreur ❌',
+        description: 'Impossible d\'uploader le document',
         variant: 'destructive',
       });
+    } finally {
+      setUploading(false);
     }
   };
-
-  const getArtisanNom = (artisanId) => {
-    if (!artisanId) return null;
-    const st = sousTraitants.find(s => s.id === artisanId);
-    return st ? (st.nomsocieteST || `${st.PrenomST} ${st.nomST}`) : 'Inconnu';
-  };
-
-  const formatFileSize = (bytes) => {
-    if (!bytes) return '';
-    const mb = bytes / (1024 * 1024);
-    return mb < 1 ? `${(bytes / 1024).toFixed(0)} Ko` : `${mb.toFixed(1)} Mo`;
-  };
-
-  const formatDateTime = (dateString) => {
-    if (!dateString) return '';
-    try {
-      return format(new Date(dateString), 'dd/MM/yyyy HH:mm', { locale: fr });
-    } catch {
-      return dateString;
-    }
-  };
-
-  if (loading) {
-    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
-  }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Documents du chantier</h2>
-        <Button onClick={() => setIsUploadModalOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Ajouter un document
-        </Button>
-      </div>
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Ajouter un document</DialogTitle>
+        </DialogHeader>
 
-      {documents.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">Aucun document pour ce chantier</p>
-            <Button onClick={() => setIsUploadModalOpen(true)} variant="outline" className="mt-4">
-              <Plus className="mr-2 h-4 w-4" />
-              Ajouter le premier document
+        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+          {/* Upload fichier */}
+          <div>
+            <Label htmlFor="file-upload" className="cursor-pointer">
+              <div className="border-2 border-dashed rounded-lg p-6 text-center hover:bg-slate-50 transition">
+                {file ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <Upload className="h-5 w-5 text-green-600" />
+                    <span className="font-medium text-green-600">{file.name}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setFile(null);
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-sm font-medium">Cliquez pour sélectionner un fichier</p>
+                    <p className="text-xs text-muted-foreground mt-1">PDF, DOCX, XLSX, images...</p>
+                  </>
+                )}
+              </div>
+            </Label>
+            <input
+              id="file-upload"
+              type="file"
+              className="hidden"
+              onChange={handleFileChange}
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif"
+            />
+          </div>
+
+          {/* Type de partage */}
+          <div className="space-y-3">
+            <Label>Partager avec :</Label>
+            
+            <div className="flex items-center space-x-2">
+              <input
+                type="radio"
+                id="partage-tous"
+                value="tous"
+                checked={partageType === 'tous'}
+                onChange={(e) => setPartageType(e.target.value)}
+                className="h-4 w-4"
+              />
+              <Label htmlFor="partage-tous" className="cursor-pointer font-normal">
+                Tous les artisans du chantier
+              </Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="radio"
+                id="partage-specifique"
+                value="specifique"
+                checked={partageType === 'specifique'}
+                onChange={(e) => setPartageType(e.target.value)}
+                className="h-4 w-4"
+              />
+              <Label htmlFor="partage-specifique" className="cursor-pointer font-normal">
+                Un artisan spécifique
+              </Label>
+            </div>
+          </div>
+
+          {/* Sélection artisan */}
+          {partageType === 'specifique' && (
+            <div>
+              <Label htmlFor="artisan">Artisan</Label>
+              <select
+                id="artisan"
+                value={artisanId}
+                onChange={(e) => setArtisanId(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                required={partageType === 'specifique'}
+              >
+                <option value="">Sélectionner un artisan...</option>
+                {artisansDuChantier.map(st => (
+                  <option key={st.id} value={st.id}>
+                    {st.nomsocieteST || `${st.PrenomST} ${st.nomST}`}
+                  </option>
+                ))}
+              </select>
+              {artisansDuChantier.length === 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Aucun artisan n'a de tâche sur ce chantier
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ✅ SIGNATURE ÉLECTRONIQUE */}
+          <div className="pt-4 border-t space-y-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="necessite_signature"
+                checked={necessiteSignature}
+                onCheckedChange={setNecessiteSignature}
+                disabled={partageType === 'tous'}
+              />
+              <Label 
+                htmlFor="necessite_signature" 
+                className="text-sm font-medium cursor-pointer flex items-center gap-2"
+              >
+                <FileSignature className="h-4 w-4 text-orange-600" />
+                Ce document nécessite une signature électronique
+              </Label>
+            </div>
+
+            {necessiteSignature && (
+              <div className="ml-6 p-3 bg-orange-50 border border-orange-200 rounded-md text-sm">
+                <p className="text-orange-800">
+                  📝 L'artisan <strong>{artisansDuChantier.find(st => st.id === artisanId)?.nomsocieteST || 'sélectionné'}</strong> devra signer électroniquement ce document.
+                </p>
+              </div>
+            )}
+
+            {partageType === 'tous' && necessiteSignature && (
+              <p className="text-xs text-red-600 ml-6">
+                ⚠️ Pour demander une signature, vous devez sélectionner un artisan spécifique.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter className="pt-4">
+            <Button type="button" variant="outline" onClick={onClose} disabled={uploading}>
+              Annuler
             </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4">
-          {documents.map((doc) => (
-            <Card key={doc.id} className={doc.signature_statut === 'en_attente' ? 'border-orange-300' : ''}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-3 flex-1">
-                    <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
-                    <div className="flex-1">
-                      <h3 className="font-medium">{doc.nom_fichier}</h3>
-                      <div className="flex gap-4 text-sm text-muted-foreground mt-1">
-                        <span>{doc.type_fichier?.toUpperCase()}</span>
-                        {doc.taille_fichier && <span>{formatFileSize(doc.taille_fichier)}</span>}
-                        <span>{format(new Date(doc.created_at), 'dd/MM/yyyy', { locale: fr })}</span>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 mt-2">
-                        {/* Partage */}
-                        {doc.partage_type === 'tous' ? (
-                          <div className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
-                            <Users className="h-3 w-3" />
-                            Partagé avec tous les artisans
-                          </div>
-                        ) : doc.artisan_id && (
-                          <div className="flex items-center gap-1 text-xs bg-orange-50 text-orange-700 px-2 py-1 rounded">
-                            <User className="h-3 w-3" />
-                            Partagé avec {getArtisanNom(doc.artisan_id)}
-                          </div>
-                        )}
-
-                        {/* Statut signature */}
-                        {doc.necessite_signature && (
-                          <>
-                            {doc.signature_statut === 'signe' ? (
-                              <div className="flex items-center gap-1 text-xs bg-green-50 text-green-700 px-2 py-1 rounded">
-                                <CheckCircle className="h-3 w-3" />
-                                Signé par {doc.signature_artisan_nom} le {formatDateTime(doc.signature_artisan_date)}
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1 text-xs bg-orange-50 text-orange-700 px-2 py-1 rounded">
-                                <FileSignature className="h-3 w-3" />
-                                En attente signature de {getArtisanNom(doc.artisan_assigne_signature)}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    {/* Télécharger document original */}
-                    <Button 
-                      variant="outline" 
-                      size="icon" 
-                      onClick={() => window.open(doc.url_fichier, '_blank')}
-                      title="Télécharger original"
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-
-                    {/* Télécharger document signé */}
-                    {doc.signature_statut === 'signe' && doc.document_signe_url && (
-                      <Button 
-                        variant="outline" 
-                        size="icon" 
-                        onClick={() => handleDownloadSigned(doc)}
-                        className="text-green-600 hover:text-green-700"
-                        title="Télécharger version signée"
-                      >
-                        <FileSignature className="h-4 w-4" />
-                      </Button>
-                    )}
-
-                    <Button 
-                      variant="outline" 
-                      size="icon" 
-                      onClick={() => handleDelete(doc)} 
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      <DocumentUploadModal
-        isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
-        chantierId={chantierId}
-        onSuccess={loadDocuments}
-      />
-    </div>
+            <Button type="submit" disabled={!file || uploading}>
+              {uploading ? 'Upload en cours...' : 'Ajouter'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
