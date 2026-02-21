@@ -63,10 +63,9 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
     return tachesDuChantier.map(tache => {
       const tacheDateDebut = parseISO(tache.datedebut);
       const tacheDateFin = parseISO(tache.datefin);
-      let color = 'bg-gray-400';
 
-      // 1. Vérifier conflit artisan sur TOUTE la période
-      let hasConflict = false;
+      let joursEnConflit = new Set();
+      
       if (tache.assignetype === 'soustraitant' && tache.assigneid) {
         try {
           const days = eachDayOfInterval({ start: startOfDay(tacheDateDebut), end: startOfDay(tacheDateFin) });
@@ -76,8 +75,7 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
             const conflict = conflictsByChantier[key];
             
             if (conflict && conflict.chantierids && conflict.chantierids.length > 1) {
-              hasConflict = true;
-              break;
+              joursEnConflit.add(format(day, 'yyyy-MM-dd'));
             }
           }
         } catch (err) {
@@ -85,30 +83,13 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
         }
       }
 
-      if (hasConflict) {
-        // 🔴 ROUGE : Conflit artisan
-        color = 'bg-red-600';
-      } else if (tache.artisan_termine && !tache.constructeur_valide) {
-        // 🟡 JAUNE : Terminée par artisan (en attente validation)
-        color = 'bg-yellow-500';
-      } else if (tache.constructeur_valide || tache.terminee) {
-        // 🔵 BLEU : Tâche validée/terminée
-        color = 'bg-blue-500';
-      } else if (isPast(tacheDateFin)) {
-        // 🟠 ORANGE : En retard (non terminée + date fin passée)
-        color = 'bg-orange-500';
-      } else {
-        // 🟢 VERT : À faire (non terminée + date fin >= aujourd'hui)
-        color = 'bg-green-500';
-      }
-
       return {
         id: tache.id,
         name: tache.nom,
         start: tacheDateDebut,
         end: tacheDateFin,
-        color,
-        rawTache: tache
+        rawTache: tache,
+        joursEnConflit,
       };
     }).sort((a, b) => a.start - b.start);
   }, [tachesDuChantier, conflictsByChantier, chantierId]);
@@ -206,6 +187,23 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
     return headers;
   }, [overallStartDate, overallEndDate, dayWidth]);
 
+  const getColorForSegment = (tache, segmentDate) => {
+    const today = startOfDay(new Date());
+    const dateStr = format(segmentDate, 'yyyy-MM-dd');
+    
+    if (tache.joursEnConflit.has(dateStr)) {
+      return 'bg-red-600';
+    } else if (tache.rawTache.artisan_termine && !tache.rawTache.constructeur_valide) {
+      return 'bg-yellow-500';
+    } else if (tache.rawTache.constructeur_valide || tache.rawTache.terminee) {
+      return 'bg-blue-500';
+    } else if (isPast(tache.end)) {
+      return 'bg-orange-500';
+    } else {
+      return 'bg-green-500';
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="overflow-x-auto pb-4 bg-slate-50 p-1 rounded-lg shadow-inner relative">
@@ -222,7 +220,6 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
         </div>
 
         <div id="gantt-container" style={{ width: totalDays * dayWidth, minWidth: '100%' }}>
-          {/* Header mois */}
           <div className="flex sticky top-0 bg-slate-100 z-20 border-b border-slate-300">
             {monthHeaders.map((m, i) => (
               <div key={i} className="h-7 flex items-center justify-center border-r border-slate-300" style={{ width: m.width }}>
@@ -231,7 +228,6 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
             ))}
           </div>
 
-          {/* Header jours */}
           <div className="flex sticky top-7 bg-slate-100 z-20 border-b border-slate-300">
             {monthHeaders.map((m, mi) =>
               Array.from({ length: m.days }).map((_, di) => {
@@ -275,9 +271,7 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
             )}
           </div>
 
-          {/* Conteneur relatif pour les barres avec grille de fond */}
           <div className="relative" style={{ height: chartHeight - 70 }}>
-            {/* Grille verticale de fond */}
             {monthHeaders.map((m, mi) =>
               Array.from({ length: m.days }).map((_, di) => {
                 const date = addDays(m.startDate, di);
@@ -307,7 +301,6 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
               })
             )}
 
-            {/* Barres tâches */}
             {ganttItems.map((item, index) => {
               const topPos = index * 36 + 4;
               
@@ -318,10 +311,13 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
               while (current <= end) {
                 if (isJourOuvre(current)) {
                   const offset = differenceInDays(current, overallStartDate);
+                  const color = getColorForSegment(item, current);
+                  
                   segments.push({
                     date: current,
                     offset: offset * dayWidth,
-                    width: dayWidth - 1
+                    width: dayWidth - 1,
+                    color
                   });
                 }
                 current = addDays(current, 1);
@@ -346,7 +342,7 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
                       onClick={() => onEditTache && onEditTache(item.rawTache)}
                       title={`${item.name} - Cliquer pour modifier`}
                     >
-                      <div className={`absolute inset-0 ${item.color} opacity-100`}></div>
+                      <div className={`absolute inset-0 ${segment.color} opacity-100`}></div>
                       {segIndex === 0 && (
                         <span className="relative z-10 truncate font-medium text-[9px]">
                           {item.name}
@@ -361,7 +357,6 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
         </div>
       </div>
 
-      {/* ✅ LÉGENDE AVEC JAUNE */}
       <div className="flex flex-wrap gap-3 text-xs items-center p-3 bg-white rounded border">
         <span className="font-medium">Légende :</span>
         <span className="flex items-center gap-1">

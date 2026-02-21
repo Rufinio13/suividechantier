@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Liste jours fériés 2025-2026
 const JOURS_FERIES = [
   '2025-01-01', '2025-04-21', '2025-05-01', '2025-05-08', '2025-05-29', '2025-06-09',
   '2025-07-14', '2025-08-15', '2025-11-01', '2025-11-11', '2025-12-25',
@@ -19,11 +18,11 @@ export function CalendrierView({
   conflictsByChantier = {}, 
   onEditTache, 
   onAddTache,
-  chantierColors = null,   // ✅ Couleurs par chantier pour artisan
-  chantierNoms = null,     // ✅ Map { chantierId: "Nom chantier" }
-  readOnly = false,        // ✅ Mode lecture seule
-  isArtisanView = false,   // ✅ Mode artisan pour badges
-  notifications = []       // ✅ NOUVEAU : Notifications tâches
+  chantierColors = null,
+  chantierNoms = null,
+  readOnly = false,
+  isArtisanView = false,
+  notifications = []
 }) {
   const [currentDate, setCurrentDate] = useState(new Date());
 
@@ -32,7 +31,6 @@ export function CalendrierView({
   const goToToday = () => setCurrentDate(new Date());
 
   const handleDayClick = (day) => {
-    // ✅ Pas de création si lecture seule
     if (readOnly || !onAddTache) return;
     
     const dateStr = format(day, 'yyyy-MM-dd');
@@ -40,7 +38,6 @@ export function CalendrierView({
     onAddTache(dateStr);
   };
 
-  // ✅ NOUVEAU : Fonction couleur par chantier pour artisan
   const getTacheColorByChantier = (tache) => {
     if (!chantierColors || !tache.chantierid) {
       return 'bg-gray-100 border-gray-300 text-gray-600';
@@ -49,57 +46,47 @@ export function CalendrierView({
     const color = chantierColors[tache.chantierid];
     if (!color) return 'bg-gray-100 border-gray-300 text-gray-600';
     
-    // ✅ BORDURE ROUGE si en retard
     const isEnRetard = isArtisanView && 
                        tache.datefin &&
                        new Date(tache.datefin) < new Date() &&
                        !tache.artisan_termine &&
                        !tache.constructeur_valide;
     
-    // Style avec la couleur du chantier
     return {
-      backgroundColor: `${color}20`, // 20% opacité
-      borderColor: isEnRetard ? '#dc2626' : color, // ✅ Rouge si retard, sinon couleur chantier
+      backgroundColor: `${color}20`,
+      borderColor: isEnRetard ? '#dc2626' : color,
       color: color,
       borderWidth: '2px'
     };
   };
 
-  // Fonction couleur normale (constructeur)
-  const getTacheColor = (tache) => {
+  const getColorForDay = (tache, dayStr) => {
     if (!tache.datedebut || !tache.datefin) return 'bg-gray-100 border-gray-300 text-gray-600';
 
     const tacheDateDebut = parseISO(tache.datedebut);
     const tacheDateFin = parseISO(tache.datefin);
     const today = startOfDay(new Date());
 
-    let hasConflict = false;
+    let hasConflictThisDay = false;
     if (tache.assignetype === 'soustraitant' && tache.assigneid) {
       try {
-        const days = eachDayOfInterval({ start: startOfDay(tacheDateDebut), end: startOfDay(tacheDateFin) });
+        const key = `${tache.assigneid}-${dayStr}`;
+        const conflict = conflictsByChantier[key];
         
-        for (const day of days) {
-          const key = `${tache.assigneid}-${format(day, 'yyyy-MM-dd')}`;
-          const conflict = conflictsByChantier[key];
-          
-          if (conflict && conflict.chantierids && conflict.chantierids.length > 1) {
-            hasConflict = true;
-            break;
-          }
+        if (conflict && conflict.chantierids && conflict.chantierids.length > 1) {
+          hasConflictThisDay = true;
         }
       } catch (err) {
         console.error("Erreur check conflit:", err);
       }
     }
 
-    if (hasConflict) {
+    if (hasConflictThisDay) {
       return 'bg-red-100 border-red-400 text-red-800';
     } 
-    // ✅ JAUNE : Terminée par artisan (en attente validation)
     else if (tache.artisan_termine && !tache.constructeur_valide) {
       return 'bg-yellow-100 border-yellow-400 text-yellow-800';
     }
-    // BLEU : Validée par constructeur
     else if (tache.constructeur_valide || tache.terminee) {
       return 'bg-blue-100 border-blue-400 text-blue-800';
     } 
@@ -135,36 +122,26 @@ export function CalendrierView({
       const lot = lots.find(l => l.id === tache.lotid);
       const lotNom = lot?.lot || 'Sans lot';
       
-      // ✅ Nom à afficher : chantier si disponible, sinon tâche
       const displayName = (isArtisanView && chantierNoms && tache.chantierid) 
         ? chantierNoms[tache.chantierid] 
         : tache.nom;
       
-      // ✅ 1. BORDURE ROUGE : Date passée ET non terminée ET non validée
       const isEnRetard = isArtisanView && 
                          tache.datefin &&
                          new Date(tache.datefin) < new Date() &&
                          !tache.artisan_termine &&
                          !tache.constructeur_valide;
       
-      // ✅ 2. Badge BLEU : Nouvelle tâche (notification non vue)
       const isNouvelleTache = isArtisanView && notifications.some(
         n => n.tache_id === tache.id && n.type === 'nouvelle_tache' && !n.vu
       );
       
-      // ✅ Utiliser couleur par chantier si disponible
-      const tacheStyle = chantierColors 
-        ? getTacheColorByChantier(tache)
-        : getTacheColor(tache);
-      
       return {
         ...tache,
         lotNom,
-        displayName,              // ✅ Nom à afficher
-        isEnRetard,               // ✅ Bordure rouge 🔴
-        isNouvelleTache,          // ✅ Point bleu 🔵 (nouvelle)
-        tacheColor: typeof tacheStyle === 'string' ? tacheStyle : null,
-        tacheStyle: typeof tacheStyle === 'object' ? tacheStyle : null
+        displayName,
+        isEnRetard,
+        isNouvelleTache,
       };
     });
   }, [taches, lots, conflictsByChantier, chantierColors, chantierNoms, isArtisanView, notifications]);
@@ -183,12 +160,21 @@ export function CalendrierView({
       const tacheEnd = tache.datefin ? format(parseISO(tache.datefin), 'yyyy-MM-dd') : tacheStart;
       
       return dayStr >= tacheStart && dayStr <= tacheEnd;
+    }).map(tache => {
+      const tacheColor = chantierColors 
+        ? getTacheColorByChantier(tache)
+        : getColorForDay(tache, dayStr);
+      
+      return {
+        ...tache,
+        tacheColor: typeof tacheColor === 'string' ? tacheColor : null,
+        tacheStyle: typeof tacheColor === 'object' ? tacheColor : null
+      };
     });
   };
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={goToPreviousMonth}>
@@ -206,9 +192,7 @@ export function CalendrierView({
         </Button>
       </div>
 
-      {/* Calendrier */}
       <div className="border rounded-lg overflow-hidden">
-        {/* En-tête */}
         <div className="grid grid-cols-8 bg-muted border-b">
           <div className="p-2 text-center text-sm font-medium">Semaine</div>
           {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
@@ -218,7 +202,6 @@ export function CalendrierView({
           ))}
         </div>
 
-        {/* Semaines */}
         {weeks.map((week, weekIndex) => (
           <div key={weekIndex} className="grid grid-cols-8 border-b last:border-b-0">
             <div className="border-r p-2 bg-muted/30 flex items-start justify-center">
@@ -258,7 +241,6 @@ export function CalendrierView({
                     {format(day, 'd')}
                   </div>
 
-                  {/* Tâches */}
                   <div className="space-y-1">
                     {tachesForDay.map((tache, idx) => (
                       <div
@@ -277,9 +259,7 @@ export function CalendrierView({
                           }
                         }}
                       >
-                        {/* ✅ Affichage avec point bleu pour nouvelle tâche */}
                         <div className="font-medium flex items-center gap-1">
-                          {/* ✅ Point BLEU : Nouvelle tâche non vue */}
                           {isArtisanView && tache.isNouvelleTache && (
                             <span 
                               className="inline-block w-2 h-2 rounded-full bg-blue-600 flex-shrink-0" 
@@ -287,7 +267,6 @@ export function CalendrierView({
                             ></span>
                           )}
                           
-                          {/* Nom (chantier ou tâche) */}
                           <span className="truncate">{tache.displayName}</span>
                         </div>
                       </div>
@@ -300,7 +279,6 @@ export function CalendrierView({
         ))}
       </div>
 
-      {/* Légende */}
       {!chantierColors && (
         <div className="flex flex-wrap gap-3 text-xs items-center">
           <span className="font-medium">Légende :</span>
