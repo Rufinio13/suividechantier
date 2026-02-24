@@ -16,9 +16,6 @@ export function ChantierProvider({ children }) {
   const [taches, setTaches] = useState([]);
   const [lots, setLots] = useState([]);
 
-  // ==========================================
-  // CHARGEMENT INITIAL (inchangé)
-  // ==========================================
   useEffect(() => {
     if (!profile?.nomsociete) {
       console.log("⏳ ChantierContext : En attente de profile.nomsociete...");
@@ -116,9 +113,6 @@ export function ChantierProvider({ children }) {
     };
   }, [profile?.nomsociete]);
 
-  // ==========================================
-  // FONCTIONS DE RECHARGEMENT (inchangées)
-  // ==========================================
   const loadChantiers = async () => {
     if (!profile?.nomsociete) return;
     const { data, error } = await supabase
@@ -185,13 +179,12 @@ export function ChantierProvider({ children }) {
     setLots(data || []);
   };
 
-  // ==========================================
-  // CONFLITS (inchangé)
-  // ==========================================
   const conflictsByChantier = useMemo(() => {
     const conflicts = {};
     
-    taches.forEach(t => {
+    const tachesNonValidees = taches.filter(t => !t.constructeur_valide && !t.terminee);
+    
+    tachesNonValidees.forEach(t => {
       if (!t.assigneid || t.assignetype !== "soustraitant" || !t.datedebut || !t.datefin) return;
       
       try {
@@ -230,9 +223,6 @@ export function ChantierProvider({ children }) {
     return conflicts;
   }, [taches]);
 
-  // ==========================================
-  // ✅ CRUD TÂCHES (AVEC WRAPPER)
-  // ==========================================
   const addTache = async (tache) => {
     return await supabaseWithSessionCheck(async () => {
       console.log('🔵 addTache DÉBUT - Payload reçu:', tache);
@@ -394,9 +384,6 @@ export function ChantierProvider({ children }) {
     });
   };
 
-  // ==========================================
-  // ✅ CRUD CHANTIERS (AVEC WRAPPER)
-  // ==========================================
   const addChantier = async (chantier) => {
     return await supabaseWithSessionCheck(async () => {
       const { data, error } = await supabase
@@ -500,9 +487,6 @@ export function ChantierProvider({ children }) {
     });
   };
 
-  // ==========================================
-  // ✅ CRUD SOUS-TRAITANTS (AVEC WRAPPER)
-  // ==========================================
   const addSousTraitant = async (st) => {
     return await supabaseWithSessionCheck(async () => {
       const { data, error } = await supabase
@@ -547,9 +531,6 @@ export function ChantierProvider({ children }) {
     });
   };
 
-  // ==========================================
-  // ✅ CRUD FOURNISSEURS (AVEC WRAPPER)
-  // ==========================================
   const addFournisseur = async (f) => {
     return await supabaseWithSessionCheck(async () => {
       const { data, error } = await supabase
@@ -594,9 +575,6 @@ export function ChantierProvider({ children }) {
     });
   };
 
-  // ==========================================
-  // ✅ CRUD SAV (AVEC WRAPPER)
-  // ==========================================
   const addSAV = async (s) => {
     return await supabaseWithSessionCheck(async () => {
       const { data, error } = await supabase

@@ -84,49 +84,53 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
   }, []);
 
   const conflictsByDay = useMemo(() => {
-    const conflicts = {};
-    const stAssignments = {};
+  const conflicts = {};
+  const stAssignments = {};
 
-    cleanTaches.forEach(tache => {
-      if (tache.assignetype === 'soustraitant' && tache.assigneid && tache.datedebut && tache.datefin) {
-        const startDate = safeParseDate(tache.datedebut);
-        const endDate = safeParseDate(tache.datefin);
+  // ✅ FILTRER : Ne considérer que les tâches NON validées
+  const tachesNonValidees = cleanTaches.filter(t => !t.constructeur_valide && !t.terminee);
+
+  tachesNonValidees.forEach(tache => {
+    if (tache.assignetype === 'soustraitant' && tache.assigneid && tache.datedebut && tache.datefin) {
+      const startDate = safeParseDate(tache.datedebut);
+      const endDate = safeParseDate(tache.datefin);
+      
+      if (!startDate || !endDate) return;
+
+      const days = eachDayOfInterval({ start: startOfDay(startDate), end: endOfDay(endDate) });
+      
+      days.forEach(day => {
+        if (isWeekend(day)) return;
         
-        if (!startDate || !endDate) return;
+        const dayKey = format(day, 'yyyy-MM-dd');
+        const stId = tache.assigneid;
 
-        const days = eachDayOfInterval({ start: startOfDay(startDate), end: endOfDay(endDate) });
+        if (!stAssignments[dayKey]) stAssignments[dayKey] = {};
+        if (!stAssignments[dayKey][stId]) stAssignments[dayKey][stId] = [];
         
-        days.forEach(day => {
-          if (isWeekend(day)) return;
-          
-          const dayKey = format(day, 'yyyy-MM-dd');
-          const stId = tache.assigneid;
-
-          if (!stAssignments[dayKey]) stAssignments[dayKey] = {};
-          if (!stAssignments[dayKey][stId]) stAssignments[dayKey][stId] = [];
-          
-          stAssignments[dayKey][stId].push({
-            tacheId: tache.id,
-            chantierid: tache.chantierid,
-          });
+        stAssignments[dayKey][stId].push({
+          tacheId: tache.id,
+          chantierid: tache.chantierid,
         });
+      });
+    }
+  });
+
+  // ✅ Ne créer des conflits QUE si 2+ chantiers différents
+  Object.keys(stAssignments).forEach(dayKey => {
+    Object.keys(stAssignments[dayKey]).forEach(stId => {
+      const assignments = stAssignments[dayKey][stId];
+      const chantierIds = [...new Set(assignments.map(a => a.chantierid))];
+      
+      if (chantierIds.length > 1) {
+        if (!conflicts[dayKey]) conflicts[dayKey] = new Set();
+        chantierIds.forEach(cid => conflicts[dayKey].add(cid));
       }
     });
+  });
 
-    Object.keys(stAssignments).forEach(dayKey => {
-      Object.keys(stAssignments[dayKey]).forEach(stId => {
-        const assignments = stAssignments[dayKey][stId];
-        const chantierIds = [...new Set(assignments.map(a => a.chantierid))];
-        
-        if (chantierIds.length > 1) {
-          if (!conflicts[dayKey]) conflicts[dayKey] = new Set();
-          chantierIds.forEach(cid => conflicts[dayKey].add(cid));
-        }
-      });
-    });
-
-    return conflicts;
-  }, [cleanTaches]);
+  return conflicts;
+}, [cleanTaches]);
 
   const getTaskColor = (tache, hasConflict) => {
     if (hasConflict) {
