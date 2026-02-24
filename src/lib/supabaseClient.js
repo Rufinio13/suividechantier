@@ -58,10 +58,12 @@ export async function setSupabaseRLSContext(nomsociete) {
 
 export async function ensureValidSession() {
   try {
-    const { data: { session }, error } = await supabase.auth.getSession();
+    console.log('🔄 ensureValidSession appelé');
     
-    if (error) {
-      console.error('❌ Erreur getSession:', error);
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      console.error('❌ Erreur getSession:', sessionError);
       return false;
     }
     
@@ -74,18 +76,28 @@ export async function ensureValidSession() {
     const now = Date.now();
     const timeUntilExpiry = expiresAt - now;
     
-    if (timeUntilExpiry < 10 * 60 * 1000) {
-      console.log('🔄 Session expire bientôt, rafraîchissement...');
-      const { error: refreshError } = await supabase.auth.refreshSession();
+    console.log(`⏱️ Session expire dans ${Math.round(timeUntilExpiry / 1000 / 60)} minutes`);
+    
+    if (timeUntilExpiry < 30 * 60 * 1000) {
+      console.log('🔄 Session expire bientôt (< 30min), rafraîchissement FORCÉ...');
+      
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
       
       if (refreshError) {
         console.error('❌ Erreur rafraîchissement:', refreshError);
         return false;
       }
       
-      console.log('✅ Session rafraîchie avec succès');
+      if (refreshData?.session) {
+        console.log('✅ Session rafraîchie avec succès, nouveau token valide');
+        return true;
+      } else {
+        console.error('❌ Pas de session après refresh');
+        return false;
+      }
     }
     
+    console.log('✅ Session encore valide');
     return true;
   } catch (err) {
     console.error('❌ Exception ensureValidSession:', err);
@@ -105,6 +117,8 @@ export async function supabaseWithSessionCheck(operation, retries = 3) {
       if (!sessionValid) {
         throw new Error('Session expirée. Veuillez vous reconnecter.');
       }
+      
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       const result = await operation();
       

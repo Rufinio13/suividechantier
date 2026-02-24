@@ -50,7 +50,6 @@ const isToday = (date) => {
   return isSameDay(date, new Date());
 };
 
-// ✅ Trouver le jour ouvré le plus proche (aujourd'hui si ouvré, sinon lundi suivant)
 const getClosestWorkday = (date) => {
   if (isWeekend(date)) {
     return nextMonday(date);
@@ -84,7 +83,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // ✅ DÉTECTER LES CONFLITS PAR JOUR
   const conflictsByDay = useMemo(() => {
     const conflicts = {};
     const stAssignments = {};
@@ -130,26 +128,25 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
     return conflicts;
   }, [cleanTaches]);
 
-  // ✅ FONCTION POUR DÉTERMINER LA COULEUR D'UNE TÂCHE
   const getTaskColor = (tache, hasConflict) => {
     if (hasConflict) {
-      return 'bg-red-600'; // 🔴 Conflit artisan
+      return 'bg-red-600';
     }
     
     if (tache.artisan_termine && !tache.constructeur_valide) {
-      return 'bg-yellow-500'; // 🟡 Terminée par artisan (en attente validation)
+      return 'bg-yellow-500';
     }
     
     if (tache.constructeur_valide || tache.terminee) {
-      return 'bg-blue-500'; // 🔵 Validée
+      return 'bg-blue-500';
     }
     
     const dateFinTache = safeParseDate(tache.datefin);
     if (dateFinTache && isPast(endOfDay(dateFinTache))) {
-      return 'bg-orange-500'; // 🟠 En retard
+      return 'bg-orange-500';
     }
     
-    return 'bg-green-500'; // 🟢 À faire
+    return 'bg-green-500';
   };
 
   const ganttData = useMemo(() => {
@@ -176,8 +173,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         }
       });
 
-      // ✅ Stocker les jours avec leurs tâches (pour déterminer la couleur)
-      const daysTasks = new Map(); // dayKey -> array of tasks
+      const daysTasks = new Map();
       
       chantierTaches.forEach(tache => {
         const startDate = safeParseDate(tache.datedebut);
@@ -200,7 +196,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
       return {
         id: chantier.id,
         name: chantier.nomchantier,
-        daysTasks, // Map de jour -> tâches
+        daysTasks,
         tasks: chantierTaches,
         earliestTaskDate: earliestTaskDate || new Date(8640000000000000),
       };
@@ -210,7 +206,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
       return a.earliestTaskDate - b.earliestTaskDate;
     });
 
-    // ✅ FORCER L'INCLUSION DU JOUR OUVRÉ ACTUEL
     let overallStartDate = null;
     let overallEndDate = null;
 
@@ -232,9 +227,14 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
       });
     });
 
-    if (!overallStartDate || todayWorkday < overallStartDate) {
-      overallStartDate = subWeeks(todayWorkday, 4);
+    const oneWeekBeforeToday = startOfWeek(subWeeks(todayWorkday, 1), { weekStartsOn: 1 });
+
+    if (!overallStartDate) {
+      overallStartDate = oneWeekBeforeToday;
+    } else if (overallStartDate > oneWeekBeforeToday) {
+      overallStartDate = oneWeekBeforeToday;
     }
+
     if (!overallEndDate || todayWorkday > overallEndDate) {
       overallEndDate = addWeeks(todayWorkday, 8);
     }
@@ -330,15 +330,22 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
   useEffect(() => {
     if (scrollContainerRef.current && allDays.length > 0 && !hasScrolledToToday.current) {
       const scrollToToday = () => {
-        const todayIndex = allDays.findIndex(day => isSameDay(day, targetScrollDay));
+        const currentWeekMonday = startOfWeek(new Date(), { weekStartsOn: 1 });
+        const mondayIndex = allDays.findIndex(day => isSameDay(day, currentWeekMonday));
         
-        if (todayIndex !== -1) {
-          const todayPosition = getDayPosition(todayIndex);
-          const containerWidth = scrollContainerRef.current.offsetWidth;
-          const scrollPosition = todayPosition - (containerWidth / 2) + (dayWidth / 2);
-          
-          scrollContainerRef.current.scrollLeft = Math.max(0, scrollPosition);
+        if (mondayIndex !== -1) {
+          const mondayPosition = getDayPosition(mondayIndex);
+          scrollContainerRef.current.scrollLeft = Math.max(0, mondayPosition);
           hasScrolledToToday.current = true;
+          console.log('🎯 Scroll vers lundi semaine courante, index:', mondayIndex);
+        } else {
+          const todayIndex = allDays.findIndex(day => isSameDay(day, targetScrollDay));
+          if (todayIndex !== -1) {
+            const todayPosition = getDayPosition(todayIndex);
+            scrollContainerRef.current.scrollLeft = Math.max(0, todayPosition - 100);
+            hasScrolledToToday.current = true;
+            console.log('🎯 Scroll vers aujourd\'hui, index:', todayIndex);
+          }
         }
       };
 
@@ -388,7 +395,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
           </Button>
         </div>
 
-        {/* ✅ LÉGENDE */}
         <div className="absolute top-1 left-1 z-30 flex items-center gap-3 text-xs bg-white/90 px-2 py-1 rounded-md shadow-sm">
           <span className="font-semibold text-slate-700">Légende :</span>
           <div className="flex items-center gap-1">
@@ -414,7 +420,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         </div>
 
         <div className="flex mt-10">
-          {/* COLONNE CHANTIERS */}
           <div className="flex-shrink-0 bg-slate-200" style={{ width: chantierColWidth }}>
             <div className="h-7 border-r border-slate-300 border-b border-slate-300 flex items-center justify-center bg-slate-200 sticky top-0 z-20">
               <span className="text-[10px] font-semibold text-slate-700">CHANTIER</span>
@@ -442,10 +447,8 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
             </div>
           </div>
 
-          {/* ZONE DE PLANNING */}
           <div className="flex-1 overflow-x-auto" ref={scrollContainerRef}>
             <div style={{ minWidth: totalWidth }}>
-              {/* EN-TÊTE MOIS */}
               <div className="flex sticky top-0 bg-slate-100 z-20 border-b border-slate-300">
                 {monthHeaders.map((month, index) => (
                   <div 
@@ -458,7 +461,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                 ))}
               </div>
 
-              {/* EN-TÊTE SEMAINES */}
               <div className="flex sticky top-7 bg-slate-100 z-20 border-b border-slate-300" style={{ gap: `${DAY_GAP}px` }}>
                 {weekHeaders.map((week, idx) => (
                   <div 
@@ -473,7 +475,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                 ))}
               </div>
 
-              {/* EN-TÊTE JOURS (L M M J V uniquement) avec dates */}
               <div className="flex sticky top-13 bg-slate-50 z-20 border-b border-slate-300" style={{ gap: `${DAY_GAP}px` }}>
                 {allDays.map((day, idx) => {
                   const dayLetter = format(day, 'EEEEE', { locale: fr });
@@ -496,7 +497,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                 })}
               </div>
 
-              {/* GRILLE DE FOND */}
               <div className="relative pointer-events-none">
                 {allDays.map((day, i) => {
                   const isTargetDay = isSameDay(day, targetScrollDay);
@@ -528,7 +528,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                 })}
               </div>
 
-              {/* LIGNES DES CHANTIERS */}
               <div className="relative" style={{ height: chartHeight - 100 }}>
                 {items.map((chantier, chantierIndex) => {
                   const rowTop = chantierIndex * ROW_HEIGHT;
@@ -546,10 +545,8 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                         
                         if (!tasksForDay || tasksForDay.length === 0) return null;
 
-                        // ✅ Déterminer si ce jour a un conflit
                         const hasConflict = conflictsByDay[dayKey]?.has(chantier.id);
                         
-                        // ✅ Prendre la couleur de la première tâche (ou rouge si conflit)
                         const firstTask = tasksForDay[0];
                         const boxColor = getTaskColor(firstTask, hasConflict);
 
@@ -581,7 +578,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         </div>
       </div>
 
-      {/* ✅ MODAL DÉTAILS DU JOUR */}
       <AnimatePresence>
         {selectedDayData && (
           <Dialog open={!!selectedDayData} onOpenChange={() => setSelectedDayData(null)}>
