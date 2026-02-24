@@ -14,7 +14,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   global: {
     fetch: (url, options = {}) => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 secondes
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 secondes
       
       return fetch(url, {
         ...options,
@@ -37,28 +37,40 @@ export async function setSupabaseRLSContext(nomsociete) {
   }
 }
 
+// ✅ NOUVEAU : Fonction pour "réveiller" la connexion
+async function pingSupabase() {
+  try {
+    await supabase.from('profiles').select('count').limit(1).single();
+  } catch (err) {
+    // On ignore l'erreur, on veut juste réveiller la connexion
+  }
+}
+
 export async function supabaseWithSessionCheck(operation, retries = 2) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      // ✅ Laisser Supabase gérer le refresh automatiquement
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
         throw new Error('Session expirée');
       }
       
-      // ✅ Exécuter l'opération directement
+      // ✅ NOUVEAU : Ping avant l'opération si c'est un retry
+      if (attempt > 1) {
+        console.log('🏓 Ping Supabase avant retry...');
+        await pingSupabase();
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
       return await operation();
       
     } catch (err) {
-      // ✅ Retry SEULEMENT si timeout réseau
-      if (attempt < retries && err.name === 'AbortError') {
-        console.log(`⏳ Timeout, retry ${attempt + 1}/${retries}...`);
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      if (attempt < retries && (err.name === 'AbortError' || err.code === 'PGRST301')) {
+        console.log(`⏳ Erreur réseau, retry ${attempt + 1}/${retries}...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
         continue;
       }
       
-      // ✅ Sinon, propager l'erreur
       throw err;
     }
   }
