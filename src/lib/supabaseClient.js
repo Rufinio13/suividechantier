@@ -58,21 +58,46 @@ export async function setSupabaseRLSContext(nomsociete) {
 
 export async function ensureValidSession() {
   try {
-    console.log('🔄 ensureValidSession appelé');
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
-    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-    
-    if (refreshError) {
-      console.error('❌ Erreur rafraîchissement:', refreshError);
+    if (sessionError) {
+      console.error('❌ Erreur getSession:', sessionError);
       return false;
     }
     
-    if (!refreshData?.session) {
-      console.error('❌ Pas de session après refresh');
+    if (!session) {
+      console.warn('⚠️ Pas de session active');
       return false;
     }
     
-    console.log('✅ Session rafraîchie avec succès');
+    const expiresAt = session.expires_at * 1000;
+    const now = Date.now();
+    const timeUntilExpiry = expiresAt - now;
+    const minutesLeft = Math.round(timeUntilExpiry / 1000 / 60);
+    
+    console.log(`⏱️ Session expire dans ${minutesLeft} minutes`);
+    
+    if (timeUntilExpiry < 5 * 60 * 1000) {
+      console.log('🔄 Session expire bientôt (< 5min), rafraîchissement...');
+      
+      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+      
+      if (refreshError) {
+        console.error('❌ Erreur rafraîchissement:', refreshError);
+        return false;
+      }
+      
+      if (!refreshData?.session) {
+        console.error('❌ Pas de session après refresh');
+        return false;
+      }
+      
+      console.log('✅ Session rafraîchie avec succès');
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return true;
+    }
+    
+    console.log('✅ Session encore valide');
     return true;
   } catch (err) {
     console.error('❌ Exception ensureValidSession:', err);
@@ -93,8 +118,6 @@ export async function supabaseWithSessionCheck(operation, retries = 3) {
         throw new Error('Session expirée. Veuillez vous reconnecter.');
       }
       
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
       const result = await operation();
       
       if (attempt > 1) {
@@ -114,11 +137,7 @@ export async function supabaseWithSessionCheck(operation, retries = 3) {
         throw err;
       }
       
-      if (err.name === 'AbortError') {
-        console.log('⏱️ Timeout détecté, retry...');
-      }
-      
-      const waitTime = attempt * 1500;
+      const waitTime = attempt * 1000;
       console.log(`⏳ Attente ${waitTime}ms avant retry...`);
       await new Promise(resolve => setTimeout(resolve, waitTime));
     }
