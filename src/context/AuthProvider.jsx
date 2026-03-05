@@ -9,6 +9,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   
   const refreshIntervalRef = useRef(null);
+  const pingIntervalRef = useRef(null); // ✅ NOUVEAU
   const isLoadingProfileRef = useRef(false);
 
   const loadProfile = async (userId) => {
@@ -55,6 +56,11 @@ export function AuthProvider({ children }) {
       refreshIntervalRef.current = null;
     }
     
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
+    }
+    
     isLoadingProfileRef.current = false;
     setUser(null);
     setProfile(null);
@@ -62,6 +68,22 @@ export function AuthProvider({ children }) {
     
     await setSupabaseRLSContext(null);
     await supabase.auth.signOut();
+  };
+
+  // ✅ NOUVEAU : Ping régulier pour garder la connexion active
+  const startPing = () => {
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+    }
+    
+    pingIntervalRef.current = setInterval(async () => {
+      try {
+        // Ping léger : juste récupérer la session
+        await supabase.auth.getSession();
+      } catch (err) {
+        console.error('❌ Erreur ping:', err);
+      }
+    }, 2 * 60 * 1000); // ✅ Toutes les 2 minutes
   };
 
   const startAutoRefresh = () => {
@@ -89,8 +111,6 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
-    console.log('🚀 AuthProvider INIT');
-    
     let isMounted = true;
 
     const initAuth = async () => {
@@ -126,6 +146,7 @@ export function AuthProvider({ children }) {
             setUser(refreshData.session.user);
             await loadProfile(refreshData.session.user.id);
             startAutoRefresh();
+            startPing(); // ✅ NOUVEAU
           }
           return;
         }
@@ -134,6 +155,7 @@ export function AuthProvider({ children }) {
           setUser(session.user);
           await loadProfile(session.user.id);
           startAutoRefresh();
+          startPing(); // ✅ NOUVEAU
         }
 
       } catch (err) {
@@ -158,6 +180,7 @@ export function AuthProvider({ children }) {
               setUser(session.user);
               await loadProfile(session.user.id);
               startAutoRefresh();
+              startPing(); // ✅ NOUVEAU
             }
             break;
 
@@ -165,6 +188,10 @@ export function AuthProvider({ children }) {
             if (refreshIntervalRef.current) {
               clearInterval(refreshIntervalRef.current);
               refreshIntervalRef.current = null;
+            }
+            if (pingIntervalRef.current) {
+              clearInterval(pingIntervalRef.current);
+              pingIntervalRef.current = null;
             }
             isLoadingProfileRef.current = false;
             await setSupabaseRLSContext(null);
@@ -193,6 +220,10 @@ export function AuthProvider({ children }) {
       
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
+      }
+      
+      if (pingIntervalRef.current) {
+        clearInterval(pingIntervalRef.current);
       }
       
       subscription?.unsubscribe();
