@@ -14,7 +14,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
   global: {
     fetch: (url, options = {}) => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 secondes
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
       
       return fetch(url, {
         ...options,
@@ -23,6 +23,11 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     },
   },
 });
+
+// ✅ NOUVEAU : Exposer globalement pour debugging
+if (typeof window !== 'undefined') {
+  window.supabase = supabase;
+}
 
 export async function setSupabaseRLSContext(nomsociete) {
   if (!nomsociete) return;
@@ -37,12 +42,11 @@ export async function setSupabaseRLSContext(nomsociete) {
   }
 }
 
-// ✅ NOUVEAU : Fonction pour "réveiller" la connexion
 async function pingSupabase() {
   try {
     await supabase.from('profiles').select('count').limit(1).single();
   } catch (err) {
-    // On ignore l'erreur, on veut juste réveiller la connexion
+    // On ignore l'erreur
   }
 }
 
@@ -55,7 +59,6 @@ export async function supabaseWithSessionCheck(operation, retries = 2) {
         throw new Error('Session expirée');
       }
       
-      // ✅ NOUVEAU : Ping avant l'opération si c'est un retry
       if (attempt > 1) {
         console.log('🏓 Ping Supabase avant retry...');
         await pingSupabase();
