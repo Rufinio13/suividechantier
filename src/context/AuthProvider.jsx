@@ -9,7 +9,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   
   const refreshIntervalRef = useRef(null);
-  const pingIntervalRef = useRef(null); // ✅ NOUVEAU
+  const heartbeatIntervalRef = useRef(null); // ✅ NOUVEAU
   const isLoadingProfileRef = useRef(false);
 
   const loadProfile = async (userId) => {
@@ -56,9 +56,9 @@ export function AuthProvider({ children }) {
       refreshIntervalRef.current = null;
     }
     
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = null;
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
     }
     
     isLoadingProfileRef.current = false;
@@ -70,18 +70,30 @@ export function AuthProvider({ children }) {
     await supabase.auth.signOut();
   };
 
-  // ✅ NOUVEAU : Ping régulier pour garder la connexion active
-  const startPing = () => {
-    if (pingIntervalRef.current) {
-      clearInterval(pingIntervalRef.current);
+  // ✅ NOUVEAU : Heartbeat toutes les 2 minutes
+  const startHeartbeat = () => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
     }
     
-    pingIntervalRef.current = setInterval(async () => {
+    console.log('💓 Démarrage heartbeat Supabase (toutes les 2 minutes)');
+    
+    heartbeatIntervalRef.current = setInterval(async () => {
       try {
-        // Ping léger : juste récupérer la session
-        await supabase.auth.getSession();
+        console.log('💓 Ping Supabase...');
+        
+        // ✅ Requête ultra-légère : juste compter les profils (sans les récupérer)
+        const { error } = await supabase
+          .from('profiles')
+          .select('id', { count: 'exact', head: true });
+        
+        if (error) {
+          console.error('❌ Heartbeat erreur:', error);
+        } else {
+          console.log('✅ Heartbeat OK');
+        }
       } catch (err) {
-        console.error('❌ Erreur ping:', err);
+        console.error('❌ Heartbeat exception:', err);
       }
     }, 2 * 60 * 1000); // ✅ Toutes les 2 minutes
   };
@@ -102,6 +114,7 @@ export function AuthProvider({ children }) {
         const timeUntilExpiry = expiresAt - now;
         
         if (timeUntilExpiry < 10 * 60 * 1000 && timeUntilExpiry > 0) {
+          console.log('🔄 Rafraîchissement automatique de la session');
           await supabase.auth.refreshSession();
         }
       } catch (err) {
@@ -146,7 +159,7 @@ export function AuthProvider({ children }) {
             setUser(refreshData.session.user);
             await loadProfile(refreshData.session.user.id);
             startAutoRefresh();
-            startPing(); // ✅ NOUVEAU
+            startHeartbeat(); // ✅ NOUVEAU
           }
           return;
         }
@@ -155,7 +168,7 @@ export function AuthProvider({ children }) {
           setUser(session.user);
           await loadProfile(session.user.id);
           startAutoRefresh();
-          startPing(); // ✅ NOUVEAU
+          startHeartbeat(); // ✅ NOUVEAU
         }
 
       } catch (err) {
@@ -180,7 +193,7 @@ export function AuthProvider({ children }) {
               setUser(session.user);
               await loadProfile(session.user.id);
               startAutoRefresh();
-              startPing(); // ✅ NOUVEAU
+              startHeartbeat(); // ✅ NOUVEAU
             }
             break;
 
@@ -189,9 +202,9 @@ export function AuthProvider({ children }) {
               clearInterval(refreshIntervalRef.current);
               refreshIntervalRef.current = null;
             }
-            if (pingIntervalRef.current) {
-              clearInterval(pingIntervalRef.current);
-              pingIntervalRef.current = null;
+            if (heartbeatIntervalRef.current) {
+              clearInterval(heartbeatIntervalRef.current);
+              heartbeatIntervalRef.current = null;
             }
             isLoadingProfileRef.current = false;
             await setSupabaseRLSContext(null);
@@ -222,8 +235,8 @@ export function AuthProvider({ children }) {
         clearInterval(refreshIntervalRef.current);
       }
       
-      if (pingIntervalRef.current) {
-        clearInterval(pingIntervalRef.current);
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
       }
       
       subscription?.unsubscribe();
