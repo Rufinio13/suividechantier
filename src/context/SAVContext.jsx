@@ -1,6 +1,6 @@
 // src/context/SAVContext.jsx
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { supabase, supabaseWithSessionCheck } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
 
 export const SAVContext = createContext();
@@ -34,7 +34,7 @@ export function SAVProvider({ children }) {
 
   // ✅ AJOUTER (AVEC wrapper)
   const addSAV = async (savData) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       if (!profile?.nomsociete || !user) return;
 
       const descriptionsJSON = JSON.stringify(savData.descriptions || []);
@@ -63,12 +63,12 @@ export function SAVProvider({ children }) {
 
       setDemandesSAV((prev) => [data, ...prev]);
       return data;
-    });
+    
   };
 
   // ✅ METTRE À JOUR (AVEC wrapper)
   const updateSAV = async (id, updates) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       if (updates.descriptions) {
         updates.description = JSON.stringify(updates.descriptions);
         delete updates.descriptions;
@@ -91,12 +91,12 @@ export function SAVProvider({ children }) {
       );
 
       return data;
-    });
+  
   };
 
   // ✅ TOGGLE LIGNE (AVEC wrapper)
   const toggleDescriptionLigne = async (savId, ligneIndex) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const sav = demandesSAV.find(s => s.id === savId);
       if (!sav) return;
 
@@ -114,12 +114,12 @@ export function SAVProvider({ children }) {
       await updateSAV(savId, {
         description: JSON.stringify(descriptions)
       });
-    });
+    
   };
 
   // ✅ SUPPRIMER (AVEC wrapper)
   const deleteSAV = async (id) => {
-    return await supabaseWithSessionCheck(async () => {
+  
       const { error } = await supabase.from("sav").delete().eq("id", id);
       if (error) {
         console.error("❌ Erreur delete SAV:", error);
@@ -127,7 +127,7 @@ export function SAVProvider({ children }) {
       }
 
       setDemandesSAV((prev) => prev.filter((s) => s.id !== id));
-    });
+  
   };
 
   useEffect(() => {

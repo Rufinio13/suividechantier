@@ -7,7 +7,7 @@ import { Camera, X, CheckCircle, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 
 export function TacheDetailModalArtisan({ 
   isOpen, 
@@ -40,7 +40,7 @@ export function TacheDetailModalArtisan({
     setUploadingPhotos(prev => [...prev, ...files.map(f => f.name)]);
 
     try {
-      await supabaseWithSessionCheck(async () => {
+      
         const uploadedUrls = [];
 
         for (const file of files) {
@@ -79,7 +79,7 @@ export function TacheDetailModalArtisan({
           title: "Photos ajoutées ✅",
           description: `${uploadedUrls.length} photo(s) ajoutée(s)`,
         });
-      });
+      
     } catch (error) {
       console.error('❌ Erreur upload photos:', error);
       toast({
@@ -103,7 +103,7 @@ export function TacheDetailModalArtisan({
     setIsSubmitting(true);
 
     try {
-      await supabaseWithSessionCheck(async () => {
+      
         const { error } = await supabase
           .from('taches')
           .update({
@@ -123,7 +123,7 @@ export function TacheDetailModalArtisan({
 
         onSuccess?.();
         onClose();
-      });
+      
     } catch (error) {
       console.error('❌ Erreur:', error);
       toast({

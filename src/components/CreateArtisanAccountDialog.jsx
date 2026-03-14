@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Eye, EyeOff, UserPlus } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { supabase, supabaseWithSessionCheck } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 
 export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess }) {
   const { toast } = useToast();
@@ -50,7 +50,7 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
     setIsCreating(true);
 
     try {
-      await supabaseWithSessionCheck(async () => {
+      
         console.log('👤 Création compte pour artisan:', artisan.id);
 
         // 1️⃣ Créer le compte auth
@@ -109,7 +109,7 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
 
         onSuccess?.();
         onClose();
-      });
+      
     } catch (err) {
       console.error('❌ Erreur création compte:', err);
       toast({ 

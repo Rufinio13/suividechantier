@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
 const CommandesContext = createContext();
@@ -70,7 +70,7 @@ export function CommandesProvider({ children }) {
 
   // ✅ AJOUTER UNE COMMANDE (AVEC wrapper)
   const addCommande = async (commandeData) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const dataToInsert = {
         ...commandeData,
         nomsociete: profile?.nomsociete,
@@ -95,12 +95,12 @@ export function CommandesProvider({ children }) {
       console.log('✅ Commande ajoutée:', data);
       setCommandes(prev => [...prev, data]);
       return { success: true, data };
-    });
+    
   };
 
   // ✅ METTRE À JOUR UNE COMMANDE (AVEC wrapper)
   const updateCommande = async (id, updates) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const dataToUpdate = {
         ...updates,
         updated_at: new Date().toISOString()
@@ -125,12 +125,12 @@ export function CommandesProvider({ children }) {
       console.log('✅ Commande mise à jour:', data);
       setCommandes(prev => prev.map(c => c.id === id ? data : c));
       return { success: true, data };
-    });
+    
   };
 
   // ✅ SUPPRIMER UNE COMMANDE (AVEC wrapper)
   const deleteCommande = async (id) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       console.log('📤 Delete commande:', id);
 
       const { error } = await supabase
@@ -144,7 +144,7 @@ export function CommandesProvider({ children }) {
       console.log('✅ Commande supprimée');
       setCommandes(prev => prev.filter(c => c.id !== id));
       return { success: true };
-    });
+    
   };
 
   // ✅ VALIDER UNE COMMANDE (AVEC wrapper via updateCommande)

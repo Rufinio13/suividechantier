@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { supabase, supabaseWithSessionCheck } from "@/lib/supabaseClient";
+import { supabase} from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
 
 export const FournisseurContext = createContext();
@@ -34,7 +34,7 @@ export function FournisseurProvider({ children }) {
 
   // ✅ AJOUTER UN FOURNISSEUR (AVEC wrapper)
   const addFournisseur = async (fournisseurData) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       console.log("🔵 addFournisseur - Début");
       
       if (!profile?.nomsociete || !user) {
@@ -70,12 +70,12 @@ export function FournisseurProvider({ children }) {
       console.log("✅ Fournisseur ajouté:", data);
       setFournisseurs((prev) => [data, ...prev]);
       return data;
-    });
+    
   };
 
   // ✅ METTRE À JOUR UN FOURNISSEUR (AVEC wrapper)
   const updateFournisseur = async (id, updates) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       console.log('📤 updateFournisseur - ID:', id);
       
       const cleanUpdates = { ...updates };
@@ -103,17 +103,17 @@ export function FournisseurProvider({ children }) {
       );
 
       return data;
-    });
+    
   };
 
   // ✅ SUPPRIMER UN FOURNISSEUR (AVEC wrapper)
   const deleteFournisseur = async (id) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const { error } = await supabase.from("fournisseurs").delete().eq("id", id);
       if (error) throw error;
 
       setFournisseurs((prev) => prev.filter((f) => f.id !== id));
-    });
+    
   };
 
   // AUTO LOAD

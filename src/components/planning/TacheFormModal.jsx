@@ -197,53 +197,71 @@ export function TacheFormModal({
   };
 
   const handleSubmit = async e => {
-    e.preventDefault();
+  console.log('🔵 handleSubmit DÉBUT');
+  e.preventDefault();
 
-    if (!formData.lotid) {
-      alert("Veuillez sélectionner un lot.");
-      return;
+  console.log('🔵 Validation lotid...');
+  if (!formData.lotid) {
+    alert("Veuillez sélectionner un lot.");
+    return;
+  }
+  
+  console.log('🔵 Validation dates...');
+  if (!formData.datedebut || !formData.duree) {
+    alert("Veuillez renseigner la date de début et la durée.");
+    return;
+  }
+
+  console.log('🔵 Parse date...');
+  const deb = parseISO(formData.datedebut);
+  if (!isValid(deb)) {
+    alert("Date de début invalide");
+    return;
+  }
+
+  console.log('🔵 Construction payload...');
+  const payload = {
+    nom: formData.nom,
+    description: formData.description || null,
+    chantierid: chantierId,
+    lotid: formData.lotid,
+    datedebut: formData.datedebut,
+    datefin: calculateDateFinLogic(formData.datedebut, parseInt(formData.duree, 10)),
+    assigneid: formData.assigneid || null,
+    assignetype: formData.assignetype || null,
+    terminee: formData.terminee || false,
+  };
+
+  if (tache) {
+    payload.constructeur_valide = formData.constructeur_valide || false;
+    payload.constructeur_valide_date = formData.constructeur_valide ? new Date().toISOString() : null;
+  }
+
+  console.log("📤 Payload final:", payload);
+
+  try {
+    console.log('🔵 Appel addTache/updateTache...');
+    
+    if (tache) {
+      await updateTache(tache.id, payload);
+    } else {
+      await addTache(payload);
     }
     
-    if (!formData.datedebut || !formData.duree) {
-      alert("Veuillez renseigner la date de début et la durée.");
-      return;
-    }
-
-    const deb = parseISO(formData.datedebut);
-    if (!isValid(deb)) {
-      alert("Date de début invalide");
-      return;
-    }
-
-    const payload = {
-      nom: formData.nom,
-      description: formData.description || null,
-      chantierid: chantierId,
-      lotid: formData.lotid,
-      datedebut: formData.datedebut,
-      datefin: calculateDateFinLogic(formData.datedebut, parseInt(formData.duree, 10)),
-      assigneid: formData.assigneid || null,
-      assignetype: formData.assignetype || null,
-      terminee: formData.terminee,
-      constructeur_valide: formData.constructeur_valide,
-      constructeur_valide_date: formData.constructeur_valide ? new Date().toISOString() : null,
-    };
-
-    console.log("🔍 FormData avant payload:", formData);
-    console.log("📤 Payload envoyé à Supabase:", payload);
-
-    try {
-      if (tache) {
-        await updateTache(tache.id, payload);
-      } else {
-        await addTache(payload);
-      }
+    console.log('✅ Tâche sauvegardée');
+    
+    // ✅ NOUVEAU : Forcer la fermeture avec setTimeout
+    console.log('🔵 Fermeture du modal...');
+    setTimeout(() => {
+      console.log('🔵 onClose() appelé');
       onClose();
-    } catch (err) {
-      console.error("❌ Erreur save tâche:", err);
-      alert(`Erreur lors de l'enregistrement de la tâche: ${err.message}`);
-    }
-  };
+    }, 100);
+    
+  } catch (err) {
+    console.error("❌ Erreur save tâche:", err);
+    alert(`Erreur lors de l'enregistrement de la tâche: ${err.message}`);
+  }
+};
 
   // ✅ NOUVEAU : Fonction de suppression
   const handleDelete = async () => {

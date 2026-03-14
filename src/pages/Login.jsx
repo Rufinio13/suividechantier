@@ -132,10 +132,10 @@ function ForgotPasswordForm({ onBack }) {
     setLoading(true);
 
     try {
-      const { supabase, supabaseWithSessionCheck } = await import('@/lib/supabaseClient');
+      const { supabase } = await import('@/lib/supabaseClient');
       
       // ✅ Wrapper pour resetPasswordForEmail
-      await supabaseWithSessionCheck(async () => {
+      
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/reset-password`,
         });
@@ -148,7 +148,7 @@ function ForgotPasswordForm({ onBack }) {
           description: 'Vérifiez votre boîte mail pour réinitialiser votre mot de passe.',
           duration: 5000
         });
-      });
+      
     } catch (error) {
       toast({
         title: 'Erreur',

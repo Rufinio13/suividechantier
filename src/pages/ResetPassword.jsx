@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import { AlertCircle } from 'lucide-react';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { supabase} from '@/lib/supabaseClient';
 
 export function ResetPassword() {
   const { toast } = useToast();
@@ -53,7 +53,7 @@ export function ResetPassword() {
     setLoading(true);
 
     try {
-      await supabaseWithSessionCheck(async () => {
+      
         const { error: updateError } = await supabase.auth.updateUser({
           password: password
         });
@@ -70,7 +70,7 @@ export function ResetPassword() {
         setTimeout(() => {
           navigate('/login');
         }, 2000);
-      });
+      
     } catch (error) {
       setError(error.message);
     } finally {

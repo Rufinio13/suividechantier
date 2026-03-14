@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FileText, Download, FileSignature, CheckCircle } from 'lucide-react';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
@@ -72,7 +72,7 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
   // ✅ Marquer document comme vu (AVEC wrapper)
   const marquerDocumentVu = async (documentId) => {
     try {
-      await supabaseWithSessionCheck(async () => {
+      
         console.log('📝 Marquage document comme vu:', documentId);
         
         // Récupérer le document actuel
@@ -107,7 +107,7 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
         setTimeout(() => {
           loadDocuments();
         }, 500);
-      });
+      
     } catch (error) {
       console.error('Erreur marquage document vu:', error);
       // Ne pas bloquer le téléchargement si le tracking échoue
@@ -198,7 +198,7 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
     setSigning(true);
 
     try {
-      await supabaseWithSessionCheck(async () => {
+      
         // 1. Télécharger le PDF original
         const { data: pdfBlob, error: downloadError } = await supabase.storage
           .from('documents-chantiers')
@@ -304,7 +304,7 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
         setTimeout(async () => {
           await loadDocuments();
         }, 1000);
-      });
+      
 
     } catch (error) {
       console.error('❌ Erreur signature complète:', error);

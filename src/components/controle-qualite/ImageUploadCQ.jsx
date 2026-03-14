@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Upload, X, Image as ImageIcon, FileText, Loader2 } from 'lucide-react';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
 export function ImageUploadCQ({ 
@@ -26,7 +26,7 @@ export function ImageUploadCQ({
     setUploading(true);
 
     try {
-      await supabaseWithSessionCheck(async () => {
+      
         const uploadedImages = [];
 
         for (const file of files) {
@@ -80,7 +80,7 @@ export function ImageUploadCQ({
           onImagesChange([...images, ...uploadedImages]);
           console.log('✅ Images ajoutées:', uploadedImages.length);
         }
-      });
+      
     } catch (error) {
       console.error('❌ Erreur upload images:', error);
       alert('Erreur lors de l\'upload des images');
@@ -95,7 +95,7 @@ export function ImageUploadCQ({
   // ✅ Suppression image (AVEC wrapper)
   const handleDelete = async (imageToDelete) => {
     try {
-      await supabaseWithSessionCheck(async () => {
+      
         // Extraire le path depuis l'URL
         const urlParts = imageToDelete.url.split('/controle-qualite-images/');
         if (urlParts.length > 1) {
@@ -113,7 +113,7 @@ export function ImageUploadCQ({
 
         // Retirer de la liste
         onImagesChange(images.filter(img => img.url !== imageToDelete.url));
-      });
+      
     } catch (error) {
       console.error('Erreur suppression image:', error);
       alert('Erreur lors de la suppression de l\'image');

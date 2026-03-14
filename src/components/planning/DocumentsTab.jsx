@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Plus, FileText, Download, Trash2, Users, User, FileSignature, CheckCircle } from 'lucide-react';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useChantier } from '@/context/ChantierContext';
 import { format } from 'date-fns';
@@ -49,7 +49,7 @@ export function DocumentsTab({ chantierId }) {
     if (!window.confirm(`Supprimer "${doc.nom_fichier}" ?`)) return;
 
     try {
-      await supabaseWithSessionCheck(async () => {
+      
         const filePath = doc.url_fichier.split('/').pop();
         await supabase.storage.from('documents-chantiers').remove([`chantiers/${filePath}`]);
         
@@ -62,7 +62,7 @@ export function DocumentsTab({ chantierId }) {
 
         toast({ title: 'Document supprimé ✅' });
         loadDocuments();
-      });
+      
     } catch (error) {
       toast({ title: 'Erreur ❌', variant: 'destructive' });
     }

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { AlertTriangle, CheckCircle, Camera, Calendar } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { supabase} from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -227,7 +227,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
     setUploading(prev => ({ ...prev, [ncKey]: true }));
 
     try {
-      await supabaseWithSessionCheck(async () => {
+      
         const uploadedUrls = [];
 
         for (const file of files) {
@@ -257,7 +257,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
           title: 'Photos ajoutées',
           description: `${uploadedUrls.length} photo(s) uploadée(s)`,
         });
-      });
+      
     } catch (error) {
       console.error('Erreur upload photos:', error);
       toast({

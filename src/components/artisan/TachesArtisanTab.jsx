@@ -8,7 +8,7 @@ import { ListChecks, CheckCircle, Camera, X, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 
 export function TachesArtisanTab({ chantierId, soustraitantId }) {
   const { taches, lots, loadTaches } = useChantier();
@@ -64,7 +64,7 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
     setUploadingPhotos(prev => ({ ...prev, [tacheId]: true }));
 
     try {
-      await supabaseWithSessionCheck(async () => {
+      
         const uploadedUrls = [];
 
         for (const file of files) {
@@ -101,7 +101,7 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
           title: 'Photos ajoutées',
           description: `${uploadedUrls.length} photo(s) ajoutée(s)`,
         });
-      });
+      
     } catch (error) {
       console.error('❌ Erreur upload photos:', error);
       toast({
@@ -130,7 +130,7 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
     setSubmitting(prev => ({ ...prev, [tacheId]: true }));
 
     try {
-      await supabaseWithSessionCheck(async () => {
+      
         const { error } = await supabase
           .from('taches')
           .update({
@@ -149,7 +149,7 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
         });
 
         await loadTaches();
-      });
+      
     } catch (error) {
       console.error('❌ Erreur:', error);
       toast({

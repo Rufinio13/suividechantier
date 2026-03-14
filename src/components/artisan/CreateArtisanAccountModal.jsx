@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 import { UserPlus, Mail, Lock, Loader2 } from 'lucide-react';
 
 export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuccess }) {
@@ -58,7 +58,7 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
 
     try {
       // ✅ WRAPPER autour de toute la logique de création
-      await supabaseWithSessionCheck(async () => {
+      
         console.log('🔐 Création compte artisan pour:', formData.email);
 
         // 1️⃣ Créer l'utilisateur dans auth.users
@@ -162,7 +162,7 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
         }
 
         console.log('🎉 Création compte terminée avec succès');
-      });
+      
 
       toast({ 
         title: "Compte créé ✅", 

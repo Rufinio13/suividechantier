@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
 const CompteRenduContext = createContext();
@@ -54,7 +54,7 @@ export function CompteRenduProvider({ children }) {
 
   // ✅ AJOUTER UN COMPTE RENDU (AVEC wrapper)
   const addCompteRendu = async (chantierId, compteRenduData) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const { data, error } = await supabase
         .from('comptes_rendus')
         .insert([{
@@ -70,12 +70,12 @@ export function CompteRenduProvider({ children }) {
 
       setComptesRendus(prev => [data, ...prev]);
       return { success: true, data };
-    });
+    
   };
 
   // ✅ METTRE À JOUR UN COMPTE RENDU (AVEC wrapper)
   const updateCompteRendu = async (compteRenduId, updates) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const { data, error } = await supabase
         .from('comptes_rendus')
         .update({
@@ -90,12 +90,12 @@ export function CompteRenduProvider({ children }) {
 
       setComptesRendus(prev => prev.map(cr => cr.id === compteRenduId ? data : cr));
       return { success: true, data };
-    });
+    
   };
 
   // ✅ SUPPRIMER UN COMPTE RENDU (AVEC wrapper)
   const deleteCompteRendu = async (compteRenduId) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const { error } = await supabase
         .from('comptes_rendus')
         .delete()
@@ -105,7 +105,7 @@ export function CompteRenduProvider({ children }) {
 
       setComptesRendus(prev => prev.filter(cr => cr.id !== compteRenduId));
       return { success: true };
-    });
+    
   };
 
   const value = {

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
 const CommentairesContext = createContext();
@@ -55,7 +55,7 @@ export function CommentairesProvider({ children }) {
 
   // ✅ AJOUTER UN COMMENTAIRE (AVEC wrapper)
   const addCommentaire = async (chantierId, titre, texte) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       // Récupérer le nomsociete du chantier
       const { data: chantier, error: chantierError } = await supabase
         .from('chantiers')
@@ -93,12 +93,12 @@ export function CommentairesProvider({ children }) {
 
       setCommentaires(prev => [data, ...prev]);
       return { success: true, data };
-    });
+    
   };
 
   // ✅ METTRE À JOUR UN COMMENTAIRE (AVEC wrapper)
   const updateCommentaire = async (commentaireId, updates) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const { data, error } = await supabase
         .from('commentaires_chantier')
         .update({
@@ -113,12 +113,12 @@ export function CommentairesProvider({ children }) {
 
       setCommentaires(prev => prev.map(c => c.id === commentaireId ? data : c));
       return { success: true, data };
-    });
+    
   };
 
   // ✅ SUPPRIMER UN COMMENTAIRE (AVEC wrapper)
   const deleteCommentaire = async (commentaireId) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const { error } = await supabase
         .from('commentaires_chantier')
         .delete()
@@ -128,12 +128,12 @@ export function CommentairesProvider({ children }) {
 
       setCommentaires(prev => prev.filter(c => c.id !== commentaireId));
       return { success: true };
-    });
+    
   };
 
   // ✅ TOGGLE PRIS EN COMPTE (AVEC wrapper)
   const togglePrisEnCompte = async (commentaireId) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const commentaire = commentaires.find(c => c.id === commentaireId);
       if (!commentaire) throw new Error('Commentaire non trouvé');
 
@@ -151,7 +151,7 @@ export function CommentairesProvider({ children }) {
 
       setCommentaires(prev => prev.map(c => c.id === commentaireId ? data : c));
       return { success: true, data };
-    });
+    
   };
 
   const value = {

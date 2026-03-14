@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
 const ReferentielCommandeContext = createContext();
@@ -57,7 +57,7 @@ export function ReferentielCommandeProvider({ children }) {
 
   // ✅ AJOUTER UN MODÈLE DE COMMANDE (AVEC wrapper)
   const addModeleCommande = async (modeleData) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const dataToInsert = {
         ...modeleData,
         nomsociete,
@@ -78,12 +78,12 @@ export function ReferentielCommandeProvider({ children }) {
       console.log('✅ Modèle commande ajouté:', data);
       setModelesCommande(prev => [...prev, data]);
       return { success: true, data };
-    });
+    
   };
 
   // ✅ METTRE À JOUR UN MODÈLE DE COMMANDE (AVEC wrapper)
   const updateModeleCommande = async (id, updates) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const dataToUpdate = {
         ...updates,
         updated_at: new Date().toISOString()
@@ -104,12 +104,12 @@ export function ReferentielCommandeProvider({ children }) {
       console.log('✅ Modèle commande mis à jour:', data);
       setModelesCommande(prev => prev.map(m => m.id === id ? data : m));
       return { success: true, data };
-    });
+    
   };
 
   // ✅ SUPPRIMER UN MODÈLE DE COMMANDE (AVEC wrapper)
   const deleteModeleCommande = async (id) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       console.log('📤 Delete modèle commande:', id);
 
       const { error } = await supabase
@@ -123,7 +123,7 @@ export function ReferentielCommandeProvider({ children }) {
       console.log('✅ Modèle commande supprimé');
       setModelesCommande(prev => prev.filter(m => m.id !== id));
       return { success: true };
-    });
+    
   };
 
   const value = {

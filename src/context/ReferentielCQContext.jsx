@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { supabase, supabaseWithSessionCheck } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
 
 const ReferentielCQContext = createContext();
@@ -96,7 +96,7 @@ export function ReferentielCQProvider({ children }) {
 
   // ✅ CRUD Modèles (AVEC wrapper)
   const addModeleCQ = async (modeleData) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const dataToInsert = {
         ...modeleData,
         nomsociete: profile?.nomsociete,
@@ -114,11 +114,11 @@ export function ReferentielCQProvider({ children }) {
 
       setModelesCQ(prev => [...prev, data]);
       return { success: true, data };
-    });
+    
   };
 
   const updateModeleCQ = async (id, updates) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const dataToUpdate = {
         ...updates,
         updated_at: new Date().toISOString()
@@ -136,11 +136,11 @@ export function ReferentielCQProvider({ children }) {
 
       setModelesCQ(prev => prev.map(m => m.id === id ? data : m));
       return { success: true, data };
-    });
+    
   };
 
   const deleteModeleCQ = async (id) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const { error } = await supabase
         .from('referentiels_controle_qualite')
         .delete()
@@ -151,12 +151,12 @@ export function ReferentielCQProvider({ children }) {
 
       setModelesCQ(prev => prev.filter(m => m.id !== id));
       return { success: true };
-    });
+    
   };
 
   // ✅ Sauvegarde contrôle (AVEC wrapper)
   const saveControleFromModele = async (chantierId, modeleCQId, resultats, pointsSpecifiques) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       console.log('💾 saveControleFromModele:', { chantierId, modeleCQId });
       
       const { data: existingControle, error: fetchError } = await supabase
@@ -212,7 +212,7 @@ export function ReferentielCQProvider({ children }) {
         setControles(prev => [...prev, data]);
         return { success: true, data };
       }
-    });
+    
   };
 
   const getControlesByChantier = (chantierId) => {
@@ -221,7 +221,7 @@ export function ReferentielCQProvider({ children }) {
 
   // ✅ Points de contrôle (AVEC wrapper)
   const addPointControleChantierSpecific = async (chantierId, modeleId, domaineId, sousCategorieId, pointData) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       if (isAddingPointRef.current) {
         console.log('⚠️ addPointControleChantierSpecific déjà en cours, ignoré');
         return { success: false, message: 'Déjà en cours' };
@@ -293,11 +293,11 @@ export function ReferentielCQProvider({ children }) {
           console.log('✅ addPointControleChantierSpecific - Protection désactivée');
         }, 1000);
       }
-    });
+    
   };
 
   const updatePointControleChantierSpecific = async (chantierId, modeleId, domaineId, sousCategorieId, pointId, updates) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const existingControle = controles.find(
         c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
       );
@@ -328,11 +328,11 @@ export function ReferentielCQProvider({ children }) {
       setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
 
       return { success: true };
-    });
+    
   };
 
   const deletePointControleChantierSpecific = async (chantierId, modeleId, domaineId, sousCategorieId, pointId) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const existingControle = controles.find(
         c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
       );
@@ -376,12 +376,12 @@ export function ReferentielCQProvider({ children }) {
       setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
 
       return { success: true };
-    });
+    
   };
 
   // ✅ Suppression catégories (AVEC wrapper)
   const supprimerCategorie = async (chantierId, modeleId, categorieId) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const existingControle = controles.find(
         c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
       );
@@ -413,11 +413,11 @@ export function ReferentielCQProvider({ children }) {
       setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
 
       return { success: true };
-    });
+    
   };
 
   const supprimerSousCategorie = async (chantierId, modeleId, categorieId, sousCategorieId) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const existingControle = controles.find(
         c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
       );
@@ -452,12 +452,12 @@ export function ReferentielCQProvider({ children }) {
       setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
 
       return { success: true };
-    });
+    
   };
 
   // ✅ Ajout catégories/sous-catégories (AVEC wrapper)
   const ajouterCategorieChantier = async (chantierId, modeleId, categorieData) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const existingControle = controles.find(
         c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
       );
@@ -488,11 +488,11 @@ export function ReferentielCQProvider({ children }) {
       setControles(prev => prev.map(c => c.id === existingControle.id ? data : c));
 
       return { success: true, data: nouvelleCategorie };
-    });
+    
   };
 
   const ajouterSousCategorieChantier = async (chantierId, modeleId, categorieId, sousCategorieData) => {
-    return await supabaseWithSessionCheck(async () => {
+    
       const existingControle = controles.find(
         c => c.chantier_id === chantierId && c.modele_cq_id === modeleId
       );
@@ -551,7 +551,7 @@ export function ReferentielCQProvider({ children }) {
 
         return { success: true, data: nouvelleSousCategorie };
       }
-    });
+    
   };
 
   // Refresh (sans wrapper - lectures)
