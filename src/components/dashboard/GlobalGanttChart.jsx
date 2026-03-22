@@ -19,9 +19,14 @@ import {
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ZoomIn, ZoomOut } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { ZoomIn, ZoomOut, Calendar } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useChantier } from '@/context/ChantierContext';
+import { useSousTraitant } from '@/context/SousTraitantContext';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { calculateDateFinLogic, calculateDureeOuvree } from '@/context/chantierContextLogics/tacheLogics';
 
 const MIN_DAY_WIDTH = 16;
 const MAX_DAY_WIDTH = 48;
@@ -58,9 +63,17 @@ const getClosestWorkday = (date) => {
 };
 
 export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTraitants }) {
+  const { updateTache, chantiers: allChantiers } = useChantier();
+  const { sousTraitants: allSousTraitants } = useSousTraitant();
+  
   const [dayWidth, setDayWidth] = useState(DEFAULT_DAY_WIDTH);
   const [chantierColWidth, setChantierColWidth] = useState(CHANTIER_COL_WIDTH_DESKTOP);
-  const [selectedDayData, setSelectedDayData] = useState(null);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [formData, setFormData] = useState({
+    datedebut: '',
+    duree: '',
+  });
+  const [isSaving, setIsSaving] = useState(false);
   
   const scrollContainerRef = useRef(null);
   const hasScrolledToToday = useRef(false);
@@ -84,53 +97,51 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
   }, []);
 
   const conflictsByDay = useMemo(() => {
-  const conflicts = {};
-  const stAssignments = {};
+    const conflicts = {};
+    const stAssignments = {};
 
-  // ✅ FILTRER : Ne considérer que les tâches NON validées
-  const tachesNonValidees = cleanTaches.filter(t => !t.constructeur_valide && !t.terminee);
+    const tachesNonValidees = cleanTaches.filter(t => !t.constructeur_valide && !t.terminee);
 
-  tachesNonValidees.forEach(tache => {
-    if (tache.assignetype === 'soustraitant' && tache.assigneid && tache.datedebut && tache.datefin) {
-      const startDate = safeParseDate(tache.datedebut);
-      const endDate = safeParseDate(tache.datefin);
-      
-      if (!startDate || !endDate) return;
-
-      const days = eachDayOfInterval({ start: startOfDay(startDate), end: endOfDay(endDate) });
-      
-      days.forEach(day => {
-        if (isWeekend(day)) return;
+    tachesNonValidees.forEach(tache => {
+      if (tache.assignetype === 'soustraitant' && tache.assigneid && tache.datedebut && tache.datefin) {
+        const startDate = safeParseDate(tache.datedebut);
+        const endDate = safeParseDate(tache.datefin);
         
-        const dayKey = format(day, 'yyyy-MM-dd');
-        const stId = tache.assigneid;
+        if (!startDate || !endDate) return;
 
-        if (!stAssignments[dayKey]) stAssignments[dayKey] = {};
-        if (!stAssignments[dayKey][stId]) stAssignments[dayKey][stId] = [];
+        const days = eachDayOfInterval({ start: startOfDay(startDate), end: endOfDay(endDate) });
         
-        stAssignments[dayKey][stId].push({
-          tacheId: tache.id,
-          chantierid: tache.chantierid,
+        days.forEach(day => {
+          if (isWeekend(day)) return;
+          
+          const dayKey = format(day, 'yyyy-MM-dd');
+          const stId = tache.assigneid;
+
+          if (!stAssignments[dayKey]) stAssignments[dayKey] = {};
+          if (!stAssignments[dayKey][stId]) stAssignments[dayKey][stId] = [];
+          
+          stAssignments[dayKey][stId].push({
+            tacheId: tache.id,
+            chantierid: tache.chantierid,
+          });
         });
-      });
-    }
-  });
-
-  // ✅ Ne créer des conflits QUE si 2+ chantiers différents
-  Object.keys(stAssignments).forEach(dayKey => {
-    Object.keys(stAssignments[dayKey]).forEach(stId => {
-      const assignments = stAssignments[dayKey][stId];
-      const chantierIds = [...new Set(assignments.map(a => a.chantierid))];
-      
-      if (chantierIds.length > 1) {
-        if (!conflicts[dayKey]) conflicts[dayKey] = new Set();
-        chantierIds.forEach(cid => conflicts[dayKey].add(cid));
       }
     });
-  });
 
-  return conflicts;
-}, [cleanTaches]);
+    Object.keys(stAssignments).forEach(dayKey => {
+      Object.keys(stAssignments[dayKey]).forEach(stId => {
+        const assignments = stAssignments[dayKey][stId];
+        const chantierIds = [...new Set(assignments.map(a => a.chantierid))];
+        
+        if (chantierIds.length > 1) {
+          if (!conflicts[dayKey]) conflicts[dayKey] = new Set();
+          chantierIds.forEach(cid => conflicts[dayKey].add(cid));
+        }
+      });
+    });
+
+    return conflicts;
+  }, [cleanTaches]);
 
   const getTaskColor = (tache, hasConflict) => {
     if (hasConflict) {
@@ -341,14 +352,12 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
           const mondayPosition = getDayPosition(mondayIndex);
           scrollContainerRef.current.scrollLeft = Math.max(0, mondayPosition);
           hasScrolledToToday.current = true;
-          console.log('🎯 Scroll vers lundi semaine courante, index:', mondayIndex);
         } else {
           const todayIndex = allDays.findIndex(day => isSameDay(day, targetScrollDay));
           if (todayIndex !== -1) {
             const todayPosition = getDayPosition(todayIndex);
             scrollContainerRef.current.scrollLeft = Math.max(0, todayPosition - 100);
             hasScrolledToToday.current = true;
-            console.log('🎯 Scroll vers aujourd\'hui, index:', todayIndex);
           }
         }
       };
@@ -359,31 +368,77 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
     }
   }, [allDays, dayWidth, targetScrollDay]);
 
-  const handleDayClick = (chantier, day) => {
-    const dayKey = format(day, 'yyyy-MM-dd');
-    
-    const tasksOfDay = chantier.tasks.filter(tache => {
-      const startDate = safeParseDate(tache.datedebut);
-      const endDate = safeParseDate(tache.datefin);
-      
-      if (!startDate || !endDate) return false;
-      
-      return day >= startOfDay(startDate) && day <= endOfDay(endDate);
-    });
+  // ✅ Ouvrir modal avec calcul de la durée
+  const handleTaskClick = (tache, chantierName) => {
+    const duree = tache.datedebut && tache.datefin
+      ? calculateDureeOuvree(tache.datedebut, tache.datefin)
+      : '';
 
-    if (tasksOfDay.length === 0) return;
-
-    setSelectedDayData({
-      chantierName: chantier.name,
-      day,
-      dayKey,
-      tasks: tasksOfDay,
+    setSelectedTask({ ...tache, chantierName });
+    setFormData({
+      datedebut: tache.datedebut || '',
+      duree: duree || '',
     });
   };
 
+  // ✅ Recalculer datefin quand datedebut ou duree change
+  useEffect(() => {
+    if (formData.datedebut && formData.duree) {
+      // Pas besoin de stocker datefin dans formData, on le calcule à la volée
+    }
+  }, [formData.datedebut, formData.duree]);
+
+  const handleSave = async () => {
+  if (!selectedTask) return;
+
+  if (!formData.datedebut || !formData.duree) {
+    alert('La date de début et la durée sont obligatoires');
+    return;
+  }
+
+  const dureeNum = parseInt(formData.duree, 10);
+  if (isNaN(dureeNum) || dureeNum < 1) {
+    alert('La durée doit être un nombre positif');
+    return;
+  }
+
+  const datefin = calculateDateFinLogic(formData.datedebut, dureeNum);
+
+  setIsSaving(true);
+
+  try {
+    // ✅ CORRECTION : Envoyer TOUS les champs obligatoires
+    await updateTache(selectedTask.id, {
+      nom: selectedTask.nom,
+      description: selectedTask.description,
+      chantierid: selectedTask.chantierid,
+      lotid: selectedTask.lotid,  // ✅ IMPORTANT
+      assigneid: selectedTask.assigneid,
+      assignetype: selectedTask.assignetype,
+      datedebut: formData.datedebut,
+      datefin: datefin,
+      terminee: selectedTask.terminee || false,
+    });
+
+    setSelectedTask(null);
+  } catch (error) {
+    console.error('❌ Erreur mise à jour tâche:', error);
+    alert('Erreur lors de la mise à jour de la tâche');
+  } finally {
+    setIsSaving(false);
+  }
+};
+
+  // ✅ Récupérer nom du chantier
+  const getChantierNom = (chantierId) => {
+    const chantier = allChantiers?.find(c => c.id === chantierId);
+    return chantier?.nomchantier || 'Chantier inconnu';
+  };
+
+  // ✅ Récupérer nom du sous-traitant
   const getArtisanNom = (soustraitantId) => {
-    if (!soustraitantId || !sousTraitants) return 'Non assigné';
-    const st = sousTraitants.find(s => s.id === soustraitantId);
+    if (!soustraitantId) return 'Non assigné';
+    const st = allSousTraitants?.find(s => s.id === soustraitantId);
     return st ? (st.nomsocieteST || `${st.PrenomST} ${st.nomST}`) : 'Inconnu';
   };
 
@@ -568,8 +623,8 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ duration: 0.2, delay: chantierIndex * 0.02 + dayIndex * 0.001 }}
-                            onClick={() => handleDayClick(chantier, day)}
-                            title={`${chantier.name} - ${format(day, 'dd MMM yyyy', { locale: fr })}${hasConflict ? ' - CONFLIT ARTISAN' : ''}\n${tasksForDay.length} tâche(s)`}
+                            onClick={() => handleTaskClick(firstTask, chantier.name)}
+                            title={`${firstTask.nom}\nClic pour modifier`}
                           />
                         );
                       })}
@@ -582,81 +637,95 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         </div>
       </div>
 
+      {/* ✅ Modal d'édition - Style TacheFormModal */}
       <AnimatePresence>
-        {selectedDayData && (
-          <Dialog open={!!selectedDayData} onOpenChange={() => setSelectedDayData(null)}>
-            <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+        {selectedTask && (
+          <Dialog open={!!selectedTask} onOpenChange={() => setSelectedTask(null)}>
+            <DialogContent className="sm:max-w-[520px]">
               <DialogHeader>
-                <DialogTitle>
-                  📅 {format(selectedDayData.day, 'EEEE dd MMMM yyyy', { locale: fr })} - {selectedDayData.chantierName}
+                <DialogTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Modifier la tâche
                 </DialogTitle>
               </DialogHeader>
 
-              <div className="space-y-3 mt-4">
-                <p className="font-semibold text-sm text-slate-700">
-                  Tâches du jour ({selectedDayData.tasks.length}) :
-                </p>
+              <div className="space-y-4 py-4">
+                {/* ✅ Informations en lecture seule */}
+                <div className="space-y-2 p-3 bg-slate-50 rounded-md border">
+                  <div>
+                    <Label className="text-xs text-slate-500">Nom de la tâche</Label>
+                    <p className="font-semibold text-slate-900">{selectedTask.nom}</p>
+                  </div>
 
-                {selectedDayData.tasks.map(tache => {
-                  const hasConflict = conflictsByDay[selectedDayData.dayKey]?.has(tache.chantierid);
-                  const taskColor = getTaskColor(tache, hasConflict);
-                  
-                  return (
-                    <motion.div
-                      key={tache.id}
-                      className="p-3 bg-slate-50 border border-slate-200 rounded-md hover:bg-slate-100 transition-colors"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded ${taskColor}`}></div>
-                            <p className="font-medium text-sm text-slate-800">{tache.nom}</p>
-                          </div>
-                          
-                          {tache.description && (
-                            <p className="text-xs text-slate-600 mt-1">{tache.description}</p>
-                          )}
+                  <div>
+                    <Label className="text-xs text-slate-500">Chantier (client)</Label>
+                    <p className="font-medium text-slate-800">{getChantierNom(selectedTask.chantierid)}</p>
+                  </div>
 
-                          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-slate-500">
-                            <span>
-                              📅 Du {format(parseISO(tache.datedebut), 'dd/MM/yy', { locale: fr })} au {format(parseISO(tache.datefin), 'dd/MM/yy', { locale: fr })}
-                            </span>
-                            
-                            {tache.assignetype === 'soustraitant' && tache.assigneid && (
-                              <span className="text-orange-700 font-medium">
-                                👷 {getArtisanNom(tache.assigneid)}
-                              </span>
-                            )}
-                          </div>
+                  {selectedTask.assignetype === 'soustraitant' && selectedTask.assigneid && (
+                    <div>
+                      <Label className="text-xs text-slate-500">Sous-traitant</Label>
+                      <p className="font-medium text-orange-700">
+                        👷 {getArtisanNom(selectedTask.assigneid)}
+                      </p>
+                    </div>
+                  )}
+                </div>
 
-                          <div className="mt-2">
-                            {hasConflict && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 mr-2">
-                                ⚠️ Conflit artisan
-                              </span>
-                            )}
-                            {tache.constructeur_valide || tache.terminee ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                ✅ Validée
-                              </span>
-                            ) : tache.artisan_termine ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
-                                ⏳ En attente validation
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                🚧 À faire
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                {/* ✅ Champs modifiables */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="datedebut">
+                      Date de début <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="datedebut"
+                      type="date"
+                      value={formData.datedebut}
+                      onChange={(e) => setFormData(prev => ({ ...prev, datedebut: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="duree">
+                      Durée (jours) <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="duree"
+                      type="number"
+                      min="1"
+                      value={formData.duree}
+                      onChange={(e) => setFormData(prev => ({ ...prev, duree: e.target.value }))}
+                    />
+                  </div>
+                </div>
+
+                {/* ✅ Affichage de la date de fin calculée */}
+                {formData.datedebut && formData.duree && (
+                  <div className="text-sm text-slate-600 bg-blue-50 p-2 rounded">
+                    📅 Date de fin calculée : {' '}
+                    <span className="font-semibold">
+                      {format(parseISO(calculateDateFinLogic(formData.datedebut, parseInt(formData.duree, 10))), 'dd/MM/yyyy', { locale: fr })}
+                    </span>
+                  </div>
+                )}
               </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedTask(null)}
+                  disabled={isSaving}
+                >
+                  Annuler
+                </Button>
+                <Button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                >
+                  {isSaving ? 'Enregistrement...' : 'Enregistrer'}
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         )}
