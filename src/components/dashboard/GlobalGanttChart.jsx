@@ -15,7 +15,9 @@ import {
   isSameDay,
   isSameWeek,
   isWeekend,
-  nextMonday
+  nextMonday,
+  getMonth,
+  getDate
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -37,6 +39,25 @@ const DAY_GAP = 2;
 const CHANTIER_COL_WIDTH_DESKTOP = 200;
 const CHANTIER_COL_WIDTH_TABLET = 150;
 const CHANTIER_COL_WIDTH_MOBILE = 100;
+
+// ✅ NOUVEAU : Liste des jours fériés français (fixes + Pâques approximatif)
+const JOURS_FERIES = [
+  { month: 1, day: 1 },   // Jour de l'an
+  { month: 5, day: 1 },   // Fête du travail
+  { month: 5, day: 8 },   // Victoire 1945
+  { month: 7, day: 14 },  // Fête nationale
+  { month: 8, day: 15 },  // Assomption
+  { month: 11, day: 1 },  // Toussaint
+  { month: 11, day: 11 }, // Armistice 1918
+  { month: 12, day: 25 }, // Noël
+  // Note: Pâques, Ascension, Pentecôte sont variables (pas inclus ici pour simplifier)
+];
+
+const isJourFerie = (date) => {
+  const month = getMonth(date) + 1; // getMonth retourne 0-11
+  const day = getDate(date);
+  return JOURS_FERIES.some(jf => jf.month === month && jf.day === day);
+};
 
 const isValidDate = (date) => date instanceof Date && !isNaN(date.getTime());
 
@@ -112,6 +133,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         const days = eachDayOfInterval({ start: startOfDay(startDate), end: endOfDay(endDate) });
         
         days.forEach(day => {
+          // ✅ Ne pas compter les weekends dans les conflits
           if (isWeekend(day)) return;
           
           const dayKey = format(day, 'yyyy-MM-dd');
@@ -197,6 +219,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         if (startDate && endDate) {
           const days = eachDayOfInterval({ start: startOfDay(startDate), end: endOfDay(endDate) });
           days.forEach(day => {
+            // ✅ Ne pas afficher les tâches sur les weekends
             if (!isWeekend(day)) {
               const dayKey = format(day, 'yyyy-MM-dd');
               if (!daysTasks.has(dayKey)) {
@@ -272,7 +295,8 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
   const handleZoomIn = () => setDayWidth(prev => Math.min(MAX_DAY_WIDTH, prev + 4));
   const handleZoomOut = () => setDayWidth(prev => Math.max(MIN_DAY_WIDTH, prev - 4));
 
-  const allDays = eachDayOfInterval({ start: overallStartDate, end: overallEndDate }).filter(day => !isWeekend(day));
+  // ✅ MODIFIÉ : Afficher TOUS les jours (y compris weekends)
+  const allDays = eachDayOfInterval({ start: overallStartDate, end: overallEndDate });
 
   const targetScrollDay = getClosestWorkday(startOfDay(new Date()));
 
@@ -287,7 +311,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
       const daysInWeek = eachDayOfInterval({ 
         start: weekStart > overallStartDate ? weekStart : overallStartDate, 
         end: weekEnd < overallEndDate ? weekEnd : overallEndDate 
-      }).filter(day => !isWeekend(day));
+      });
 
       return {
         startDate: weekStart,
@@ -368,7 +392,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
     }
   }, [allDays, dayWidth, targetScrollDay]);
 
-  // ✅ Ouvrir modal avec calcul de la durée
   const handleTaskClick = (tache, chantierName) => {
     const duree = tache.datedebut && tache.datefin
       ? calculateDureeOuvree(tache.datedebut, tache.datefin)
@@ -381,61 +404,51 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
     });
   };
 
-  // ✅ Recalculer datefin quand datedebut ou duree change
-  useEffect(() => {
-    if (formData.datedebut && formData.duree) {
-      // Pas besoin de stocker datefin dans formData, on le calcule à la volée
-    }
-  }, [formData.datedebut, formData.duree]);
-
   const handleSave = async () => {
-  if (!selectedTask) return;
+    if (!selectedTask) return;
 
-  if (!formData.datedebut || !formData.duree) {
-    alert('La date de début et la durée sont obligatoires');
-    return;
-  }
+    if (!formData.datedebut || !formData.duree) {
+      alert('La date de début et la durée sont obligatoires');
+      return;
+    }
 
-  const dureeNum = parseInt(formData.duree, 10);
-  if (isNaN(dureeNum) || dureeNum < 1) {
-    alert('La durée doit être un nombre positif');
-    return;
-  }
+    const dureeNum = parseInt(formData.duree, 10);
+    if (isNaN(dureeNum) || dureeNum < 1) {
+      alert('La durée doit être un nombre positif');
+      return;
+    }
 
-  const datefin = calculateDateFinLogic(formData.datedebut, dureeNum);
+    const datefin = calculateDateFinLogic(formData.datedebut, dureeNum);
 
-  setIsSaving(true);
+    setIsSaving(true);
 
-  try {
-    // ✅ CORRECTION : Envoyer TOUS les champs obligatoires
-    await updateTache(selectedTask.id, {
-      nom: selectedTask.nom,
-      description: selectedTask.description,
-      chantierid: selectedTask.chantierid,
-      lotid: selectedTask.lotid,  // ✅ IMPORTANT
-      assigneid: selectedTask.assigneid,
-      assignetype: selectedTask.assignetype,
-      datedebut: formData.datedebut,
-      datefin: datefin,
-      terminee: selectedTask.terminee || false,
-    });
+    try {
+      await updateTache(selectedTask.id, {
+        nom: selectedTask.nom,
+        description: selectedTask.description,
+        chantierid: selectedTask.chantierid,
+        lotid: selectedTask.lotid,
+        assigneid: selectedTask.assigneid,
+        assignetype: selectedTask.assignetype,
+        datedebut: formData.datedebut,
+        datefin: datefin,
+        terminee: selectedTask.terminee || false,
+      });
 
-    setSelectedTask(null);
-  } catch (error) {
-    console.error('❌ Erreur mise à jour tâche:', error);
-    alert('Erreur lors de la mise à jour de la tâche');
-  } finally {
-    setIsSaving(false);
-  }
-};
+      setSelectedTask(null);
+    } catch (error) {
+      console.error('❌ Erreur mise à jour tâche:', error);
+      alert('Erreur lors de la mise à jour de la tâche');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-  // ✅ Récupérer nom du chantier
   const getChantierNom = (chantierId) => {
     const chantier = allChantiers?.find(c => c.id === chantierId);
     return chantier?.nomchantier || 'Chantier inconnu';
   };
 
-  // ✅ Récupérer nom du sous-traitant
   const getArtisanNom = (soustraitantId) => {
     if (!soustraitantId) return 'Non assigné';
     const st = allSousTraitants?.find(s => s.id === soustraitantId);
@@ -539,12 +552,18 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                   const dayLetter = format(day, 'EEEEE', { locale: fr });
                   const dayNumber = format(day, 'd');
                   const isTargetDay = isSameDay(day, targetScrollDay);
+                  const isWE = isWeekend(day);
+                  const isFerie = isJourFerie(day);
                   
                   return (
                     <div 
                       key={`day-header-${idx}`} 
                       className={`h-5 flex flex-col items-center justify-center text-[9px] font-medium ${
-                        isTargetDay ? 'bg-blue-500 text-white font-bold' : 'bg-white text-slate-600'
+                        isTargetDay 
+                          ? 'bg-blue-500 text-white font-bold' 
+                          : (isWE || isFerie)
+                            ? 'bg-gray-300 text-slate-600'
+                            : 'bg-white text-slate-600'
                       }`}
                       style={{ width: dayWidth }}
                       title={format(day, 'dd MMM yyyy', { locale: fr })}
@@ -556,30 +575,52 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                 })}
               </div>
 
+              {/* ✅ Colonnes de fond grisées pour weekends et jours fériés */}
               <div className="relative pointer-events-none">
                 {allDays.map((day, i) => {
                   const isTargetDay = isSameDay(day, targetScrollDay);
+                  const isWE = isWeekend(day);
+                  const isFerie = isJourFerie(day);
                   
                   return (
                     <React.Fragment key={`gridline-v-${i}`}>
-                      {isTargetDay && (
+                      {/* Fond gris pour weekends et jours fériés */}
+                      {(isWE || isFerie) && (
+                        <div 
+                          className="absolute bg-gray-200" 
+                          style={{ 
+                            left: getDayPosition(i),
+                            top: 0,
+                            width: dayWidth,
+                            height: chartHeight - 100,
+                            zIndex: 1
+                          }} 
+                        />
+                      )}
+                      
+                      {/* Fond bleu pour aujourd'hui */}
+                      {isTargetDay && !isWE && (
                         <div 
                           className="absolute bg-blue-200 opacity-30" 
                           style={{ 
                             left: getDayPosition(i),
                             top: 0,
                             width: dayWidth,
-                            height: chartHeight - 100
+                            height: chartHeight - 100,
+                            zIndex: 2
                           }} 
                         />
                       )}
+                      
+                      {/* Lignes de grille */}
                       <div 
                         className="absolute border-l border-slate-200/40" 
                         style={{ 
                           left: getDayPosition(i),
                           top: 0,
                           bottom: 0,
-                          height: chartHeight - 100
+                          height: chartHeight - 100,
+                          zIndex: 3
                         }} 
                       />
                     </React.Fragment>
@@ -599,6 +640,9 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                       />
 
                       {allDays.map((day, dayIndex) => {
+                        // ✅ Ne pas afficher de tâches sur les weekends
+                        if (isWeekend(day)) return null;
+                        
                         const dayKey = format(day, 'yyyy-MM-dd');
                         const tasksForDay = chantier.daysTasks.get(dayKey);
                         
@@ -637,7 +681,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         </div>
       </div>
 
-      {/* ✅ Modal d'édition - Style TacheFormModal */}
       <AnimatePresence>
         {selectedTask && (
           <Dialog open={!!selectedTask} onOpenChange={() => setSelectedTask(null)}>
@@ -650,7 +693,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
               </DialogHeader>
 
               <div className="space-y-4 py-4">
-                {/* ✅ Informations en lecture seule */}
                 <div className="space-y-2 p-3 bg-slate-50 rounded-md border">
                   <div>
                     <Label className="text-xs text-slate-500">Nom de la tâche</Label>
@@ -672,7 +714,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                   )}
                 </div>
 
-                {/* ✅ Champs modifiables */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-2">
                     <Label htmlFor="datedebut">
@@ -700,7 +741,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                   </div>
                 </div>
 
-                {/* ✅ Affichage de la date de fin calculée */}
                 {formData.datedebut && formData.duree && (
                   <div className="text-sm text-slate-600 bg-blue-50 p-2 rounded">
                     📅 Date de fin calculée : {' '}
