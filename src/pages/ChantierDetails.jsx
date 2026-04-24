@@ -3,22 +3,18 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useChantier } from '@/context/ChantierContext.jsx';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
-  ArrowLeft, Edit, Trash2, Users, Truck, FileText, CheckSquare, ListChecks, 
-  MessageSquare, User, Phone, Mail, ExternalLink, Info, MapPin, Package, FolderOpen
+  ArrowLeft, Edit, Trash2, ListChecks, CheckSquare, FileText, 
+  User, Phone, Mail, MapPin, Package, FolderOpen, Info
 } from 'lucide-react';
 import { ChantierForm } from '@/components/ChantierForm.jsx';
 import { Planning } from '@/pages/Planning.jsx';
 import { ControlQualite } from '@/pages/ControlQualite.jsx';
 import { CompteRendu } from '@/pages/CompteRendu.jsx';
-import { ChantierCommentaires } from '@/pages/ChantierCommentaires.jsx';
 import { Commandes } from '@/pages/Commandes.jsx';
 import { DocumentsTab } from '@/components/planning/DocumentsTab';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, parseISO } from 'date-fns';
-import { fr } from 'date-fns/locale';
 
 export function ChantierDetails() {
   const { id } = useParams();
@@ -41,57 +37,6 @@ export function ChantierDetails() {
     () => chantiers?.find((c) => c.id === id),
     [chantiers, id]
   );
-
-  // -------- ARTISANS ASSIGNÉS -------------
-  const chantierSousTraitants = useMemo(() => {
-    if (!chantier) return [];
-
-    const ids = new Set(
-      taches
-        ?.filter(t => t.chantierid === chantier.id && t.assignetype === "soustraitant")
-        ?.map(t => t.assigneid)
-    );
-
-    return sousTraitants.filter(st => ids.has(st.id));
-  }, [chantier, taches, sousTraitants]);
-
-  // -------- FOURNISSEURS ASSIGNÉS -------------
-  const chantierFournisseurs = useMemo(() => {
-    if (!chantier) return [];
-
-    const ids = new Set(
-      taches
-        ?.filter(t => t.chantierid === chantier.id && t.assignetype === "fournisseur")
-        ?.map(t => t.assigneid)
-    );
-
-    return fournisseurs.filter(f => ids.has(f.id));
-  }, [chantier, taches, fournisseurs]);
-
-  // -------- TÂCHES PAR FOURNISSEUR -------------
-  const getTachesForFournisseur = (fid) => {
-    return taches
-      .filter(
-        t =>
-          t.chantierid === chantier?.id &&
-          t.assignetype === "fournisseur" &&
-          t.assigneid === fid
-      )
-      .sort((a, b) => {
-        const da = a?.datedebut ? parseISO(a.datedebut) : 0;
-        const db = b?.datedebut ? parseISO(b.datedebut) : 0;
-        return da - db;
-      });
-  };
-
-  const formatDate = (d) => {
-    if (!d) return "N/A";
-    try {
-      return format(parseISO(d), "dd MMMM yyyy", { locale: fr });
-    } catch {
-      return "Date invalide";
-    }
-  };
 
   const handleDelete = () => {
     if (window.confirm(`Supprimer le chantier "${chantier?.nomchantier}" ?`)) {
@@ -203,9 +148,9 @@ export function ChantierDetails() {
             </CardContent>
           </Card>
 
-          {/* ✅ TABS - Planning → Commandes → Documents → CQ → CR → Commentaires */}
+          {/* ✅ TABS - Planning (avec commentaires) → Commandes → Documents → CQ → CR */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 gap-2 h-auto p-2">
+            <TabsList className="grid w-full grid-cols-3 lg:grid-cols-5 gap-2 h-auto p-2">
               <TabsTrigger value="planning" className="flex items-center justify-center">
                 <ListChecks className="mr-2 h-4 w-4" /> 
                 <span className="hidden sm:inline">Planning</span>
@@ -231,11 +176,6 @@ export function ChantierDetails() {
                 <span className="hidden sm:inline">Compte Rendu</span>
                 <span className="sm:hidden">CR</span>
               </TabsTrigger>
-              <TabsTrigger value="commentaires" className="flex items-center justify-center">
-                <MessageSquare className="mr-2 h-4 w-4" /> 
-                <span className="hidden sm:inline">Commentaires</span>
-                <span className="sm:hidden">💬</span>
-              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="planning" className="mt-6">
@@ -256,10 +196,6 @@ export function ChantierDetails() {
 
             <TabsContent value="compte-rendu" className="mt-6">
               <CompteRendu isEmbedded embeddedChantierId={chantier.id} />
-            </TabsContent>
-
-            <TabsContent value="commentaires" className="mt-6">
-              <ChantierCommentaires isEmbedded embeddedChantierId={chantier.id} />
             </TabsContent>
           </Tabs>
         </>
