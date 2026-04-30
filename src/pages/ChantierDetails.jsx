@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   ArrowLeft, Edit, Trash2, ListChecks, CheckSquare, FileText, 
-  User, Phone, Mail, MapPin, Package, FolderOpen, Info
+  User, Phone, Mail, MapPin, Package, FolderOpen, Info, Briefcase
 } from 'lucide-react';
 import { ChantierForm } from '@/components/ChantierForm.jsx';
 import { Planning } from '@/pages/Planning.jsx';
@@ -15,6 +15,7 @@ import { ControlQualite } from '@/pages/ControlQualite.jsx';
 import { CompteRendu } from '@/pages/CompteRendu.jsx';
 import { Commandes } from '@/pages/Commandes.jsx';
 import { DocumentsTab } from '@/components/planning/DocumentsTab';
+import { MarchesTravaux } from '@/components/planning/MarchesTravaux';
 
 export function ChantierDetails() {
   const { id } = useParams();
@@ -148,9 +149,9 @@ export function ChantierDetails() {
             </CardContent>
           </Card>
 
-          {/* ✅ TABS - Planning (avec commentaires) → Commandes → Documents → CQ → CR */}
+          {/* ✅ TABS - Planning → Commandes → Documents → Marchés → CQ → CR */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 lg:grid-cols-5 gap-2 h-auto p-2">
+            <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 gap-2 h-auto p-2">
               <TabsTrigger value="planning" className="flex items-center justify-center">
                 <ListChecks className="mr-2 h-4 w-4" /> 
                 <span className="hidden sm:inline">Planning</span>
@@ -165,6 +166,11 @@ export function ChantierDetails() {
                 <FolderOpen className="mr-2 h-4 w-4" /> 
                 <span className="hidden sm:inline">Documents</span>
                 <span className="sm:hidden">📁</span>
+              </TabsTrigger>
+              <TabsTrigger value="marches" className="flex items-center justify-center">
+                <Briefcase className="mr-2 h-4 w-4" /> 
+                <span className="hidden sm:inline">Marchés</span>
+                <span className="sm:hidden">📋</span>
               </TabsTrigger>
               <TabsTrigger value="controle-qualite" className="flex items-center justify-center">
                 <CheckSquare className="mr-2 h-4 w-4" /> 
@@ -188,6 +194,10 @@ export function ChantierDetails() {
 
             <TabsContent value="documents" className="mt-6">
               <DocumentsTab chantierId={chantier.id} />
+            </TabsContent>
+
+            <TabsContent value="marches" className="mt-6">
+              <MarchesTravaux chantierId={chantier.id} />
             </TabsContent>
 
             <TabsContent value="controle-qualite" className="mt-6">

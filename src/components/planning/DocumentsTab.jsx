@@ -1,23 +1,86 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Plus, FileText, Download, Trash2, Users, User, FileSignature, CheckCircle } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { 
+  Plus, FileText, Download, Trash2, ChevronDown, ChevronRight,
+  File, Folder, Package, Briefcase, Building, FileCheck
+} from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useChantier } from '@/context/ChantierContext';
+import { DocumentUploadModal } from './DocumentUploadModal';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { DocumentUploadModal } from './DocumentUploadModal';
+
+// ✅ CONFIGURATION DES TYPES DE DOCUMENTS
+const DOCUMENT_CATEGORIES = [
+  { 
+    key: 'bon_commande', 
+    label: 'Bons de commande', 
+    icon: Package, 
+    color: 'text-blue-600',
+    bgColor: 'bg-blue-50',
+    borderColor: 'border-blue-200'
+  },
+  { 
+    key: 'plan', 
+    label: 'Plans', 
+    icon: FileText, 
+    color: 'text-purple-600',
+    bgColor: 'bg-purple-50',
+    borderColor: 'border-purple-200'
+  },
+  { 
+    key: 'marche_travaux', 
+    label: 'Marchés de travaux', 
+    icon: Briefcase, 
+    color: 'text-orange-600',
+    bgColor: 'bg-orange-50',
+    borderColor: 'border-orange-200'
+  },
+  { 
+    key: 'etudes', 
+    label: 'Études', 
+    icon: FileCheck, 
+    color: 'text-green-600',
+    bgColor: 'bg-green-50',
+    borderColor: 'border-green-200'
+  },
+  { 
+    key: 'permis_construire', 
+    label: 'Permis de construire', 
+    icon: Building, 
+    color: 'text-red-600',
+    bgColor: 'bg-red-50',
+    borderColor: 'border-red-200'
+  },
+  { 
+    key: 'autre', 
+    label: 'Autres documents', 
+    icon: File, 
+    color: 'text-gray-600',
+    bgColor: 'bg-gray-50',
+    borderColor: 'border-gray-200'
+  },
+];
 
 export function DocumentsTab({ chantierId }) {
   const { toast } = useToast();
-  const { sousTraitants } = useChantier();
+  const { sousTraitants = [] } = useChantier(); // ✅ Récupérer les artisans
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState({
+    bon_commande: true,
+    plan: true,
+    marche_travaux: true,
+    etudes: true,
+    permis_construire: true,
+    autre: true,
+  });
 
-  // Chargement documents (sans wrapper - lecture)
-  const loadDocuments = async () => {
+  // ✅ Charger les documents
+  const fetchDocuments = async () => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -29,7 +92,7 @@ export function DocumentsTab({ chantierId }) {
       if (error) throw error;
       setDocuments(data || []);
     } catch (error) {
-      console.error('Erreur:', error);
+      console.error('Erreur chargement documents:', error);
       toast({
         title: 'Erreur',
         description: 'Impossible de charger les documents',
@@ -41,221 +104,234 @@ export function DocumentsTab({ chantierId }) {
   };
 
   useEffect(() => {
-    loadDocuments();
+    if (chantierId) {
+      fetchDocuments();
+    }
   }, [chantierId]);
 
-  // ✅ Suppression document (AVEC wrapper)
-  const handleDelete = async (doc) => {
-    if (!window.confirm(`Supprimer "${doc.nom_fichier}" ?`)) return;
+  // ✅ Grouper les documents par type
+  const documentsByType = useMemo(() => {
+    const grouped = {};
+    
+    DOCUMENT_CATEGORIES.forEach(cat => {
+      grouped[cat.key] = documents.filter(doc => doc.type_document === cat.key);
+    });
+    
+    return grouped;
+  }, [documents]);
 
-    try {
-      
-        const filePath = doc.url_fichier.split('/').pop();
-        await supabase.storage.from('documents-chantiers').remove([`chantiers/${filePath}`]);
-        
-        // Supprimer aussi le PDF signé si existe
-        if (doc.document_signe_url) {
-          await supabase.storage.from('documents-chantiers').remove([doc.document_signe_url]);
-        }
-        
-        await supabase.from('documents_chantier').delete().eq('id', doc.id);
-
-        toast({ title: 'Document supprimé ✅' });
-        loadDocuments();
-      
-    } catch (error) {
-      toast({ title: 'Erreur ❌', variant: 'destructive' });
-    }
+  // ✅ Toggle expansion d'une catégorie
+  const toggleCategory = (categoryKey) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [categoryKey]: !prev[categoryKey]
+    }));
   };
 
-  // Téléchargement document signé (sans wrapper - lecture seule)
-  const handleDownloadSigned = async (doc) => {
-    if (!doc.document_signe_url) {
-      toast({
-        title: 'Erreur',
-        description: 'Document signé non disponible',
-        variant: 'destructive',
-      });
+  // ✅ Supprimer un document
+  const handleDeleteDocument = async (doc) => {
+    if (!window.confirm(`Supprimer le document "${doc.nom_fichier}" ?`)) {
       return;
     }
 
-    console.log('📥 Téléchargement document signé:', doc.document_signe_url);
-
     try {
-      const { data, error } = await supabase.storage
-        .from('documents-chantiers')
-        .download(doc.document_signe_url);
+      // 1. Supprimer du Storage
+      if (doc.storage_path) {
+        const { error: storageError } = await supabase.storage
+          .from('documents-chantiers')
+          .remove([doc.storage_path]);
 
-      if (error) {
-        console.error('❌ Erreur téléchargement:', error);
-        throw error;
+        if (storageError) {
+          console.error('Erreur suppression storage:', storageError);
+        }
       }
 
-      const url = URL.createObjectURL(data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `signed_${doc.nom_fichier}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // 2. Supprimer de la BDD
+      const { error: dbError } = await supabase
+        .from('documents_chantier')
+        .delete()
+        .eq('id', doc.id);
+
+      if (dbError) throw dbError;
 
       toast({
-        title: 'Téléchargement réussi',
-        description: 'Document signé téléchargé',
+        title: 'Document supprimé ✅',
+        description: `${doc.nom_fichier} a été supprimé`,
       });
 
+      fetchDocuments();
     } catch (error) {
-      console.error('Erreur téléchargement:', error);
+      console.error('Erreur suppression document:', error);
       toast({
         title: 'Erreur',
-        description: 'Impossible de télécharger le document signé',
+        description: 'Impossible de supprimer le document',
         variant: 'destructive',
       });
     }
   };
 
-  const getArtisanNom = (artisanId) => {
-    if (!artisanId) return null;
-    const st = sousTraitants.find(s => s.id === artisanId);
-    return st ? (st.nomsocieteST || `${st.PrenomST} ${st.nomST}`) : 'Inconnu';
-  };
-
-  const formatFileSize = (bytes) => {
-    if (!bytes) return '';
-    const mb = bytes / (1024 * 1024);
-    return mb < 1 ? `${(bytes / 1024).toFixed(0)} Ko` : `${mb.toFixed(1)} Mo`;
-  };
-
-  const formatDateTime = (dateString) => {
-    if (!dateString) return '';
-    try {
-      return format(new Date(dateString), 'dd/MM/yyyy HH:mm', { locale: fr });
-    } catch {
-      return dateString;
-    }
+  // ✅ Télécharger un document
+  const handleDownloadDocument = (doc) => {
+    window.open(doc.url_fichier, '_blank');
   };
 
   if (loading) {
-    return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>;
+    return (
+      <div className="flex justify-center items-center py-12">
+        <p className="text-muted-foreground">Chargement des documents...</p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Documents du chantier</h2>
+        <div>
+          <h2 className="text-2xl font-bold">Documents du chantier</h2>
+          <p className="text-sm text-muted-foreground">
+            {documents.length} document{documents.length > 1 ? 's' : ''} au total
+          </p>
+        </div>
         <Button onClick={() => setIsUploadModalOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Ajouter un document
         </Button>
       </div>
 
-      {documents.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">Aucun document pour ce chantier</p>
-            <Button onClick={() => setIsUploadModalOpen(true)} variant="outline" className="mt-4">
+      {/* ✅ SECTIONS PAR CATÉGORIE */}
+      <div className="space-y-3">
+        {DOCUMENT_CATEGORIES.map(category => {
+          const categoryDocs = documentsByType[category.key] || [];
+          const Icon = category.icon;
+          const isExpanded = expandedCategories[category.key];
+
+          if (categoryDocs.length === 0) {
+            return null; // Ne pas afficher les catégories vides
+          }
+
+          return (
+            <Card key={category.key} className={`${category.borderColor}`}>
+              {/* En-tête de catégorie (cliquable) */}
+              <CardHeader
+                className={`cursor-pointer ${category.bgColor} hover:opacity-80 transition`}
+                onClick={() => toggleCategory(category.key)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {isExpanded ? (
+                      <ChevronDown className="h-5 w-5 text-gray-500" />
+                    ) : (
+                      <ChevronRight className="h-5 w-5 text-gray-500" />
+                    )}
+                    <Icon className={`h-5 w-5 ${category.color}`} />
+                    <CardTitle className="text-lg">
+                      {category.label}
+                      <span className="ml-2 text-sm font-normal text-muted-foreground">
+                        ({categoryDocs.length})
+                      </span>
+                    </CardTitle>
+                  </div>
+                </div>
+              </CardHeader>
+
+              {/* Liste des documents (si catégorie dépliée) */}
+              {isExpanded && (
+                <CardContent className="pt-4">
+                  <div className="space-y-2">
+                    {categoryDocs.map(doc => {
+                      // ✅ Trouver l'artisan assigné
+                      const artisan = doc.artisan_id 
+                        ? sousTraitants.find(st => st.id === doc.artisan_id)
+                        : null;
+                      const artisanNom = artisan 
+                        ? (artisan.nomsocieteST || `${artisan.PrenomST} ${artisan.nomST}`)
+                        : null;
+
+                      return (
+                        <div
+                          key={doc.id}
+                          className="flex items-center justify-between p-3 rounded-lg border bg-white hover:bg-gray-50 transition"
+                        >
+                          <div className="flex items-center gap-3 flex-1">
+                            <Folder className="h-5 w-5 text-gray-400" />
+                            <div className="flex-1">
+                              <p className="font-medium text-sm">{doc.nom_fichier}</p>
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 flex-wrap">
+                                <span>
+                                  Ajouté le {format(new Date(doc.created_at), 'dd MMM yyyy', { locale: fr })}
+                                </span>
+                                {doc.taille_fichier && (
+                                  <span>
+                                    {(doc.taille_fichier / 1024).toFixed(0)} Ko
+                                  </span>
+                                )}
+                                {/* ✅ AFFICHER L'ARTISAN */}
+                                {artisanNom && (
+                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                    👷 {artisanNom}
+                                  </span>
+                                )}
+                                {doc.necessite_signature && (
+                                  <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                                    {doc.signature_statut === 'signe' ? '✅ Signé' : '⏳ Signature requise'}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDownloadDocument(doc)}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteDocument(doc)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-600" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Message si aucun document */}
+      {documents.length === 0 && (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <Folder className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium">Aucun document</h3>
+            <p className="text-muted-foreground mt-1 mb-4">
+              Commencez par ajouter des documents à ce chantier
+            </p>
+            <Button onClick={() => setIsUploadModalOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Ajouter le premier document
+              Ajouter un document
             </Button>
           </CardContent>
         </Card>
-      ) : (
-        <div className="grid gap-4">
-          {documents.map((doc) => (
-            <Card key={doc.id} className={doc.signature_statut === 'en_attente' ? 'border-orange-300' : ''}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-3 flex-1">
-                    <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
-                    <div className="flex-1">
-                      <h3 className="font-medium">{doc.nom_fichier}</h3>
-                      <div className="flex gap-4 text-sm text-muted-foreground mt-1">
-                        <span>{doc.type_fichier?.toUpperCase()}</span>
-                        {doc.taille_fichier && <span>{formatFileSize(doc.taille_fichier)}</span>}
-                        <span>{format(new Date(doc.created_at), 'dd/MM/yyyy', { locale: fr })}</span>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 mt-2">
-                        {/* Partage */}
-                        {doc.partage_type === 'tous' ? (
-                          <div className="flex items-center gap-1 text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
-                            <Users className="h-3 w-3" />
-                            Partagé avec tous les artisans
-                          </div>
-                        ) : doc.artisan_id && (
-                          <div className="flex items-center gap-1 text-xs bg-orange-50 text-orange-700 px-2 py-1 rounded">
-                            <User className="h-3 w-3" />
-                            Partagé avec {getArtisanNom(doc.artisan_id)}
-                          </div>
-                        )}
-
-                        {/* Statut signature */}
-                        {doc.necessite_signature && (
-                          <>
-                            {doc.signature_statut === 'signe' ? (
-                              <div className="flex items-center gap-1 text-xs bg-green-50 text-green-700 px-2 py-1 rounded">
-                                <CheckCircle className="h-3 w-3" />
-                                Signé par {doc.signature_artisan_nom} le {formatDateTime(doc.signature_artisan_date)}
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1 text-xs bg-orange-50 text-orange-700 px-2 py-1 rounded">
-                                <FileSignature className="h-3 w-3" />
-                                En attente signature de {getArtisanNom(doc.artisan_assigne_signature)}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    {/* Télécharger document original */}
-                    <Button 
-                      variant="outline" 
-                      size="icon" 
-                      onClick={() => window.open(doc.url_fichier, '_blank')}
-                      title="Télécharger original"
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-
-                    {/* Télécharger document signé */}
-                    {doc.signature_statut === 'signe' && doc.document_signe_url && (
-                      <Button 
-                        variant="outline" 
-                        size="icon" 
-                        onClick={() => handleDownloadSigned(doc)}
-                        className="text-green-600 hover:text-green-700"
-                        title="Télécharger version signée"
-                      >
-                        <FileSignature className="h-4 w-4" />
-                      </Button>
-                    )}
-
-                    <Button 
-                      variant="outline" 
-                      size="icon" 
-                      onClick={() => handleDelete(doc)} 
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
       )}
 
+      {/* Modal d'upload */}
       <DocumentUploadModal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
         chantierId={chantierId}
-        onSuccess={loadDocuments}
+        onSuccess={fetchDocuments}
       />
     </div>
   );

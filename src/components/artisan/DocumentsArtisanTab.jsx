@@ -20,7 +20,6 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
   const [signing, setSigning] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
 
-  // Chargement documents (sans wrapper - lecture)
   const loadDocuments = async () => {
     try {
       setLoading(true);
@@ -31,7 +30,7 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
         .select('*')
         .eq('chantier_id', chantierId)
         .or(`partage_type.eq.tous,artisan_id.eq.${soustraitantId}`)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false});
 
       if (error) throw error;
       
@@ -69,53 +68,44 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
     }
   };
 
-  // ✅ Marquer document comme vu (AVEC wrapper)
   const marquerDocumentVu = async (documentId) => {
     try {
+      console.log('📝 Marquage document comme vu:', documentId);
       
-        console.log('📝 Marquage document comme vu:', documentId);
-        
-        // Récupérer le document actuel
-        const { data: doc, error: fetchError } = await supabase
-          .from('documents_chantier')
-          .select('artisans_vus')
-          .eq('id', documentId)
-          .single();
+      const { data: doc, error: fetchError } = await supabase
+        .from('documents_chantier')
+        .select('artisans_vus')
+        .eq('id', documentId)
+        .single();
 
-        if (fetchError) throw fetchError;
+      if (fetchError) throw fetchError;
 
-        // Vérifier si artisan déjà dans la liste
-        const artisansVus = doc.artisans_vus || [];
-        if (artisansVus.includes(soustraitantId)) {
-          console.log('✓ Document déjà marqué comme vu');
-          return;
-        }
+      const artisansVus = doc.artisans_vus || [];
+      if (artisansVus.includes(soustraitantId)) {
+        console.log('✓ Document déjà marqué comme vu');
+        return;
+      }
 
-        // Ajouter l'artisan à la liste
-        const nouveauxArtisansVus = [...artisansVus, soustraitantId];
+      const nouveauxArtisansVus = [...artisansVus, soustraitantId];
 
-        const { error: updateError } = await supabase
-          .from('documents_chantier')
-          .update({ artisans_vus: nouveauxArtisansVus })
-          .eq('id', documentId);
+      const { error: updateError } = await supabase
+        .from('documents_chantier')
+        .update({ artisans_vus: nouveauxArtisansVus })
+        .eq('id', documentId);
 
-        if (updateError) throw updateError;
+      if (updateError) throw updateError;
 
-        console.log('✅ Document marqué comme vu');
-        
-        // Recharger les documents
-        setTimeout(() => {
-          loadDocuments();
-        }, 500);
+      console.log('✅ Document marqué comme vu');
       
+      setTimeout(() => {
+        loadDocuments();
+      }, 500);
     } catch (error) {
       console.error('Erreur marquage document vu:', error);
-      // Ne pas bloquer le téléchargement si le tracking échoue
     }
   };
 
   const handleViewDocument = async (doc) => {
-    // Si signature requise et pas encore signé, ouvrir pour signature
     if (doc.necessite_signature && 
         doc.artisan_assigne_signature === soustraitantId && 
         doc.signature_statut === 'en_attente') {
@@ -141,7 +131,6 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
         });
       }
     } else {
-      // Télécharger le document
       const pathToDownload = (doc.signature_statut === 'signe' && doc.document_signe_url) 
         ? doc.document_signe_url 
         : doc.storage_path;
@@ -158,7 +147,6 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
           throw error;
         }
 
-        // Créer URL et ouvrir
         const url = URL.createObjectURL(data);
         const a = document.createElement('a');
         a.href = url;
@@ -168,7 +156,6 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
 
-        // Marquer comme "vu" si pas à signer
         if (!doc.necessite_signature) {
           await marquerDocumentVu(doc.id);
         }
@@ -184,7 +171,6 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
     }
   };
 
-  // ✅ Signature document (AVEC wrapper)
   const handleSignDocument = async () => {
     if (!signatureData || !selectedDoc) {
       toast({
@@ -198,113 +184,125 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
     setSigning(true);
 
     try {
-      
-        // 1. Télécharger le PDF original
-        const { data: pdfBlob, error: downloadError } = await supabase.storage
-          .from('documents-chantiers')
-          .download(selectedDoc.storage_path);
+      const { data: pdfBlob, error: downloadError } = await supabase.storage
+        .from('documents-chantiers')
+        .download(selectedDoc.storage_path);
 
-        if (downloadError) throw downloadError;
+      if (downloadError) throw downloadError;
 
-        // 2. Charger le PDF avec pdf-lib
-        const arrayBuffer = await pdfBlob.arrayBuffer();
-        const pdfDoc = await PDFDocument.load(arrayBuffer);
+      const arrayBuffer = await pdfBlob.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(arrayBuffer);
 
-        // 3. Charger l'image de signature
-        const signatureImage = await pdfDoc.embedPng(signatureData);
-        
-        // 4. Ajouter la signature sur la dernière page
-        const pages = pdfDoc.getPages();
-        const lastPage = pages[pages.length - 1];
-        const { width, height } = lastPage.getSize();
+      const signatureImage = await pdfDoc.embedPng(signatureData);
 
-        const signatureWidth = 150;
-        const signatureHeight = 50;
+      const pages = pdfDoc.getPages();
+      const signatureWidth = 150;
+      const signatureHeight = 50;
+
+      const nomComplet = `${profile.prenom} ${profile.nom}`;
+      const dateSignature = format(new Date(), "dd/MM/yyyy 'à' HH:mm", { locale: fr });
+
+      pages.forEach((page) => {
+        const { width } = page.getSize();
+
         const x = width - signatureWidth - 50;
         const y = 50;
 
-        lastPage.drawImage(signatureImage, {
+        page.drawImage(signatureImage, {
           x,
           y,
           width: signatureWidth,
           height: signatureHeight,
         });
 
-        const nomComplet = `${profile.prenom} ${profile.nom}`;
-        const dateSignature = format(new Date(), "dd/MM/yyyy 'à' HH:mm", { locale: fr });
+        const textX = x - 100;
         
-        lastPage.drawText(`Signé par: ${nomComplet}`, {
-          x: x,
-          y: y - 15,
+        page.drawText(`Signé par: ${nomComplet}`, {
+          x: textX,
+          y: y + 30,
           size: 8,
           color: rgb(0, 0, 0),
         });
 
-        lastPage.drawText(`Date: ${dateSignature}`, {
-          x: x,
-          y: y - 27,
+        page.drawText(`Date: ${dateSignature}`, {
+          x: textX,
+          y: y + 15,
           size: 8,
           color: rgb(0, 0, 0),
         });
+      });
 
-        // 5. Sauvegarder le PDF modifié
-        const pdfBytes = await pdfDoc.save();
-        const pdfFile = new Blob([pdfBytes], { type: 'application/pdf' });
+      const pdfBytes = await pdfDoc.save();
+      const pdfFile = new Blob([pdfBytes], { type: 'application/pdf' });
 
-        // 6. Upload du PDF signé
-        const timestamp = Date.now();
-        const signedFileName = `signed_${timestamp}_${selectedDoc.nom_fichier}`;
-        const signedPath = `signed/${signedFileName}`;
+      const timestamp = Date.now();
+      const signedFileName = `signed_${timestamp}_${selectedDoc.nom_fichier}`;
+      const signedPath = `signed/${signedFileName}`;
 
-        console.log('📤 Upload PDF signé vers:', signedPath);
+      console.log('📤 Upload PDF signé vers:', signedPath);
 
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('documents-chantiers')
-          .upload(signedPath, pdfFile, {
-            contentType: 'application/pdf',
-            upsert: false
-          });
-
-        if (uploadError) {
-          console.error('❌ Erreur upload storage:', uploadError);
-          throw new Error(`Upload failed: ${uploadError.message}`);
-        }
-
-        console.log('✅ Upload réussi:', uploadData);
-
-        // 7. Mettre à jour le document dans la BDD
-        console.log('📝 Mise à jour BDD document ID:', selectedDoc.id);
-        
-        const { error: updateError } = await supabase
-          .from('documents_chantier')
-          .update({
-            signature_statut: 'signe',
-            signature_artisan_date: new Date().toISOString(),
-            signature_artisan_nom: nomComplet,
-            document_signe_url: signedPath,
-          })
-          .eq('id', selectedDoc.id);
-
-        if (updateError) {
-          console.error('❌ Erreur update BDD:', updateError);
-          throw updateError;
-        }
-
-        toast({
-          title: 'Document signé ✅',
-          description: 'Votre signature a été enregistrée avec succès',
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents-chantiers')
+        .upload(signedPath, pdfFile, {
+          contentType: 'application/pdf',
+          upsert: false
         });
 
-        // 8. Reset
-        setSelectedDoc(null);
-        setPdfUrl(null);
-        setSignatureData(null);
-        
-        // Rechargement
-        setTimeout(async () => {
-          await loadDocuments();
-        }, 1000);
+      if (uploadError) {
+        console.error('❌ Erreur upload storage:', uploadError);
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
+      console.log('✅ Upload réussi:', uploadData);
+
+      console.log('📝 Mise à jour BDD document ID:', selectedDoc.id);
       
+      const { error: updateError } = await supabase
+        .from('documents_chantier')
+        .update({
+          signature_statut: 'signe',
+          signature_artisan_date: new Date().toISOString(),
+          signature_artisan_nom: nomComplet,
+          document_signe_url: signedPath,
+        })
+        .eq('id', selectedDoc.id);
+
+      if (updateError) {
+        console.error('❌ Erreur update BDD:', updateError);
+        throw updateError;
+      }
+
+      // ✅ NOUVEAU : Si c'est un marché de travaux, mettre à jour la table marches_travaux
+      if (selectedDoc.type_document === 'marche_travaux') {
+        console.log('📋 Mise à jour marches_travaux pour document ID:', selectedDoc.id);
+        
+        const { error: marcheError } = await supabase
+          .from('marches_travaux')
+          .update({
+            date_signature: new Date().toISOString(),
+          })
+          .eq('document_id', selectedDoc.id);
+
+        if (marcheError) {
+          console.error('❌ Erreur update marches_travaux:', marcheError);
+          // Ne pas bloquer si cette mise à jour échoue
+        } else {
+          console.log('✅ Date signature mise à jour dans marches_travaux');
+        }
+      }
+
+      toast({
+        title: 'Document signé ✅',
+        description: 'Votre signature a été enregistrée avec succès',
+      });
+
+      setSelectedDoc(null);
+      setPdfUrl(null);
+      setSignatureData(null);
+      
+      setTimeout(async () => {
+        await loadDocuments();
+      }, 1000);
 
     } catch (error) {
       console.error('❌ Erreur signature complète:', error);
@@ -326,7 +324,6 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
     );
   }
 
-  // Vue signature
   if (selectedDoc) {
     return (
       <Card>
@@ -338,7 +335,6 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
           <p className="text-sm text-muted-foreground">{selectedDoc.nom_fichier}</p>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Aperçu PDF */}
           {pdfUrl && (
             <div className="border rounded-lg overflow-hidden">
               <iframe
@@ -349,13 +345,11 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
             </div>
           )}
 
-          {/* Canvas signature */}
           <SignatureCanvas
             onSignatureCapture={setSignatureData}
             onClear={() => setSignatureData(null)}
           />
 
-          {/* Informations légales */}
           <div className="p-3 bg-slate-50 border rounded-md text-xs text-slate-600">
             <p className="font-medium mb-1">En signant ce document :</p>
             <ul className="list-disc list-inside space-y-1">
@@ -365,7 +359,6 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
             </ul>
           </div>
 
-          {/* Boutons */}
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -392,7 +385,6 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
     );
   }
 
-  // Vue liste
   return (
     <div className="space-y-4">
       {documents.length === 0 ? (
