@@ -22,7 +22,7 @@ export function ChantierDetailsArtisan() {
   const { sousTraitants } = useSousTraitant();
   const { controles, modelesCQ } = useReferentielCQ();
   
-  const [activeTab, setActiveTab] = useState('taches');
+  const [activeTab, setActiveTab] = useState('documents'); // ✅ MODIFIÉ : Ouvrir sur Documents par défaut
   const [docsASignerCount, setDocsASignerCount] = useState(0);
   const [nouveauxDocsCount, setNouveauxDocsCount] = useState(0);
 

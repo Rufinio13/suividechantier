@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Camera, X, CheckCircle, Upload } from 'lucide-react';
+import { Camera, X, CheckCircle, Upload, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
@@ -148,12 +149,23 @@ export function TacheDetailModalArtisan({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Infos tâche */}
+          {/* ✅ NOUVEAU : Infos tâche avec lien vers chantier */}
           <div>
             {chantier && (
-              <h2 className="text-xl font-bold text-slate-900 mb-2">
-                Chantier : {chantier.nomchantier}
-              </h2>
+              <div className="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                <p className="text-xs text-orange-600 font-medium mb-1">Chantier</p>
+                <Link 
+                  to={`/artisan/chantiers/${chantier.id}`}
+                  onClick={onClose}
+                  className="text-lg font-bold text-orange-700 hover:text-orange-800 flex items-center gap-2 group"
+                >
+                  {chantier.nomchantier}
+                  <ExternalLink className="h-4 w-4 opacity-0 group-hover:opacity-100 transition" />
+                </Link>
+                <p className="text-xs text-orange-600 mt-1">
+                  Cliquez pour voir le détail du chantier
+                </p>
+              </div>
             )}
             <h3 className="text-lg font-semibold">{tache.nom}</h3>
             {lot && <p className="text-sm text-muted-foreground">Lot : {lot.lot}</p>}

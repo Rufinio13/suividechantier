@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { FileText, Download, FileSignature, CheckCircle } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { 
+  FileText, Download, FileSignature, CheckCircle, ChevronDown, ChevronRight,
+  File, Folder, Package, Briefcase, Building, FileCheck
+} from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -9,6 +12,58 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { SignatureCanvas } from '@/components/SignatureCanvas';
 import { PDFDocument, rgb } from 'pdf-lib';
+
+// ✅ CONFIGURATION DES TYPES DE DOCUMENTS
+const DOCUMENT_CATEGORIES = [
+  { 
+    key: 'bon_commande', 
+    label: 'Bons de commande', 
+    icon: Package, 
+    color: 'text-blue-600',
+    bgColor: 'bg-blue-50',
+    borderColor: 'border-blue-200'
+  },
+  { 
+    key: 'plan', 
+    label: 'Plans', 
+    icon: FileText, 
+    color: 'text-purple-600',
+    bgColor: 'bg-purple-50',
+    borderColor: 'border-purple-200'
+  },
+  { 
+    key: 'marche_travaux', 
+    label: 'Marchés de travaux', 
+    icon: Briefcase, 
+    color: 'text-orange-600',
+    bgColor: 'bg-orange-50',
+    borderColor: 'border-orange-200'
+  },
+  { 
+    key: 'etudes', 
+    label: 'Études', 
+    icon: FileCheck, 
+    color: 'text-green-600',
+    bgColor: 'bg-green-50',
+    borderColor: 'border-green-200'
+  },
+  { 
+    key: 'permis_construire', 
+    label: 'Permis de construire', 
+    icon: Building, 
+    color: 'text-red-600',
+    bgColor: 'bg-red-50',
+    borderColor: 'border-red-200'
+  },
+  { 
+    key: 'autre', 
+    label: 'Autres documents', 
+    icon: File, 
+    color: 'text-gray-600',
+    bgColor: 'bg-gray-50',
+    borderColor: 'border-gray-200'
+  },
+];
 
 export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
   const { toast } = useToast();
@@ -19,7 +74,16 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
   const [signatureData, setSignatureData] = useState(null);
   const [signing, setSigning] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
+  const [expandedCategories, setExpandedCategories] = useState({
+    bon_commande: true,
+    plan: true,
+    marche_travaux: true,
+    etudes: true,
+    permis_construire: true,
+    autre: true,
+  });
 
+  // ✅ Charger les documents
   const loadDocuments = async () => {
     try {
       setLoading(true);
@@ -30,7 +94,7 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
         .select('*')
         .eq('chantier_id', chantierId)
         .or(`partage_type.eq.tous,artisan_id.eq.${soustraitantId}`)
-        .order('created_at', { ascending: false});
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
       
@@ -52,6 +116,25 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
   useEffect(() => {
     loadDocuments();
   }, [chantierId, soustraitantId]);
+
+  // ✅ Grouper les documents par type
+  const documentsByType = useMemo(() => {
+    const grouped = {};
+    
+    DOCUMENT_CATEGORIES.forEach(cat => {
+      grouped[cat.key] = documents.filter(doc => doc.type_document === cat.key);
+    });
+    
+    return grouped;
+  }, [documents]);
+
+  // ✅ Toggle expansion d'une catégorie
+  const toggleCategory = (categoryKey) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [categoryKey]: !prev[categoryKey]
+    }));
+  };
 
   const formatFileSize = (bytes) => {
     if (!bytes) return '';
@@ -272,7 +355,7 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
         throw updateError;
       }
 
-      // ✅ NOUVEAU : Si c'est un marché de travaux, mettre à jour la table marches_travaux
+      // ✅ Si c'est un marché de travaux, mettre à jour la table marches_travaux
       if (selectedDoc.type_document === 'marche_travaux') {
         console.log('📋 Mise à jour marches_travaux pour document ID:', selectedDoc.id);
         
@@ -285,7 +368,6 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
 
         if (marcheError) {
           console.error('❌ Erreur update marches_travaux:', marcheError);
-          // Ne pas bloquer si cette mise à jour échoue
         } else {
           console.log('✅ Date signature mise à jour dans marches_travaux');
         }
@@ -324,6 +406,7 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
     );
   }
 
+  // Vue signature
   if (selectedDoc) {
     return (
       <Card>
@@ -385,99 +468,158 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
     );
   }
 
+  // ✅ Vue liste par catégories
   return (
     <div className="space-y-4">
-      {documents.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">Aucun document disponible</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4">
-          {documents.map((doc) => {
-            const needsSignature = doc.necessite_signature && 
-                                  doc.artisan_assigne_signature === soustraitantId && 
-                                  doc.signature_statut === 'en_attente';
+      <div>
+        <h2 className="text-xl font-bold">Documents du chantier</h2>
+        <p className="text-sm text-muted-foreground">
+          {documents.length} document{documents.length > 1 ? 's' : ''} au total
+        </p>
+      </div>
 
-            const isNouveau = !doc.necessite_signature && 
-                             (!doc.artisans_vus || !doc.artisans_vus.includes(soustraitantId));
+      {/* ✅ SECTIONS PAR CATÉGORIE */}
+      <div className="space-y-3">
+        {DOCUMENT_CATEGORIES.map(category => {
+          const categoryDocs = documentsByType[category.key] || [];
+          const Icon = category.icon;
+          const isExpanded = expandedCategories[category.key];
 
-            return (
-              <Card 
-                key={doc.id}
-                className={needsSignature ? 'border-orange-300 bg-orange-50' : ''}
+          if (categoryDocs.length === 0) {
+            return null; // Ne pas afficher les catégories vides
+          }
+
+          return (
+            <Card key={category.key} className={`${category.borderColor}`}>
+              {/* En-tête de catégorie (cliquable) */}
+              <CardHeader
+                className={`cursor-pointer ${category.bgColor} hover:opacity-80 transition`}
+                onClick={() => toggleCategory(category.key)}
               >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3 flex-1">
-                      <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="font-medium">{doc.nom_fichier}</h3>
-                          
-                          {needsSignature && (
-                            <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <FileSignature className="h-3 w-3" />
-                              À signer
-                            </span>
-                          )}
-                          
-                          {isNouveau && (
-                            <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <FileText className="h-3 w-3" />
-                              Nouveau
-                            </span>
-                          )}
-                          
-                          {doc.signature_statut === 'signe' && doc.artisan_assigne_signature === soustraitantId && (
-                            <span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <CheckCircle className="h-3 w-3" />
-                              Signé
-                            </span>
-                          )}
-                        </div>
-                        
-                        <div className="flex gap-4 text-sm text-muted-foreground mt-1">
-                          <span>{doc.type_fichier?.toUpperCase()}</span>
-                          {doc.taille_fichier && <span>{formatFileSize(doc.taille_fichier)}</span>}
-                          <span>{format(new Date(doc.created_at), 'dd/MM/yyyy', { locale: fr })}</span>
-                        </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {isExpanded ? (
+                      <ChevronDown className="h-5 w-5 text-gray-500" />
+                    ) : (
+                      <ChevronRight className="h-5 w-5 text-gray-500" />
+                    )}
+                    <Icon className={`h-5 w-5 ${category.color}`} />
+                    <CardTitle className="text-lg">
+                      {category.label}
+                      <span className="ml-2 text-sm font-normal text-muted-foreground">
+                        ({categoryDocs.length})
+                      </span>
+                    </CardTitle>
+                  </div>
+                </div>
+              </CardHeader>
 
-                        {doc.signature_statut === 'signe' && doc.signature_artisan_nom && (
-                          <p className="text-xs text-green-600 mt-2">
-                            ✓ Signé le {formatDateTime(doc.signature_artisan_date)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
+              {/* Liste des documents (si catégorie dépliée) */}
+              {isExpanded && (
+                <CardContent className="pt-4">
+                  <div className="space-y-2">
+                    {categoryDocs.map(doc => {
+                      const needsSignature = doc.necessite_signature && 
+                                            doc.artisan_assigne_signature === soustraitantId && 
+                                            doc.signature_statut === 'en_attente';
 
-                    <div className="flex gap-2">
-                      {needsSignature ? (
-                        <Button
-                          onClick={() => handleViewDocument(doc)}
-                          className="bg-orange-600 hover:bg-orange-700"
+                      const isNouveau = !doc.necessite_signature && 
+                                       (!doc.artisans_vus || !doc.artisans_vus.includes(soustraitantId));
+
+                      return (
+                        <div
+                          key={doc.id}
+                          className={`flex items-center justify-between p-3 rounded-lg border transition ${
+                            needsSignature ? 'bg-orange-50 border-orange-300' : 'bg-white hover:bg-gray-50'
+                          }`}
                         >
-                          <FileSignature className="mr-2 h-4 w-4" />
-                          Signer
-                        </Button>
-                      ) : (
-                        <Button 
-                          variant="outline" 
-                          size="icon"
-                          onClick={() => handleViewDocument(doc)}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
+                          <div className="flex items-center gap-3 flex-1">
+                            <Folder className="h-5 w-5 text-gray-400" />
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-medium text-sm">{doc.nom_fichier}</p>
+                                
+                                {needsSignature && (
+                                  <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <FileSignature className="h-3 w-3" />
+                                    À signer
+                                  </span>
+                                )}
+                                
+                                {isNouveau && (
+                                  <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <FileText className="h-3 w-3" />
+                                    Nouveau
+                                  </span>
+                                )}
+                                
+                                {doc.signature_statut === 'signe' && doc.artisan_assigne_signature === soustraitantId && (
+                                  <span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full flex items-center gap-1">
+                                    <CheckCircle className="h-3 w-3" />
+                                    Signé
+                                  </span>
+                                )}
+                              </div>
+                              
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 flex-wrap">
+                                <span>
+                                  Ajouté le {format(new Date(doc.created_at), 'dd MMM yyyy', { locale: fr })}
+                                </span>
+                                {doc.taille_fichier && (
+                                  <span>{formatFileSize(doc.taille_fichier)}</span>
+                                )}
+                                {doc.signature_statut === 'signe' && doc.signature_artisan_date && (
+                                  <span className="text-green-600 font-medium">
+                                    ✓ Signé le {formatDateTime(doc.signature_artisan_date)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-2">
+                            {needsSignature ? (
+                              <Button
+                                onClick={() => handleViewDocument(doc)}
+                                className="bg-orange-600 hover:bg-orange-700"
+                                size="sm"
+                              >
+                                <FileSignature className="mr-2 h-4 w-4" />
+                                Signer
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleViewDocument(doc)}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Message si aucun document */}
+      {documents.length === 0 && (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <Folder className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium">Aucun document</h3>
+            <p className="text-muted-foreground mt-1">
+              Aucun document n'a été partagé avec vous pour ce chantier
+            </p>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
