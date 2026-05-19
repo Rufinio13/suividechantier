@@ -10,6 +10,7 @@ import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
 import { useReferentielCQ } from '@/context/ReferentielCQContext';
 import { supabase } from '@/lib/supabaseClient';
+import logoEvabois from '@/assets/logo-evabois.png';
 
 export function LayoutArtisan() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -21,7 +22,7 @@ export function LayoutArtisan() {
   const [tachesEnRetardCount, setTachesEnRetardCount] = useState(0);
   const [nouvellesTachesCount, setNouvellesTachesCount] = useState(0);
   const [tachesModifieesCount, setTachesModifieesCount] = useState(0);
-  
+
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut, profile } = useAuth();
@@ -50,142 +51,105 @@ export function LayoutArtisan() {
   useEffect(() => {
     const loadTachesEnRetard = () => {
       if (!monSousTraitantId || !taches) return;
-
       try {
         const maintenant = new Date();
-        
         const enRetard = taches.filter(t => {
           const estMonTache = t.assignetype === 'soustraitant' && t.assigneid === monSousTraitantId;
           const nonTerminee = !t.artisan_termine && !t.constructeur_valide;
           const dateFinPassee = t.datefin && new Date(t.datefin) < maintenant;
-          
           return estMonTache && nonTerminee && dateFinPassee;
         });
-
         console.log('📊 Tâches en retard:', enRetard.length);
         setTachesEnRetardCount(enRetard.length);
       } catch (error) {
         console.error('Erreur comptage tâches en retard:', error);
       }
     };
-
     loadTachesEnRetard();
     const interval = setInterval(loadTachesEnRetard, 30000);
     return () => clearInterval(interval);
   }, [monSousTraitantId, taches]);
-  
+
   // ✅ Compter les notifications
   useEffect(() => {
     const loadNotificationsCount = async () => {
       if (!monSousTraitantId) return;
-      
       try {
         const { data, error } = await supabase
           .from('notifications_taches_artisan')
           .select('type, vu')
           .eq('soustraitant_id', monSousTraitantId)
           .eq('vu', false);
-        
         if (error) throw error;
-        
         const nouvelles = data.filter(n => n.type === 'nouvelle_tache').length;
         const modifiees = data.filter(n => n.type === 'date_modifiee').length;
-        
         console.log('📊 Nouvelles tâches:', nouvelles);
         console.log('📊 Tâches modifiées:', modifiees);
-        
         setNouvellesTachesCount(nouvelles);
         setTachesModifieesCount(modifiees);
       } catch (error) {
         console.error('Erreur comptage notifications:', error);
       }
     };
-    
     loadNotificationsCount();
     const interval = setInterval(loadNotificationsCount, 30000);
     return () => clearInterval(interval);
   }, [monSousTraitantId]);
 
-  // ✅ CORRIGÉ : Compter les NC EXACTEMENT comme NonConformitesArtisanTab
+  // ✅ Compter les NC
   useEffect(() => {
     const loadNcCount = () => {
       if (!monSousTraitantId || !controles || !modelesCQ || mesChantierIds.length === 0) return;
-
       try {
         let totalNC = 0;
         const controlesChantier = controles.filter(c => mesChantierIds.includes(c.chantier_id));
-
         controlesChantier.forEach(ctrl => {
           const modele = modelesCQ.find(m => m.id === ctrl.modele_cq_id);
           if (!modele) return;
-
-          // ✅ 1️⃣ NC DU MODÈLE DE BASE (ctrl.resultats)
           if (ctrl.resultats) {
             Object.entries(ctrl.resultats).forEach(([categorieId, resultatsCategorie]) => {
               const categorie = modele.categories?.find(c => c.id === categorieId);
               if (!categorie) return;
-
-              // ✅ Vérifier si la catégorie n'est pas supprimée
               const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
               if (categoriesSupprimees.includes(categorieId)) return;
-
               Object.entries(resultatsCategorie).forEach(([sousCategorieId, resultatsSousCategorie]) => {
                 const sousCategorie = categorie.sousCategories?.find(sc => sc.id === sousCategorieId);
                 if (!sousCategorie) return;
-
-                // ✅ Vérifier si la sous-catégorie n'est pas supprimée
                 const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
                 if (sousCategoriesSupprimees.includes(sousCategorieId)) return;
-
                 Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
-                  // ✅ Vérifier si le point n'est pas supprimé
                   const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieId] || [];
                   if (pointsSupprimes.includes(pointControleId)) return;
-
                   if (
-                    resultatPoint.resultat === 'NC' && 
+                    resultatPoint.resultat === 'NC' &&
                     resultatPoint.soustraitant_id === monSousTraitantId &&
                     !resultatPoint.repriseValidee
                   ) {
                     const pointControle = sousCategorie.pointsControle?.find(pc => pc.id === pointControleId);
-                    if (pointControle) {
-                      totalNC++;
-                    }
+                    if (pointControle) totalNC++;
                   }
                 });
               });
             });
           }
-
-          // ✅ 2️⃣ NC DES POINTS SPÉCIFIQUES (ctrl.points_specifiques)
           if (ctrl.points_specifiques) {
             Object.entries(ctrl.points_specifiques).forEach(([categorieId, categoriePoints]) => {
               const categorie = modele.categories?.find(c => c.id === categorieId);
-              
-              // ✅ Vérifier si la catégorie n'est pas supprimée
               const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
               if (categoriesSupprimees.includes(categorieId)) return;
-              
               Object.entries(categoriePoints).forEach(([sousCategorieKey, pointsMap]) => {
-                const sousCategorie = sousCategorieKey === '_global' 
+                const sousCategorie = sousCategorieKey === '_global'
                   ? { id: '_global', nom: 'Points spécifiques' }
                   : categorie?.sousCategories?.find(sc => sc.id === sousCategorieKey);
-                
                 if (!sousCategorie) return;
-
-                // ✅ Vérifier si la sous-catégorie n'est pas supprimée
                 const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
                 if (sousCategoriesSupprimees.includes(sousCategorieKey)) return;
-
                 Object.entries(pointsMap).forEach(([pointControleId, pointData]) => {
-                  // ✅ Vérifier si le point n'est pas supprimé
                   const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieKey] || [];
                   if (pointsSupprimes.includes(pointControleId)) return;
-
                   const resultatPoint = ctrl.resultats?.[categorieId]?.[sousCategorieKey]?.[pointControleId];
-                  
                   if (
-                    resultatPoint?.resultat === 'NC' && 
+                    resultatPoint?.resultat === 'NC' &&
                     resultatPoint.soustraitant_id === monSousTraitantId &&
                     !resultatPoint.repriseValidee
                   ) {
@@ -196,35 +160,29 @@ export function LayoutArtisan() {
             });
           }
         });
-
-        console.log('📊 NC non validées (après filtrage supprimés):', totalNC);
+        console.log('📊 NC non validées:', totalNC);
         setNcCount(totalNC);
       } catch (error) {
         console.error('Erreur comptage NC:', error);
       }
     };
-
     loadNcCount();
     const interval = setInterval(loadNcCount, 30000);
     return () => clearInterval(interval);
   }, [monSousTraitantId, controles, modelesCQ, mesChantierIds]);
 
-  // ✅ Compter les documents à signer + nouveaux
+  // ✅ Compter les documents
   useEffect(() => {
     const loadDocsCount = async () => {
       if (!monSousTraitantId || mesChantierIds.length === 0) return;
-
       try {
         const { data, error } = await supabase
           .from('documents_chantier')
           .select('necessite_signature, signature_statut, artisan_assigne_signature, artisans_vus, chantier_id')
           .in('chantier_id', mesChantierIds);
-
         if (error) throw error;
-
         let aSignerCount = 0;
         let nouveauxCount = 0;
-
         data.forEach(doc => {
           if (
             doc.necessite_signature &&
@@ -232,61 +190,52 @@ export function LayoutArtisan() {
             doc.signature_statut === 'en_attente'
           ) {
             aSignerCount++;
-          }
-          else if (
+          } else if (
             !doc.necessite_signature &&
             (!doc.artisans_vus || !doc.artisans_vus.includes(monSousTraitantId))
           ) {
             nouveauxCount++;
           }
         });
-
         console.log('📊 Documents à signer:', aSignerCount);
         console.log('📊 Nouveaux documents:', nouveauxCount);
-        
         setDocsASignerCount(aSignerCount);
         setNouveauxDocsCount(nouveauxCount);
       } catch (error) {
         console.error('Erreur comptage documents:', error);
       }
     };
-
     loadDocsCount();
     const interval = setInterval(loadDocsCount, 30000);
     return () => clearInterval(interval);
   }, [monSousTraitantId, mesChantierIds]);
 
-  // Charger le nombre de SAV
+  // ✅ Compter les SAV
   useEffect(() => {
     const loadSavCount = async () => {
       if (!monSousTraitantId) return;
-
       try {
         const { count, error } = await supabase
           .from('sav')
           .select('*', { count: 'exact', head: true })
           .eq('soustraitant_id', monSousTraitantId)
           .eq('constructeur_valide', false);
-
         if (error) throw error;
-
         console.log('📊 SAV non validés:', count);
         setSavCount(count || 0);
       } catch (error) {
         console.error('Erreur chargement SAV:', error);
       }
     };
-
     loadSavCount();
     const interval = setInterval(loadSavCount, 30000);
     return () => clearInterval(interval);
   }, [monSousTraitantId]);
 
-  // ✅ Menu artisan avec tous les badges
   const navItems = [
-    { 
-      name: 'Mon calendrier', 
-      href: '/artisan', 
+    {
+      name: 'Mon calendrier',
+      href: '/artisan',
       icon: Calendar,
       badges: [
         { count: tachesEnRetardCount, variant: 'destructive', label: 'En retard' },
@@ -294,10 +243,10 @@ export function LayoutArtisan() {
         { count: tachesModifieesCount, variant: 'success', label: 'Modifiées' }
       ]
     },
-    { 
-      name: 'Mes chantiers', 
-      href: '/artisan/chantiers', 
-      icon: Building2, 
+    {
+      name: 'Mes chantiers',
+      href: '/artisan/chantiers',
+      icon: Building2,
       badges: [
         { count: ncCount, variant: 'destructive', label: 'NC' },
         { count: docsASignerCount, variant: 'warning', label: 'À signer' },
@@ -311,9 +260,7 @@ export function LayoutArtisan() {
 
   const handleSignOut = async () => {
     if (isLoggingOut) return;
-    
     setIsLoggingOut(true);
-    
     try {
       console.log('🔓 Déconnexion artisan...');
       await signOut();
@@ -328,12 +275,13 @@ export function LayoutArtisan() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#f7f4ef]">
+
       {/* Mobile hamburger */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
-        <Button 
-          variant="outline" 
-          size="icon" 
+        <Button
+          variant="outline"
+          size="icon"
           onClick={toggleSidebar}
           className="rounded-full shadow-md"
         >
@@ -341,64 +289,61 @@ export function LayoutArtisan() {
         </Button>
       </div>
 
-      {/* Sidebar */}
-      <motion.aside 
+      {/* Sidebar — fond blanc, bordure droite beige */}
+      <motion.aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-[#e8e2d9] transform transition-transform duration-300 ease-in-out lg:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         )}
         initial={false}
       >
         <div className="h-full flex flex-col">
-          {/* Logo */}
-          <div className="flex items-center justify-center h-16 px-4 border-b">
-            <Link to="/artisan" className="flex items-center space-x-2">
-              <Building2 className="h-8 w-8 text-orange-500" />
-              <span className="text-xl font-bold bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent">
-                Espace Artisan
-              </span>
-            </Link>
+
+          {/* Logo EVAbois — Espace Artisan */}
+          <div className="flex items-center justify-center h-20 px-4 border-b border-[#e8e2d9]">
+            <Link to="/artisan" className="flex items-center gap-3">
+              <img src={logoEvabois} alt="EVAbois" className="h-12 object-contain" />
+              </Link>
           </div>
-          
+
           {/* Menu */}
           <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
             {navItems.map((item) => {
               const isActive =
                 location.pathname === item.href ||
                 (item.href !== '/artisan' && location.pathname.startsWith(item.href));
-
               const Icon = item.icon;
-
               return (
                 <Link
                   key={item.name}
                   to={item.href}
                   className={cn(
                     "flex items-center justify-between px-4 py-3 text-sm font-medium rounded-md transition-all",
-                    isActive 
-                      ? "bg-orange-500 text-white" 
-                      : "text-gray-700 hover:bg-gray-100"
+                    isActive
+                      ? "bg-[#f0ebe2] text-[#683B11] font-semibold"
+                      : "text-[#5a4a3a] hover:bg-[#f7f4ef]"
                   )}
+                  style={isActive ? { borderLeft: '3px solid #9FC760' } : { borderLeft: '3px solid transparent' }}
                   onClick={() => setSidebarOpen(false)}
                 >
                   <div className="flex items-center">
-                    <Icon className={cn("mr-3 h-5 w-5", isActive ? "text-white" : "text-gray-500")} />
+                    <Icon className={cn("mr-3 h-5 w-5", isActive ? "text-[#9FC760]" : "text-[#A3806D]")} />
                     {item.name}
                   </div>
-                  
-                  {/* ✅ Badges multiples */}
+
+                  {/* Badges multiples */}
                   {item.badges && (
                     <div className="flex gap-1">
-                      {item.badges.map((badge, idx) => 
+                      {item.badges.map((badge, idx) =>
                         badge.count > 0 && (
-                          <Badge 
+                          <Badge
                             key={idx}
                             className={cn(
                               "h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs",
-                              badge.variant === 'destructive' && "bg-red-500 hover:bg-red-600",
-                              badge.variant === 'warning' && "bg-orange-500 hover:bg-orange-600",
-                              badge.variant === 'info' && "bg-blue-500 hover:bg-blue-600",
-                              badge.variant === 'success' && "bg-green-500 hover:bg-green-600"
+                              badge.variant === 'destructive' && "bg-red-500 hover:bg-red-600 text-white",
+                              badge.variant === 'warning' && "bg-[#F8B45B] hover:bg-[#e0a040] text-[#633806]",
+                              badge.variant === 'info' && "bg-blue-500 hover:bg-blue-600 text-white",
+                              badge.variant === 'success' && "bg-[#9FC760] hover:bg-[#8ab550] text-[#27500A]"
                             )}
                           >
                             {badge.count}
@@ -407,11 +352,11 @@ export function LayoutArtisan() {
                       )}
                     </div>
                   )}
-                  
-                  {/* ✅ Badge unique */}
+
+                  {/* Badge unique SAV */}
                   {item.badge > 0 && (
-                    <Badge 
-                      variant="destructive" 
+                    <Badge
+                      variant="destructive"
                       className="ml-auto h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs"
                     >
                       {item.badge}
@@ -421,16 +366,16 @@ export function LayoutArtisan() {
               );
             })}
           </nav>
-          
+
           {/* Logout */}
-          <div className="p-4 border-t">
-            <Button 
-              variant="outline" 
-              className="w-full justify-start text-gray-700"
+          <div className="p-4 border-t border-[#e8e2d9]">
+            <Button
+              variant="outline"
+              className="w-full justify-start text-[#5a4a3a] border-[#e8e2d9] hover:bg-[#f7f4ef] hover:text-[#683B11] bg-white"
               onClick={handleSignOut}
               disabled={isLoggingOut}
             >
-              <LogOut className="mr-2 h-4 w-4" />
+              <LogOut className="mr-2 h-4 w-4 text-[#A3806D]" />
               {isLoggingOut ? 'Déconnexion...' : 'Déconnexion'}
             </Button>
           </div>

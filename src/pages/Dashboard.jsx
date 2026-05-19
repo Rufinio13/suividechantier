@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useChantier } from '@/context/ChantierContext.jsx';
-import { useSAV } from '@/context/SAVContext.jsx'; // ✅ AJOUT
+import { useSAV } from '@/context/SAVContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChantierCard } from '@/components/ChantierCard.jsx';
@@ -13,11 +13,10 @@ import { useAuth } from '@/hooks/useAuth';
 
 export function Dashboard() {
   const { chantiers, taches, sousTraitants, loading: chantierLoading } = useChantier();
-  const { demandesSAV, loading: savLoading } = useSAV(); // ✅ AJOUT
+  const { demandesSAV, loading: savLoading } = useSAV();
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
-  // 🔹 Redirection automatique si pas connecté
   useEffect(() => {
     if (!authLoading && !user) {
       navigate('/login');
@@ -34,13 +33,20 @@ export function Dashboard() {
     []
   );
 
-  if (authLoading || chantierLoading || savLoading) { // ✅ AJOUT savLoading
-    return <div className="flex justify-center items-center h-64">Chargement...</div>;
+  if (authLoading || chantierLoading || savLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#9FC760] mx-auto mb-3"></div>
+          <p style={{ color: '#A3806D' }}>Chargement...</p>
+        </div>
+      </div>
+    );
   }
 
   const chantiersEnCoursCount = chantiers.filter(c => c.statut === 'En cours').length;
   const chantiersReceptionnesCount = chantiers.filter(c => c.statut === 'Réceptionné').length;
-  const savOuvertes = demandesSAV ? demandesSAV.filter(s => !s.constructeur_valide).length : 0; // ✅ CORRECTION
+  const savOuvertes = demandesSAV ? demandesSAV.filter(s => !s.constructeur_valide).length : 0;
 
   const chantiersRecents = [...chantiers]
     .sort((a, b) => {
@@ -56,57 +62,72 @@ export function Dashboard() {
 
   return (
     <div className="space-y-8">
+
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Tableau de bord</h1>
+        <h1 className="text-3xl font-bold tracking-tight" style={{ color: '#683B11' }}>
+          Tableau de bord
+        </h1>
       </div>
 
       {/* Statistiques */}
-      <motion.div 
-        className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+      <motion.div
+        className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.1 }}
       >
-        <Card 
-          className="bg-gradient-to-br from-blue-500 to-blue-600 text-white hover:shadow-xl cursor-pointer transition-all"
+        {/* Chantiers en cours */}
+        <Card
+          className="text-white hover:shadow-xl cursor-pointer transition-all border-0"
+          style={{ background: '#683B11' }}
           onClick={() => handleStatutCardClick('En cours')}
         >
           <CardHeader className="pb-2">
-            <CardTitle className="text-xl">Chantiers en cours</CardTitle>
+            <CardTitle className="text-base font-medium opacity-85">Chantiers en cours</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <span className="text-3xl font-bold">{chantiersEnCoursCount}</span>
-              <Clock className="h-8 w-8 opacity-80" />
+              <span className="text-4xl font-bold">{chantiersEnCoursCount}</span>
+              <Clock className="h-9 w-9 opacity-30" />
             </div>
           </CardContent>
         </Card>
 
-        <Card 
-          className="bg-gradient-to-br from-green-500 to-green-600 text-white hover:shadow-xl cursor-pointer transition-all"
+        {/* Chantiers réceptionnés */}
+        <Card
+          className="hover:shadow-xl cursor-pointer transition-all border-0"
+          style={{ background: '#9FC760' }}
           onClick={() => handleStatutCardClick('Réceptionné')}
         >
           <CardHeader className="pb-2">
-            <CardTitle className="text-xl">Chantiers réceptionnés</CardTitle>
+            <CardTitle className="text-base font-medium" style={{ color: '#2d5a0e', opacity: 0.85 }}>
+              Chantiers réceptionnés
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <span className="text-3xl font-bold">{chantiersReceptionnesCount}</span>
-              <CheckCircle className="h-8 w-8 opacity-80" />
+              <span className="text-4xl font-bold" style={{ color: '#2d5a0e' }}>{chantiersReceptionnesCount}</span>
+              <CheckCircle className="h-9 w-9" style={{ color: '#2d5a0e', opacity: 0.3 }} />
             </div>
           </CardContent>
         </Card>
 
+        {/* SAV Ouverts */}
         <Link to="/sav">
-          <Card className="bg-gradient-to-br from-orange-500 to-orange-600 text-white h-full hover:shadow-xl transition-all">
+          <Card
+            className="h-full hover:shadow-xl transition-all border-0"
+            style={{ background: '#F8B45B' }}
+          >
             <CardHeader className="pb-2">
-              <CardTitle className="text-xl">SAV Ouverts</CardTitle>
+              <CardTitle className="text-base font-medium" style={{ color: '#633806', opacity: 0.85 }}>
+                SAV Ouverts
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between">
-                <span className="text-3xl font-bold">{savOuvertes}</span>
-                <Wrench className="h-8 w-8 opacity-80" />
+                <span className="text-4xl font-bold" style={{ color: '#633806' }}>{savOuvertes}</span>
+                <Wrench className="h-9 w-9" style={{ color: '#633806', opacity: 0.3 }} />
               </div>
             </CardContent>
           </Card>
@@ -119,24 +140,27 @@ export function Dashboard() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, delay: 0.15 }}
       >
-        <Card>
+        <Card className="border border-[#e8e2d9] shadow-sm bg-white">
           <CardHeader>
-            <CardTitle className="text-2xl flex items-center">
-              <GanttChartSquare className="mr-3 h-6 w-6 text-primary"/>
+            <CardTitle
+              className="text-lg flex items-center font-bold uppercase tracking-wide"
+              style={{ color: '#683B11', letterSpacing: '0.5px' }}
+            >
+              <GanttChartSquare className="mr-3 h-5 w-5" style={{ color: '#F8B45B' }} />
               Planning des chantiers en cours
             </CardTitle>
           </CardHeader>
           <CardContent>
             {chantiersEnCoursPourGantt.length > 0 ? (
-              <GlobalGanttChart 
-                chantiers={chantiersEnCoursPourGantt} 
-                taches={taches} 
+              <GlobalGanttChart
+                chantiers={chantiersEnCoursPourGantt}
+                taches={taches}
                 sousTraitants={sousTraitants}
                 initialStartDate={defaultStartDateForGantt}
               />
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <GanttChartSquare className="mx-auto h-12 w-12 mb-2" />
+              <div className="text-center py-8" style={{ color: '#A3806D' }}>
+                <GanttChartSquare className="mx-auto h-12 w-12 mb-2 opacity-40" />
                 Aucun chantier en cours pour afficher le planning.
               </div>
             )}
@@ -151,12 +175,21 @@ export function Dashboard() {
         transition={{ duration: 0.3, delay: 0.2 }}
       >
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">Chantiers récents</h2>
+          <h2 className="text-xl font-bold uppercase tracking-wide" style={{ color: '#683B11', letterSpacing: '0.5px' }}>
+            Chantiers récents
+          </h2>
           <Link to="/chantiers">
-            <Button variant="outline" size="sm">Voir tous</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-[#e8e2d9] hover:bg-[#f7f4ef]"
+              style={{ color: '#9FC760', fontWeight: 600 }}
+            >
+              Voir tous
+            </Button>
           </Link>
         </div>
-        
+
         {chantiersRecents.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {chantiersRecents.map(chantier => (
@@ -164,12 +197,15 @@ export function Dashboard() {
             ))}
           </div>
         ) : (
-          <Card>
+          <Card className="border border-[#e8e2d9] shadow-sm bg-white">
             <CardContent className="flex flex-col items-center justify-center py-8">
-              <HardHat className="h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground text-center">Aucun chantier récent</p>
-              <Link to="/chantiers?action=new" className="mt-4">
-                <Button>
+              <HardHat className="h-12 w-12 mb-4" style={{ color: '#A3806D' }} />
+              <p className="text-center mb-4" style={{ color: '#A3806D' }}>Aucun chantier récent</p>
+              <Link to="/chantiers?action=new">
+                <Button
+                  className="text-white border-0"
+                  style={{ background: '#9FC760' }}
+                >
                   <Plus className="mr-2 h-4 w-4" />
                   Créer un chantier
                 </Button>
