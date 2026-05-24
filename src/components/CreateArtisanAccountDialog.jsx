@@ -3,10 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Mail, UserPlus, CheckCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabaseClient";
 
 export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess }) {
   const { toast } = useToast();
+  const { profile } = useAuth(); // ✅ Récupérer le profil du constructeur connecté
   const [isSending, setIsSending] = useState(false);
   const [invitationSent, setInvitationSent] = useState(false);
   const [wasExisting, setWasExisting] = useState(false);
@@ -15,23 +17,20 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
 
   const handleSendInvitation = async () => {
     if (!artisan.email) {
-      toast({
-        title: "Email manquant",
-        description: "L'artisan doit avoir un email pour recevoir une invitation.",
-        variant: "destructive"
-      });
+      toast({ title: "Email manquant", description: "L'artisan doit avoir un email.", variant: "destructive" });
       return;
     }
 
     setIsSending(true);
     try {
-      console.log('📧 Envoi invitation pour:', artisan.email);
+      console.log('📧 Envoi invitation pour:', artisan.email, '| nomsociete constructeur:', profile?.nomsociete);
 
       const { data, error } = await supabase.functions.invoke('invite-artisan', {
         body: {
           email: artisan.email,
           artisanNom: artisan.nomsocieteST || `${artisan.PrenomST || ''} ${artisan.nomST || ''}`.trim(),
           siteUrl: window.location.origin,
+          nomsociete: profile?.nomsociete || '', // ✅ société du constructeur connecté
         }
       });
 
@@ -42,38 +41,28 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
       const existing = data.existing;
       setWasExisting(existing);
 
-      console.log(`✅ Email envoyé (${existing ? 'recovery' : 'invitation'}), userId:`, newUserId);
-
       if (newUserId) {
-        // ✅ Lier le user_id au sous-traitant
-        await supabase
-          .from('soustraitants')
-          .update({ user_id: newUserId })
-          .eq('id', artisan.id);
+        // ✅ Lier user_id dans soustraitants
+        await supabase.from('soustraitants').update({ user_id: newUserId }).eq('id', artisan.id);
 
-        // ✅ Mettre à jour le profil
-        // ⚠️ nomsociete = null — ne pas mettre nomsocieteST ici car c'est réservé aux constructeurs
-        await supabase
-          .from('profiles')
-          .upsert({
-            id: newUserId,
-            nom: artisan.nomST || '',
-            prenom: artisan.PrenomST || '',
-            mail: artisan.email,
-            tel: artisan.telephone || '',
-            nomsociete: null,        // ✅ null pour les artisans — ne pas mettre nomsocieteST
-            user_type: 'artisan',    // ✅ CRITIQUE
-          }, { onConflict: 'id' });
+        // ✅ Mettre à jour le profil avec nomsociete du constructeur
+        await supabase.from('profiles').upsert({
+          id: newUserId,
+          nom: artisan.nomST || '',
+          prenom: artisan.PrenomST || '',
+          mail: artisan.email,
+          tel: artisan.telephone || '',
+          nomsociete: profile?.nomsociete || '', // ✅ société du constructeur
+          user_type: 'artisan',
+        }, { onConflict: 'id' });
 
-        console.log('✅ Profil artisan mis à jour — user_type: artisan, nomsociete: null');
+        console.log('✅ Profil artisan : user_type=artisan, nomsociete=', profile?.nomsociete);
       }
 
       setInvitationSent(true);
       toast({
         title: existing ? "Email envoyé ✅" : "Invitation envoyée ✅",
-        description: existing
-          ? `${artisan.email} recevra un lien pour se connecter.`
-          : `${artisan.email} recevra un email pour créer son mot de passe.`,
+        description: `${artisan.email} recevra un email pour accéder à l'application.`,
         duration: 5000
       });
 
@@ -81,11 +70,7 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
 
     } catch (err) {
       console.error('❌ Erreur invitation:', err);
-      toast({
-        title: "Erreur ❌",
-        description: err.message || "Impossible d'envoyer l'invitation",
-        variant: "destructive"
-      });
+      toast({ title: "Erreur ❌", description: err.message || "Impossible d'envoyer l'invitation", variant: "destructive" });
     } finally {
       setIsSending(false);
     }
@@ -120,14 +105,8 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
             <div className="bg-green-50 border border-green-200 rounded-md p-3 flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
               <div className="text-sm text-green-800">
-                <p className="font-semibold">
-                  {wasExisting ? 'Email de connexion envoyé !' : 'Invitation envoyée !'}
-                </p>
-                <p>
-                  {wasExisting
-                    ? `${artisan.email} recevra un lien pour définir son mot de passe.`
-                    : `${artisan.email} recevra un email pour créer son mot de passe.`}
-                </p>
+                <p className="font-semibold">{wasExisting ? 'Email de connexion envoyé !' : 'Invitation envoyée !'}</p>
+                <p>{artisan.email} recevra un email pour accéder à l'application.</p>
               </div>
             </div>
           )}
@@ -150,9 +129,7 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
           </Button>
           {!invitationSent && (
             <Button onClick={handleSendInvitation} disabled={isSending || !artisan.email}>
-              {isSending
-                ? 'Envoi en cours...'
-                : <><Mail className="mr-2 h-4 w-4" />Envoyer l'invitation</>}
+              {isSending ? 'Envoi en cours...' : <><Mail className="mr-2 h-4 w-4" />Envoyer l'invitation</>}
             </Button>
           )}
         </DialogFooter>
