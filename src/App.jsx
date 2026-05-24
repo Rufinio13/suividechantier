@@ -26,6 +26,7 @@ import { AppProvider } from '@/context/AppProvider.jsx'; // ✅ NOUVEAU
 import { Login } from '@/pages/Login.jsx';
 import { ResetPassword } from '@/pages/ResetPassword.jsx';
 import { useAuth } from '@/hooks/useAuth.jsx';
+import { MonCompte } from '@/pages/MonCompte.jsx';
 
 export function PrivateRoute({ children }) {
   const { user, profile, loading } = useAuth();
@@ -88,6 +89,7 @@ function App() {
             <Route path="sous-traitants/:id" element={<SousTraitantDetails />} />
             <Route path="fournisseurs" element={<FournisseursList />} />
             <Route path="sav" element={<SAVList />} />
+            <Route path="mon-compte" element={<MonCompte />} />
           </Route>
 
           <Route
@@ -103,6 +105,7 @@ function App() {
             <Route path="chantiers/:id" element={<ChantierDetailsArtisan />} />
             <Route path="sav" element={<SAVArtisanList />} />
             <Route path="sav/:id" element={<SAVArtisanDetails />} />
+            <Route path="mon-compte" element={<MonCompte />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

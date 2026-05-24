@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Menu, X, LogOut, HardHat, Truck, Wrench, Users, ShieldCheck, ListChecks, Package } from 'lucide-react';
+import { LayoutDashboard, Menu, X, LogOut, HardHat, Truck, Wrench, Users, ShieldCheck, ListChecks, Package, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import logoEvabois from '@/assets/logo-evabois.png';
+import { MonCompte } from '@/pages/MonCompte.jsx';
+
 
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -23,6 +25,7 @@ export function Layout() {
     { name: 'Référentiel Commande', href: '/referentiel-commande', icon: Package },
     { name: 'Lots', href: '/lots', icon: ListChecks },
     { name: 'SAV', href: '/sav', icon: Wrench },
+    { name: 'Mon Compte', href: '/mon-compte', icon: User },
   ];
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);

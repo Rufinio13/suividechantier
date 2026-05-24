@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Calendar, Building2, Menu, X, LogOut, Wrench } from 'lucide-react';
+import { Calendar, Building2, Menu, X, LogOut, Wrench, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -30,14 +30,12 @@ export function LayoutArtisan() {
   const { controles, modelesCQ } = useReferentielCQ();
   const { taches } = useChantier();
 
-  // Trouver l'ID du sous-traitant
   const monSousTraitantId = useMemo(() => {
     if (!profile?.id || !sousTraitants?.length) return null;
     const myST = sousTraitants.find(st => st.user_id === profile.id);
     return myST?.id || null;
   }, [profile, sousTraitants]);
 
-  // Récupérer les chantiers de l'artisan
   const mesChantierIds = useMemo(() => {
     if (!monSousTraitantId || !taches) return [];
     return [...new Set(
@@ -47,7 +45,6 @@ export function LayoutArtisan() {
     )];
   }, [monSousTraitantId, taches]);
 
-  // ✅ Compter les tâches en retard
   useEffect(() => {
     const loadTachesEnRetard = () => {
       if (!monSousTraitantId || !taches) return;
@@ -59,7 +56,6 @@ export function LayoutArtisan() {
           const dateFinPassee = t.datefin && new Date(t.datefin) < maintenant;
           return estMonTache && nonTerminee && dateFinPassee;
         });
-        console.log('📊 Tâches en retard:', enRetard.length);
         setTachesEnRetardCount(enRetard.length);
       } catch (error) {
         console.error('Erreur comptage tâches en retard:', error);
@@ -70,7 +66,6 @@ export function LayoutArtisan() {
     return () => clearInterval(interval);
   }, [monSousTraitantId, taches]);
 
-  // ✅ Compter les notifications
   useEffect(() => {
     const loadNotificationsCount = async () => {
       if (!monSousTraitantId) return;
@@ -81,12 +76,8 @@ export function LayoutArtisan() {
           .eq('soustraitant_id', monSousTraitantId)
           .eq('vu', false);
         if (error) throw error;
-        const nouvelles = data.filter(n => n.type === 'nouvelle_tache').length;
-        const modifiees = data.filter(n => n.type === 'date_modifiee').length;
-        console.log('📊 Nouvelles tâches:', nouvelles);
-        console.log('📊 Tâches modifiées:', modifiees);
-        setNouvellesTachesCount(nouvelles);
-        setTachesModifieesCount(modifiees);
+        setNouvellesTachesCount(data.filter(n => n.type === 'nouvelle_tache').length);
+        setTachesModifieesCount(data.filter(n => n.type === 'date_modifiee').length);
       } catch (error) {
         console.error('Erreur comptage notifications:', error);
       }
@@ -96,7 +87,6 @@ export function LayoutArtisan() {
     return () => clearInterval(interval);
   }, [monSousTraitantId]);
 
-  // ✅ Compter les NC
   useEffect(() => {
     const loadNcCount = () => {
       if (!monSousTraitantId || !controles || !modelesCQ || mesChantierIds.length === 0) return;
@@ -160,7 +150,6 @@ export function LayoutArtisan() {
             });
           }
         });
-        console.log('📊 NC non validées:', totalNC);
         setNcCount(totalNC);
       } catch (error) {
         console.error('Erreur comptage NC:', error);
@@ -171,7 +160,6 @@ export function LayoutArtisan() {
     return () => clearInterval(interval);
   }, [monSousTraitantId, controles, modelesCQ, mesChantierIds]);
 
-  // ✅ Compter les documents
   useEffect(() => {
     const loadDocsCount = async () => {
       if (!monSousTraitantId || mesChantierIds.length === 0) return;
@@ -197,8 +185,6 @@ export function LayoutArtisan() {
             nouveauxCount++;
           }
         });
-        console.log('📊 Documents à signer:', aSignerCount);
-        console.log('📊 Nouveaux documents:', nouveauxCount);
         setDocsASignerCount(aSignerCount);
         setNouveauxDocsCount(nouveauxCount);
       } catch (error) {
@@ -210,7 +196,6 @@ export function LayoutArtisan() {
     return () => clearInterval(interval);
   }, [monSousTraitantId, mesChantierIds]);
 
-  // ✅ Compter les SAV
   useEffect(() => {
     const loadSavCount = async () => {
       if (!monSousTraitantId) return;
@@ -221,7 +206,6 @@ export function LayoutArtisan() {
           .eq('soustraitant_id', monSousTraitantId)
           .eq('constructeur_valide', false);
         if (error) throw error;
-        console.log('📊 SAV non validés:', count);
         setSavCount(count || 0);
       } catch (error) {
         console.error('Erreur chargement SAV:', error);
@@ -237,6 +221,7 @@ export function LayoutArtisan() {
       name: 'Mon calendrier',
       href: '/artisan',
       icon: Calendar,
+      exact: true, // ✅ comparaison exacte
       badges: [
         { count: tachesEnRetardCount, variant: 'destructive', label: 'En retard' },
         { count: nouvellesTachesCount, variant: 'info', label: 'Nouvelles' },
@@ -254,6 +239,7 @@ export function LayoutArtisan() {
       ]
     },
     { name: 'SAV', href: '/artisan/sav', icon: Wrench, badge: savCount },
+    { name: 'Mon Compte', href: '/artisan/mon-compte', icon: User, badges: [] },
   ];
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
@@ -262,16 +248,21 @@ export function LayoutArtisan() {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
     try {
-      console.log('🔓 Déconnexion artisan...');
       await signOut();
-      console.log('✅ Déconnexion OK');
       navigate('/login', { replace: true });
     } catch (error) {
-      console.error('❌ Erreur déconnexion:', error);
       navigate('/login', { replace: true });
     } finally {
       setIsLoggingOut(false);
     }
+  };
+
+  // ✅ Fonction isActive corrigée — gère exact match et prefix match
+  const isItemActive = (item) => {
+    if (item.exact) {
+      return location.pathname === item.href;
+    }
+    return location.pathname === item.href || location.pathname.startsWith(item.href + '/');
   };
 
   return (
@@ -279,17 +270,12 @@ export function LayoutArtisan() {
 
       {/* Mobile hamburger */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={toggleSidebar}
-          className="rounded-full shadow-md"
-        >
+        <Button variant="outline" size="icon" onClick={toggleSidebar} className="rounded-full shadow-md">
           {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
         </Button>
       </div>
 
-      {/* Sidebar — fond blanc, bordure droite beige */}
+      {/* Sidebar */}
       <motion.aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-[#e8e2d9] transform transition-transform duration-300 ease-in-out lg:translate-x-0",
@@ -299,19 +285,17 @@ export function LayoutArtisan() {
       >
         <div className="h-full flex flex-col">
 
-          {/* Logo EVAbois — Espace Artisan */}
+          {/* Logo */}
           <div className="flex items-center justify-center h-20 px-4 border-b border-[#e8e2d9]">
-            <Link to="/artisan" className="flex items-center gap-3">
+            <Link to="/artisan">
               <img src={logoEvabois} alt="EVAbois" className="h-12 object-contain" />
-              </Link>
+            </Link>
           </div>
 
           {/* Menu */}
           <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
             {navItems.map((item) => {
-              const isActive =
-                location.pathname === item.href ||
-                (item.href !== '/artisan' && location.pathname.startsWith(item.href));
+              const isActive = isItemActive(item);
               const Icon = item.icon;
               return (
                 <Link
@@ -355,10 +339,8 @@ export function LayoutArtisan() {
 
                   {/* Badge unique SAV */}
                   {item.badge > 0 && (
-                    <Badge
-                      variant="destructive"
-                      className="ml-auto h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs"
-                    >
+                    <Badge variant="destructive"
+                      className="ml-auto h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs">
                       {item.badge}
                     </Badge>
                   )}
