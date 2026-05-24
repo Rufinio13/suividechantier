@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
@@ -14,137 +14,108 @@ export function DashboardArtisan() {
   const { chantiers, taches, lots, loading: chantierLoading, loadTaches } = useChantier();
   const { sousTraitants, loading: stLoading } = useSousTraitant();
 
-  // États pour modal
   const [selectedTache, setSelectedTache] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
-  // ✅ NOUVEAU : Notifications
   const [notifications, setNotifications] = useState([]);
+  
+  // ✅ Ref pour éviter que le setInterval écrase les notifications déjà marquées vues
+  const vuesLocalement = useRef(new Set());
 
-  // 1️⃣ Trouver l'ID du sous-traitant
   const monSousTraitantId = useMemo(() => {
     if (!profile?.id || !sousTraitants?.length) return null;
-    
     const myST = sousTraitants.find(st => st.user_id === profile.id);
-    console.log('👤 Mon sous-traitant:', myST);
     return myST?.id || null;
   }, [profile, sousTraitants]);
-  
-  // ✅ NOUVEAU : Charger notifications
+
   useEffect(() => {
     const loadNotifications = async () => {
       if (!monSousTraitantId) return;
-      
       try {
         const { data, error } = await supabase
           .from('notifications_taches_artisan')
           .select('*')
           .eq('soustraitant_id', monSousTraitantId)
           .order('created_at', { ascending: false });
-        
         if (error) throw error;
-        
-        console.log('📬 Notifications chargées:', data?.length);
-        setNotifications(data || []);
+
+        // ✅ Respecter les marquages locaux — ne pas écraser vu:true avec vu:false
+        setNotifications(prev => {
+          const newData = data || [];
+          return newData.map(n => {
+            // Si on a déjà marqué cette notif comme vue localement, garder vu:true
+            if (vuesLocalement.current.has(n.id)) {
+              return { ...n, vu: true };
+            }
+            return n;
+          });
+        });
       } catch (error) {
         console.error('Erreur chargement notifications:', error);
       }
     };
-    
     loadNotifications();
-    
-    // Recharger toutes les 30 secondes
     const interval = setInterval(loadNotifications, 30000);
     return () => clearInterval(interval);
   }, [monSousTraitantId]);
 
-  // 2️⃣ Filtrer MES tâches uniquement
   const mesTaches = useMemo(() => {
     if (!monSousTraitantId) return [];
-    
-    const filtered = taches.filter(t => 
-      t.assignetype === 'soustraitant' && 
-      t.assigneid === monSousTraitantId
+    return taches.filter(t =>
+      t.assignetype === 'soustraitant' && t.assigneid === monSousTraitantId
     );
-    
-    console.log('📋 Mes tâches:', filtered.length);
-    return filtered;
   }, [taches, monSousTraitantId]);
 
-  // 3️⃣ Mes chantiers
   const mesChantiers = useMemo(() => {
     if (!mesTaches.length) return [];
-    
     const chantierIds = [...new Set(mesTaches.map(t => t.chantierid))];
-    const filtered = chantiers.filter(c => chantierIds.includes(c.id));
-    
-    console.log('🏗️ Mes chantiers:', filtered.length);
-    return filtered;
+    return chantiers.filter(c => chantierIds.includes(c.id));
   }, [mesTaches, chantiers]);
 
-  // 4️⃣ Map chantier ID → nom pour l'affichage
   const chantierNoms = useMemo(() => {
     const map = {};
-    mesChantiers.forEach(chantier => {
-      map[chantier.id] = chantier.nomchantier;
-    });
+    mesChantiers.forEach(c => { map[c.id] = c.nomchantier; });
     return map;
   }, [mesChantiers]);
 
-  // 5️⃣ Générer une couleur par chantier
   const chantierColors = useMemo(() => {
-    const colors = [
-      '#3b82f6', // blue
-      '#10b981', // green
-      '#f59e0b', // amber
-      '#ef4444', // red
-      '#8b5cf6', // violet
-      '#ec4899', // pink
-      '#14b8a6', // teal
-      '#f97316', // orange
-    ];
-    
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
     const colorMap = {};
-    mesChantiers.forEach((chantier, index) => {
-      colorMap[chantier.id] = colors[index % colors.length];
-    });
-    
+    mesChantiers.forEach((c, i) => { colorMap[c.id] = colors[i % colors.length]; });
     return colorMap;
   }, [mesChantiers]);
 
-  // Handler clic sur tâche
   const handleTacheClick = async (tache) => {
-    console.log('📋 Clic sur tâche:', tache);
-    
-    // ✅ NOUVEAU : Marquer notifications comme vues pour cette tâche
-    const notifsAMarquer = notifications.filter(
-      n => n.tache_id === tache.id && !n.vu
-    );
-    
+    const notifsAMarquer = notifications.filter(n => n.tache_id === tache.id && !n.vu);
+
     if (notifsAMarquer.length > 0) {
-      try {
-        const { error } = await supabase
-          .from('notifications_taches_artisan')
-          .update({ vu: true })
-          .in('id', notifsAMarquer.map(n => n.id));
-        
-        if (error) throw error;
-        
-        console.log('✅ Notifications marquées comme vues');
-        
-        // Mettre à jour state local
-        setNotifications(prev => 
-          prev.map(n => 
-            notifsAMarquer.some(nm => nm.id === n.id) 
-              ? { ...n, vu: true } 
-              : n
-          )
-        );
-      } catch (error) {
+      const ids = notifsAMarquer.map(n => n.id);
+
+      // ✅ 1. Marquer localement IMMÉDIATEMENT
+      ids.forEach(id => vuesLocalement.current.add(id));
+      setNotifications(prev =>
+        prev.map(n => ids.includes(n.id) ? { ...n, vu: true } : n)
+      );
+
+      // ✅ 2. Persister en BDD — ATTENDRE la confirmation
+      const { error } = await supabase
+        .from('notifications_taches_artisan')
+        .update({ vu: true })
+        .in('id', ids);
+
+      if (error) {
         console.error('Erreur marquage notifications:', error);
+        // Rollback local en cas d'erreur
+        ids.forEach(id => vuesLocalement.current.delete(id));
+        setNotifications(prev =>
+          prev.map(n => ids.includes(n.id) ? { ...n, vu: false } : n)
+        );
+      } else {
+        console.log('✅ Notifications marquées comme vues en BDD');
+        // ✅ 3. Déclencher rechargement badge sidebar
+        window.dispatchEvent(new CustomEvent('notifications-updated'));
       }
     }
-    
+
     setSelectedTache(tache);
     setIsModalOpen(true);
   };
@@ -155,6 +126,7 @@ export function DashboardArtisan() {
   };
 
   const handleModalSuccess = async () => {
+    // ✅ Ne recharger QUE les tâches — pas les notifications
     await loadTaches();
   };
 
@@ -183,22 +155,12 @@ export function DashboardArtisan() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold">Mon planning</h1>
-        <p className="text-muted-foreground">
-          Bienvenue, {profile?.prenom} {profile?.nom}
-        </p>
+        <p className="text-muted-foreground">Bienvenue, {profile?.prenom} {profile?.nom}</p>
       </div>
 
-      {/* ❌ LÉGENDE SUPPRIMÉE */}
-
-      {/* Calendrier */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl flex items-center">
@@ -208,7 +170,7 @@ export function DashboardArtisan() {
           </CardHeader>
           <CardContent>
             {mesTaches.length > 0 ? (
-              <CalendrierView 
+              <CalendrierView
                 taches={mesTaches}
                 lots={lots}
                 conflictsByChantier={{}}
@@ -218,7 +180,7 @@ export function DashboardArtisan() {
                 chantierNoms={chantierNoms}
                 readOnly={true}
                 isArtisanView={true}
-                notifications={notifications} // ✅ NOUVEAU
+                notifications={notifications}
               />
             ) : (
               <div className="text-center py-12 text-muted-foreground">
@@ -230,7 +192,6 @@ export function DashboardArtisan() {
         </Card>
       </motion.div>
 
-      {/* Modal détails tâche */}
       {isModalOpen && selectedTache && (
         <TacheDetailModalArtisan
           isOpen={isModalOpen}

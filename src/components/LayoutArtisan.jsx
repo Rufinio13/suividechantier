@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Calendar, Building2, Menu, X, LogOut, Wrench, User } from 'lucide-react';
@@ -45,6 +45,26 @@ export function LayoutArtisan() {
     )];
   }, [monSousTraitantId, taches]);
 
+  // ✅ CORRIGÉ : console.log DANS le try, data bien dans scope
+  const loadNotificationsCount = useCallback(async () => {
+    if (!monSousTraitantId) return;
+    try {
+      const { data, error } = await supabase
+        .from('notifications_taches_artisan')
+        .select('type, vu')
+        .eq('soustraitant_id', monSousTraitantId)
+        .eq('vu', false);
+      if (error) throw error;
+
+      console.log('📊 Notifications non vues:', data?.length, data);
+
+      setNouvellesTachesCount(data.filter(n => n.type === 'nouvelle_tache').length);
+      setTachesModifieesCount(data.filter(n => n.type === 'date_modifiee').length);
+    } catch (error) {
+      console.error('Erreur comptage notifications:', error);
+    }
+  }, [monSousTraitantId]);
+
   useEffect(() => {
     const loadTachesEnRetard = () => {
       if (!monSousTraitantId || !taches) return;
@@ -67,25 +87,20 @@ export function LayoutArtisan() {
   }, [monSousTraitantId, taches]);
 
   useEffect(() => {
-    const loadNotificationsCount = async () => {
-      if (!monSousTraitantId) return;
-      try {
-        const { data, error } = await supabase
-          .from('notifications_taches_artisan')
-          .select('type, vu')
-          .eq('soustraitant_id', monSousTraitantId)
-          .eq('vu', false);
-        if (error) throw error;
-        setNouvellesTachesCount(data.filter(n => n.type === 'nouvelle_tache').length);
-        setTachesModifieesCount(data.filter(n => n.type === 'date_modifiee').length);
-      } catch (error) {
-        console.error('Erreur comptage notifications:', error);
-      }
-    };
     loadNotificationsCount();
     const interval = setInterval(loadNotificationsCount, 30000);
-    return () => clearInterval(interval);
-  }, [monSousTraitantId]);
+
+    const handleNotificationsUpdated = () => {
+      console.log('🔔 Événement notifications-updated reçu → rechargement immédiat');
+      loadNotificationsCount();
+    };
+    window.addEventListener('notifications-updated', handleNotificationsUpdated);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('notifications-updated', handleNotificationsUpdated);
+    };
+  }, [loadNotificationsCount]);
 
   useEffect(() => {
     const loadNcCount = () => {
@@ -134,7 +149,7 @@ export function LayoutArtisan() {
                 if (!sousCategorie) return;
                 const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
                 if (sousCategoriesSupprimees.includes(sousCategorieKey)) return;
-                Object.entries(pointsMap).forEach(([pointControleId, pointData]) => {
+                Object.entries(pointsMap).forEach(([pointControleId]) => {
                   const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieKey] || [];
                   if (pointsSupprimes.includes(pointControleId)) return;
                   const resultatPoint = ctrl.resultats?.[categorieId]?.[sousCategorieKey]?.[pointControleId];
@@ -142,9 +157,7 @@ export function LayoutArtisan() {
                     resultatPoint?.resultat === 'NC' &&
                     resultatPoint.soustraitant_id === monSousTraitantId &&
                     !resultatPoint.repriseValidee
-                  ) {
-                    totalNC++;
-                  }
+                  ) totalNC++;
                 });
               });
             });
@@ -166,8 +179,9 @@ export function LayoutArtisan() {
       try {
         const { data, error } = await supabase
           .from('documents_chantier')
-          .select('necessite_signature, signature_statut, artisan_assigne_signature, artisans_vus, chantier_id')
-          .in('chantier_id', mesChantierIds);
+          .select('necessite_signature, signature_statut, artisan_assigne_signature, artisans_vus, artisan_id, partage_type')
+          .in('chantier_id', mesChantierIds)
+          .or(`partage_type.eq.tous,artisan_id.eq.${monSousTraitantId}`);
         if (error) throw error;
         let aSignerCount = 0;
         let nouveauxCount = 0;
@@ -221,7 +235,7 @@ export function LayoutArtisan() {
       name: 'Mon calendrier',
       href: '/artisan',
       icon: Calendar,
-      exact: true, // ✅ comparaison exacte
+      exact: true,
       badges: [
         { count: tachesEnRetardCount, variant: 'destructive', label: 'En retard' },
         { count: nouvellesTachesCount, variant: 'info', label: 'Nouvelles' },
@@ -257,25 +271,19 @@ export function LayoutArtisan() {
     }
   };
 
-  // ✅ Fonction isActive corrigée — gère exact match et prefix match
   const isItemActive = (item) => {
-    if (item.exact) {
-      return location.pathname === item.href;
-    }
+    if (item.exact) return location.pathname === item.href;
     return location.pathname === item.href || location.pathname.startsWith(item.href + '/');
   };
 
   return (
     <div className="min-h-screen bg-[#f7f4ef]">
-
-      {/* Mobile hamburger */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <Button variant="outline" size="icon" onClick={toggleSidebar} className="rounded-full shadow-md">
           {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
         </Button>
       </div>
 
-      {/* Sidebar */}
       <motion.aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-[#e8e2d9] transform transition-transform duration-300 ease-in-out lg:translate-x-0",
@@ -284,15 +292,12 @@ export function LayoutArtisan() {
         initial={false}
       >
         <div className="h-full flex flex-col">
-
-          {/* Logo */}
           <div className="flex items-center justify-center h-20 px-4 border-b border-[#e8e2d9]">
             <Link to="/artisan">
               <img src={logoEvabois} alt="EVAbois" className="h-12 object-contain" />
             </Link>
           </div>
 
-          {/* Menu */}
           <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
             {navItems.map((item) => {
               const isActive = isItemActive(item);
@@ -303,9 +308,7 @@ export function LayoutArtisan() {
                   to={item.href}
                   className={cn(
                     "flex items-center justify-between px-4 py-3 text-sm font-medium rounded-md transition-all",
-                    isActive
-                      ? "bg-[#f0ebe2] text-[#683B11] font-semibold"
-                      : "text-[#5a4a3a] hover:bg-[#f7f4ef]"
+                    isActive ? "bg-[#f0ebe2] text-[#683B11] font-semibold" : "text-[#5a4a3a] hover:bg-[#f7f4ef]"
                   )}
                   style={isActive ? { borderLeft: '3px solid #9FC760' } : { borderLeft: '3px solid transparent' }}
                   onClick={() => setSidebarOpen(false)}
@@ -314,33 +317,25 @@ export function LayoutArtisan() {
                     <Icon className={cn("mr-3 h-5 w-5", isActive ? "text-[#9FC760]" : "text-[#A3806D]")} />
                     {item.name}
                   </div>
-
-                  {/* Badges multiples */}
                   {item.badges && (
                     <div className="flex gap-1">
                       {item.badges.map((badge, idx) =>
                         badge.count > 0 && (
-                          <Badge
-                            key={idx}
-                            className={cn(
-                              "h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs",
-                              badge.variant === 'destructive' && "bg-red-500 hover:bg-red-600 text-white",
-                              badge.variant === 'warning' && "bg-[#F8B45B] hover:bg-[#e0a040] text-[#633806]",
-                              badge.variant === 'info' && "bg-blue-500 hover:bg-blue-600 text-white",
-                              badge.variant === 'success' && "bg-[#9FC760] hover:bg-[#8ab550] text-[#27500A]"
-                            )}
-                          >
+                          <Badge key={idx} className={cn(
+                            "h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs",
+                            badge.variant === 'destructive' && "bg-red-500 hover:bg-red-600 text-white",
+                            badge.variant === 'warning' && "bg-[#F8B45B] hover:bg-[#e0a040] text-[#633806]",
+                            badge.variant === 'info' && "bg-blue-500 hover:bg-blue-600 text-white",
+                            badge.variant === 'success' && "bg-[#9FC760] hover:bg-[#8ab550] text-[#27500A]"
+                          )}>
                             {badge.count}
                           </Badge>
                         )
                       )}
                     </div>
                   )}
-
-                  {/* Badge unique SAV */}
                   {item.badge > 0 && (
-                    <Badge variant="destructive"
-                      className="ml-auto h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs">
+                    <Badge variant="destructive" className="ml-auto h-5 min-w-5 rounded-full p-0 flex items-center justify-center text-xs">
                       {item.badge}
                     </Badge>
                   )}
@@ -349,7 +344,6 @@ export function LayoutArtisan() {
             })}
           </nav>
 
-          {/* Logout */}
           <div className="p-4 border-t border-[#e8e2d9]">
             <Button
               variant="outline"
@@ -364,7 +358,6 @@ export function LayoutArtisan() {
         </div>
       </motion.aside>
 
-      {/* PAGE CONTENT */}
       <main className="transition-all duration-300 ease-in-out lg:ml-64 min-h-screen">
         <div className="p-4 sm:p-6 lg:p-8">
           <Outlet />
