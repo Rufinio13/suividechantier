@@ -21,29 +21,19 @@ export function SetPassword() {
   const [isReady, setIsReady] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const forceArtisanProfile = async (userId, email) => {
-    // ✅ Forcer user_type=artisan et nomsociete=null
-    // Le trigger Supabase crée le profil avec user_type='constructeur' par défaut
-    // On le corrige immédiatement après
+  // ✅ Forcer uniquement user_type=artisan — NE PAS toucher nomsociete
+  // nomsociete est déjà correctement renseigné par la Edge Function invite-artisan
+  const forceArtisanUserType = async (userId) => {
     const { error } = await supabase
       .from('profiles')
-      .update({
-        user_type: 'artisan',
-        nomsociete: null,
-      })
-      .eq('id', userId);
+      .update({ user_type: 'artisan' })
+      .eq('id', userId)
+      .neq('user_type', 'artisan'); // ✅ seulement si pas déjà artisan
 
     if (error) {
-      console.error('⚠️ Erreur update profil artisan:', error);
-      // Tentative upsert si update échoue (profil pas encore créé)
-      await supabase.from('profiles').upsert({
-        id: userId,
-        mail: email || '',
-        user_type: 'artisan',
-        nomsociete: null,
-      }, { onConflict: 'id' });
+      console.error('⚠️ Erreur update user_type:', error);
     } else {
-      console.log('✅ Profil forcé : user_type=artisan, nomsociete=null');
+      console.log('✅ user_type=artisan confirmé pour:', userId);
     }
   };
 
@@ -67,11 +57,10 @@ export function SetPassword() {
           setError('Lien invalide ou expiré. Veuillez contacter votre conducteur de travaux.');
         } else {
           const userId = data.session.user.id;
-          const email = data.session.user.email;
-          console.log('✅ Session établie pour:', email);
+          console.log('✅ Session établie pour:', data.session.user.email);
 
-          // ✅ Corriger le profil immédiatement
-          await forceArtisanProfile(userId, email);
+          // ✅ Forcer uniquement user_type — pas nomsociete
+          await forceArtisanUserType(userId);
 
           setIsReady(true);
           window.history.replaceState(null, '', window.location.pathname);
@@ -85,11 +74,10 @@ export function SetPassword() {
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData?.session) {
         const userId = sessionData.session.user.id;
-        const email = sessionData.session.user.email;
-        console.log('✅ Session active pour:', email);
+        console.log('✅ Session active pour:', sessionData.session.user.email);
 
-        // ✅ Corriger le profil ici aussi
-        await forceArtisanProfile(userId, email);
+        // ✅ Forcer uniquement user_type — pas nomsociete
+        await forceArtisanUserType(userId);
 
         setIsReady(true);
       } else {
@@ -110,14 +98,8 @@ export function SetPassword() {
 
     setLoading(true);
     try {
-      const { data: userData } = await supabase.auth.getUser();
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
-
-      // ✅ Re-forcer le profil artisan après updateUser (par sécurité)
-      if (userData?.user?.id) {
-        await forceArtisanProfile(userData.user.id, userData.user.email);
-      }
 
       await supabase.auth.signOut();
 
