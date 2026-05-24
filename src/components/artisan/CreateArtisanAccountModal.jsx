@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabaseClient';
 import { UserPlus, Mail, Lock, Loader2 } from 'lucide-react';
 
@@ -39,20 +38,11 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
     isSavingRef.current = true;
 
     try {
-      // ✅ Lire nomsociete directement depuis la table soustraitants
-      // C'est là qu'il est déjà correctement renseigné lors de la création de l'artisan
-      const { data: stData, error: stError } = await supabase
-        .from('soustraitants')
-        .select('nomsociete')
-        .eq('id', sousTraitant.id)
-        .single();
+      // ✅ nomsociete est déjà dans sousTraitant (table soustraitants)
+      // C'est la société du constructeur qui a créé cet artisan
+      const nomsociete = sousTraitant.nomsociete || '';
+      console.log('🔐 Création compte | nomsociete depuis sousTraitant:', nomsociete);
 
-      if (stError) throw new Error('Impossible de récupérer les données du sous-traitant');
-
-      const nomsociete = stData?.nomsociete || '';
-      console.log('🔐 Création compte | nomsociete depuis soustraitants:', nomsociete);
-
-      // Créer le compte auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -62,7 +52,7 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
             prenom: sousTraitant.PrenomST || '',
             role: 'artisan',
             user_type: 'artisan',
-            nomsociete, // ✅ lu depuis soustraitants
+            nomsociete, // ✅ société du constructeur
           }
         }
       });
@@ -78,14 +68,14 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
       console.log('✅ Utilisateur créé:', userId);
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // ✅ Upsert profil avec nomsociete lu depuis soustraitants
+      // ✅ Upsert profil avec nomsociete depuis sousTraitant
       const { error: profileError } = await supabase.from('profiles').upsert({
         id: userId,
         nom: sousTraitant.nomST || '',
         prenom: sousTraitant.PrenomST || '',
         mail: formData.email,
         tel: sousTraitant.telephone || null,
-        nomsociete, // ✅ même valeur que dans soustraitants
+        nomsociete, // ✅ société du constructeur
         user_type: 'artisan',
       }, { onConflict: 'id' });
 

@@ -3,17 +3,20 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Mail, UserPlus, CheckCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
-import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabaseClient";
 
 export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess }) {
   const { toast } = useToast();
-  const { user } = useAuth();
   const [isSending, setIsSending] = useState(false);
   const [invitationSent, setInvitationSent] = useState(false);
   const [wasExisting, setWasExisting] = useState(false);
 
   if (!artisan) return null;
+
+  // ✅ nomsociete est déjà dans l'objet artisan (table soustraitants)
+  // C'est la société du constructeur qui a créé cet artisan
+  const nomsociete = artisan.nomsociete || '';
+  console.log('🏢 nomsociete depuis artisan prop:', nomsociete);
 
   const handleSendInvitation = async () => {
     if (!artisan.email) {
@@ -23,25 +26,14 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
 
     setIsSending(true);
     try {
-      // ✅ Lire nomsociete directement depuis la table soustraitants
-      // C'est là qu'il est déjà correctement renseigné lors de la création de l'artisan
-      const { data: stData, error: stError } = await supabase
-        .from('soustraitants')
-        .select('nomsociete')
-        .eq('id', artisan.id)
-        .single();
-
-      if (stError) throw new Error('Impossible de récupérer les données du sous-traitant');
-
-      const nomsociete = stData?.nomsociete || '';
-      console.log('📧 Invitation pour:', artisan.email, '| nomsociete depuis soustraitants:', nomsociete);
+      console.log('📧 Invitation pour:', artisan.email, '| nomsociete:', nomsociete);
 
       const { data, error } = await supabase.functions.invoke('invite-artisan', {
         body: {
           email: artisan.email,
           artisanNom: artisan.nomsocieteST || `${artisan.PrenomST || ''} ${artisan.nomST || ''}`.trim(),
           siteUrl: window.location.origin,
-          nomsociete, // ✅ lu depuis soustraitants — toujours correct
+          nomsociete, // ✅ directement depuis artisan.nomsociete
         }
       });
 
@@ -58,14 +50,14 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
           .update({ user_id: newUserId })
           .eq('id', artisan.id);
 
-        // ✅ Mettre à jour le profil avec nomsociete lu depuis soustraitants
+        // ✅ Mettre à jour le profil avec artisan.nomsociete
         await supabase.from('profiles').upsert({
           id: newUserId,
           nom: artisan.nomST || '',
           prenom: artisan.PrenomST || '',
           mail: artisan.email,
           tel: artisan.telephone || '',
-          nomsociete, // ✅ même valeur que dans soustraitants
+          nomsociete, // ✅ artisan.nomsociete = société du constructeur
           user_type: 'artisan',
         }, { onConflict: 'id' });
 
