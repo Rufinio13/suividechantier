@@ -18,6 +18,8 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
   const nomsociete = artisan.nomsociete || '';
   console.log('🏢 nomsociete depuis artisan prop:', nomsociete);
 
+  console.log('🔍 artisan complet:', JSON.stringify(artisan));
+  
   const handleSendInvitation = async () => {
     if (!artisan.email) {
       toast({ title: "Email manquant", description: "L'artisan doit avoir un email.", variant: "destructive" });
