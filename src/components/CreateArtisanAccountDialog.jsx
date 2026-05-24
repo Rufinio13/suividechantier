@@ -31,7 +31,6 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
         body: {
           email: artisan.email,
           artisanNom: artisan.nomsocieteST || `${artisan.PrenomST || ''} ${artisan.nomST || ''}`.trim(),
-          // ✅ Passer l'URL du site pour que la Edge Function construise la bonne URL
           siteUrl: window.location.origin,
         }
       });
@@ -47,27 +46,23 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
 
       // ✅ Lier le user_id au sous-traitant
       if (newUserId) {
-        const { error: updateError } = await supabase
-          .from('soustraitants')
+        await supabase.from('soustraitants')
           .update({ user_id: newUserId })
           .eq('id', artisan.id);
 
-        if (updateError) console.error('⚠️ Erreur liaison user_id:', updateError);
-
-        // ✅ Mettre à jour le profil
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
+        // ✅ Mettre à jour le profil avec user_type: 'artisan' OBLIGATOIRE
+        await supabase.from('profiles')
+          .upsert({
+            id: newUserId,
             nom: artisan.nomST || '',
             prenom: artisan.PrenomST || '',
             mail: artisan.email,
             tel: artisan.telephone || '',
-            nomsociete: artisan.nomsocieteST,
-            user_type: 'artisan',
-          })
-          .eq('id', newUserId);
+            nomsociete: artisan.nomsocieteST || '',
+            user_type: 'artisan', // ✅ CRITIQUE — sans ça l'artisan voit la vue constructeur
+          }, { onConflict: 'id' });
 
-        if (profileError) console.error('⚠️ Erreur profil:', profileError);
+        console.log('✅ Profil artisan mis à jour avec user_type: artisan');
       }
 
       setInvitationSent(true);

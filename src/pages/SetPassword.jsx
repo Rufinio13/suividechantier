@@ -23,7 +23,6 @@ export function SetPassword() {
 
   useEffect(() => {
     const init = async () => {
-      // ✅ Cas 1 : token dans le hash (lien email cliqué directement)
       const hash = window.location.hash;
       const params = new URLSearchParams(hash.replace('#', ''));
       const accessToken = params.get('access_token');
@@ -32,7 +31,6 @@ export function SetPassword() {
       console.log('🔐 SetPassword init - access_token dans hash:', !!accessToken);
 
       if (accessToken) {
-        // Établir la session avec le token du lien
         const { data, error: sessionError } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken || accessToken,
@@ -42,28 +40,39 @@ export function SetPassword() {
           console.error('❌ setSession échoué:', sessionError?.message);
           setError('Lien invalide ou expiré. Veuillez contacter votre conducteur de travaux.');
         } else {
-          console.log('✅ Session établie via hash token pour:', data.session.user?.email);
+          console.log('✅ Session établie pour:', data.session.user?.email);
+
+          // ✅ Forcer user_type = 'artisan' dès maintenant
+          const userId = data.session.user.id;
+          await supabase.from('profiles').upsert({
+            id: userId,
+            mail: data.session.user.email,
+            user_type: 'artisan',
+          }, { onConflict: 'id' });
+
           setIsReady(true);
-          // Nettoyer le hash de l'URL
           window.history.replaceState(null, '', window.location.pathname);
         }
         setChecking(false);
         return;
       }
 
-      // ✅ Cas 2 : pas de token dans le hash → vérifier si session déjà active
-      // (AppProvider a peut-être déjà établi la session via onAuthStateChange)
-      console.log('🔍 Pas de token dans le hash — vérification session existante...');
-
-      // Attendre un peu que AppProvider traite le token s'il est ailleurs
+      // Pas de token dans le hash → vérifier session existante
       await new Promise(resolve => setTimeout(resolve, 800));
-
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData?.session) {
         console.log('✅ Session active trouvée pour:', sessionData.session.user?.email);
+
+        // ✅ Forcer user_type = 'artisan' ici aussi
+        const userId = sessionData.session.user.id;
+        await supabase.from('profiles').upsert({
+          id: userId,
+          mail: sessionData.session.user.email,
+          user_type: 'artisan',
+        }, { onConflict: 'id' });
+
         setIsReady(true);
       } else {
-        console.warn('❌ Aucune session — lien invalide ou expiré');
         setError('Lien invalide ou expiré. Veuillez contacter votre conducteur de travaux.');
       }
       setChecking(false);
@@ -84,8 +93,7 @@ export function SetPassword() {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
 
-      // ✅ Déconnecter après avoir défini le mot de passe
-      // pour que l'artisan se reconnecte proprement
+      // ✅ Déconnecter pour que l'artisan se reconnecte proprement
       await supabase.auth.signOut();
 
       setSuccess(true);
@@ -157,20 +165,11 @@ export function SetPassword() {
     );
   }
 
-  // Formulaire
+  // ✅ Formulaire — sans logo ni phrase EVAbois
   return (
     <div className="flex justify-center items-center min-h-screen bg-[#f7f4ef]">
       <Card className="w-full max-w-md shadow-lg border border-[#e8e2d9]">
         <CardHeader>
-          <div className="flex justify-center mb-4">
-            <div className="text-center">
-              <div>
-                <span style={{ fontFamily: 'Outfit, sans-serif', fontWeight: 700, fontSize: '28px', color: '#683B11' }}>EVA</span>
-                <span style={{ fontFamily: 'Georgia, serif', fontStyle: 'italic', fontSize: '28px', color: '#9FC760' }}>bois</span>
-              </div>
-              <div style={{ fontSize: '10px', color: '#A3806D', fontStyle: 'italic' }}>pour un avenir durable en toute confiance</div>
-            </div>
-          </div>
           <CardTitle className="text-xl text-center" style={{ color: '#683B11' }}>
             Créer votre mot de passe
           </CardTitle>
