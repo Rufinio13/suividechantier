@@ -23,31 +23,25 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
 
     setIsSending(true);
     try {
-      // ✅ Récupérer le profil constructeur DIRECTEMENT depuis Supabase
-      // (évite le problème de timing avec useAuth)
-      const { data: constructeurProfile, error: profileFetchError } = await supabase
-        .from('profiles')
+      // ✅ Lire nomsociete directement depuis la table soustraitants
+      // C'est là qu'il est déjà correctement renseigné lors de la création de l'artisan
+      const { data: stData, error: stError } = await supabase
+        .from('soustraitants')
         .select('nomsociete')
-        .eq('id', user.id)
+        .eq('id', artisan.id)
         .single();
 
-      if (profileFetchError) throw new Error('Impossible de récupérer le profil constructeur');
+      if (stError) throw new Error('Impossible de récupérer les données du sous-traitant');
 
-      const nomsociete = constructeurProfile?.nomsociete || '';
-      console.log('📧 Envoi invitation pour:', artisan.email, '| nomsociete:', nomsociete);
-
-      if (!nomsociete) {
-        toast({ title: "Erreur", description: "Votre profil n'a pas de société renseignée. Renseignez-la dans Mon Compte.", variant: "destructive" });
-        setIsSending(false);
-        return;
-      }
+      const nomsociete = stData?.nomsociete || '';
+      console.log('📧 Invitation pour:', artisan.email, '| nomsociete depuis soustraitants:', nomsociete);
 
       const { data, error } = await supabase.functions.invoke('invite-artisan', {
         body: {
           email: artisan.email,
           artisanNom: artisan.nomsocieteST || `${artisan.PrenomST || ''} ${artisan.nomST || ''}`.trim(),
           siteUrl: window.location.origin,
-          nomsociete, // ✅ société du constructeur récupérée en direct
+          nomsociete, // ✅ lu depuis soustraitants — toujours correct
         }
       });
 
@@ -60,16 +54,18 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
 
       if (newUserId) {
         // ✅ Lier user_id dans soustraitants
-        await supabase.from('soustraitants').update({ user_id: newUserId }).eq('id', artisan.id);
+        await supabase.from('soustraitants')
+          .update({ user_id: newUserId })
+          .eq('id', artisan.id);
 
-        // ✅ Mettre à jour le profil artisan
+        // ✅ Mettre à jour le profil avec nomsociete lu depuis soustraitants
         await supabase.from('profiles').upsert({
           id: newUserId,
           nom: artisan.nomST || '',
           prenom: artisan.PrenomST || '',
           mail: artisan.email,
           tel: artisan.telephone || '',
-          nomsociete,        // ✅ société du constructeur
+          nomsociete, // ✅ même valeur que dans soustraitants
           user_type: 'artisan',
         }, { onConflict: 'id' });
 

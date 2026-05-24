@@ -10,7 +10,6 @@ import { UserPlus, Mail, Lock, Loader2 } from 'lucide-react';
 
 export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuccess }) {
   const { toast } = useToast();
-  const { user } = useAuth();
   const isSavingRef = useRef(false);
 
   const [formData, setFormData] = useState({
@@ -40,24 +39,20 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
     isSavingRef.current = true;
 
     try {
-      // ✅ Récupérer le profil constructeur DIRECTEMENT depuis Supabase
-      const { data: constructeurProfile, error: profileFetchError } = await supabase
-        .from('profiles')
+      // ✅ Lire nomsociete directement depuis la table soustraitants
+      // C'est là qu'il est déjà correctement renseigné lors de la création de l'artisan
+      const { data: stData, error: stError } = await supabase
+        .from('soustraitants')
         .select('nomsociete')
-        .eq('id', user.id)
+        .eq('id', sousTraitant.id)
         .single();
 
-      if (profileFetchError) throw new Error('Impossible de récupérer le profil constructeur');
+      if (stError) throw new Error('Impossible de récupérer les données du sous-traitant');
 
-      const nomsociete = constructeurProfile?.nomsociete || '';
-      console.log('🔐 Création compte artisan | nomsociete constructeur:', nomsociete);
+      const nomsociete = stData?.nomsociete || '';
+      console.log('🔐 Création compte | nomsociete depuis soustraitants:', nomsociete);
 
-      if (!nomsociete) {
-        toast({ title: "Erreur", description: "Votre profil n'a pas de société renseignée. Renseignez-la dans Mon Compte.", variant: "destructive" });
-        isSavingRef.current = false;
-        return;
-      }
-
+      // Créer le compte auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -67,7 +62,7 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
             prenom: sousTraitant.PrenomST || '',
             role: 'artisan',
             user_type: 'artisan',
-            nomsociete, // ✅ société du constructeur
+            nomsociete, // ✅ lu depuis soustraitants
           }
         }
       });
@@ -83,21 +78,21 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
       console.log('✅ Utilisateur créé:', userId);
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // ✅ Upsert profil avec nomsociete du constructeur
+      // ✅ Upsert profil avec nomsociete lu depuis soustraitants
       const { error: profileError } = await supabase.from('profiles').upsert({
         id: userId,
         nom: sousTraitant.nomST || '',
         prenom: sousTraitant.PrenomST || '',
         mail: formData.email,
         tel: sousTraitant.telephone || null,
-        nomsociete, // ✅ société du constructeur
+        nomsociete, // ✅ même valeur que dans soustraitants
         user_type: 'artisan',
       }, { onConflict: 'id' });
 
       if (profileError) console.error('⚠️ Erreur profil:', profileError);
       else console.log('✅ Profil : user_type=artisan, nomsociete=', nomsociete);
 
-      // ✅ Lier au sous-traitant
+      // Lier au sous-traitant
       let retries = 3;
       let updateError = null;
       while (retries > 0) {
