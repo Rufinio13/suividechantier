@@ -13,29 +13,28 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
 
   if (!artisan) return null;
 
-  // ✅ nomsociete est déjà dans l'objet artisan (table soustraitants)
-  // C'est la société du constructeur qui a créé cet artisan
-  const nomsociete = artisan.nomsociete || '';
-  console.log('🏢 nomsociete depuis artisan prop:', nomsociete);
-
-  console.log('🔍 artisan complet:', JSON.stringify(artisan));
-  
   const handleSendInvitation = async () => {
     if (!artisan.email) {
       toast({ title: "Email manquant", description: "L'artisan doit avoir un email.", variant: "destructive" });
       return;
     }
 
+    console.log('🔍 artisan.nomsociete:', artisan.nomsociete);
+
     setIsSending(true);
     try {
-      console.log('📧 Invitation pour:', artisan.email, '| nomsociete:', nomsociete);
-
       const { data, error } = await supabase.functions.invoke('invite-artisan', {
         body: {
           email: artisan.email,
           artisanNom: artisan.nomsocieteST || `${artisan.PrenomST || ''} ${artisan.nomST || ''}`.trim(),
           siteUrl: window.location.origin,
-          nomsociete, // ✅ directement depuis artisan.nomsociete
+          nomsociete: artisan.nomsociete || '', // ✅ depuis artisan prop
+          // ✅ Passer les données artisan pour que la Edge Function mette à jour le profil
+          artisanData: {
+            nomST: artisan.nomST || '',
+            PrenomST: artisan.PrenomST || '',
+            telephone: artisan.telephone || '',
+          }
         }
       });
 
@@ -46,25 +45,15 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
       const existing = data.existing;
       setWasExisting(existing);
 
+      // ✅ Lier user_id dans soustraitants (RLS autorisé car c'est le constructeur connecté)
       if (newUserId) {
-        // ✅ Lier user_id dans soustraitants
         await supabase.from('soustraitants')
           .update({ user_id: newUserId })
           .eq('id', artisan.id);
-
-        // ✅ Mettre à jour le profil avec artisan.nomsociete
-        await supabase.from('profiles').upsert({
-          id: newUserId,
-          nom: artisan.nomST || '',
-          prenom: artisan.PrenomST || '',
-          mail: artisan.email,
-          tel: artisan.telephone || '',
-          nomsociete, // ✅ artisan.nomsociete = société du constructeur
-          user_type: 'artisan',
-        }, { onConflict: 'id' });
-
-        console.log('✅ Profil artisan : user_type=artisan, nomsociete=', nomsociete);
+        console.log('✅ soustraitants.user_id mis à jour:', newUserId);
       }
+
+      // ✅ Le profil est mis à jour par la Edge Function avec le client admin
 
       setInvitationSent(true);
       toast({
