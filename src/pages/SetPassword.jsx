@@ -21,6 +21,32 @@ export function SetPassword() {
   const [isReady, setIsReady] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  const forceArtisanProfile = async (userId, email) => {
+    // ✅ Forcer user_type=artisan et nomsociete=null
+    // Le trigger Supabase crée le profil avec user_type='constructeur' par défaut
+    // On le corrige immédiatement après
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        user_type: 'artisan',
+        nomsociete: null,
+      })
+      .eq('id', userId);
+
+    if (error) {
+      console.error('⚠️ Erreur update profil artisan:', error);
+      // Tentative upsert si update échoue (profil pas encore créé)
+      await supabase.from('profiles').upsert({
+        id: userId,
+        mail: email || '',
+        user_type: 'artisan',
+        nomsociete: null,
+      }, { onConflict: 'id' });
+    } else {
+      console.log('✅ Profil forcé : user_type=artisan, nomsociete=null');
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       const hash = window.location.hash;
@@ -28,7 +54,7 @@ export function SetPassword() {
       const accessToken = params.get('access_token');
       const refreshToken = params.get('refresh_token');
 
-      console.log('🔐 SetPassword init - access_token dans hash:', !!accessToken);
+      console.log('🔐 SetPassword init - access_token:', !!accessToken);
 
       if (accessToken) {
         const { data, error: sessionError } = await supabase.auth.setSession({
@@ -40,15 +66,12 @@ export function SetPassword() {
           console.error('❌ setSession échoué:', sessionError?.message);
           setError('Lien invalide ou expiré. Veuillez contacter votre conducteur de travaux.');
         } else {
-          console.log('✅ Session établie pour:', data.session.user?.email);
-
-          // ✅ Forcer user_type = 'artisan' dès maintenant
           const userId = data.session.user.id;
-          await supabase.from('profiles').upsert({
-            id: userId,
-            mail: data.session.user.email,
-            user_type: 'artisan',
-          }, { onConflict: 'id' });
+          const email = data.session.user.email;
+          console.log('✅ Session établie pour:', email);
+
+          // ✅ Corriger le profil immédiatement
+          await forceArtisanProfile(userId, email);
 
           setIsReady(true);
           window.history.replaceState(null, '', window.location.pathname);
@@ -61,15 +84,12 @@ export function SetPassword() {
       await new Promise(resolve => setTimeout(resolve, 800));
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData?.session) {
-        console.log('✅ Session active trouvée pour:', sessionData.session.user?.email);
-
-        // ✅ Forcer user_type = 'artisan' ici aussi
         const userId = sessionData.session.user.id;
-        await supabase.from('profiles').upsert({
-          id: userId,
-          mail: sessionData.session.user.email,
-          user_type: 'artisan',
-        }, { onConflict: 'id' });
+        const email = sessionData.session.user.email;
+        console.log('✅ Session active pour:', email);
+
+        // ✅ Corriger le profil ici aussi
+        await forceArtisanProfile(userId, email);
 
         setIsReady(true);
       } else {
@@ -90,10 +110,15 @@ export function SetPassword() {
 
     setLoading(true);
     try {
+      const { data: userData } = await supabase.auth.getUser();
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
 
-      // ✅ Déconnecter pour que l'artisan se reconnecte proprement
+      // ✅ Re-forcer le profil artisan après updateUser (par sécurité)
+      if (userData?.user?.id) {
+        await forceArtisanProfile(userData.user.id, userData.user.email);
+      }
+
       await supabase.auth.signOut();
 
       setSuccess(true);
@@ -165,7 +190,7 @@ export function SetPassword() {
     );
   }
 
-  // ✅ Formulaire — sans logo ni phrase EVAbois
+  // Formulaire
   return (
     <div className="flex justify-center items-center min-h-screen bg-[#f7f4ef]">
       <Card className="w-full max-w-md shadow-lg border border-[#e8e2d9]">

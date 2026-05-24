@@ -59,13 +59,13 @@ export function SousTraitantDetails() {
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('id, role')
+        .select('id, user_type')      // ✅ 'user_type' est le bon champ
         .eq('id', userId)
         .maybeSingle();
       
-      const accountExists = !!data && data.role === 'artisan';
+      const accountExists = !!data && data.user_type === 'artisan';  // ✅ bon champ
       setHasAccount(accountExists);
-      console.log('✅ Compte artisan existant:', accountExists);
+      console.log('✅ Compte artisan existant:', accountExists, data?.user_type);
     } catch (err) {
       console.error('❌ Erreur vérification compte:', err);
       setHasAccount(false);

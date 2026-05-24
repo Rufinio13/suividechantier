@@ -44,25 +44,28 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
 
       console.log(`✅ Email envoyé (${existing ? 'recovery' : 'invitation'}), userId:`, newUserId);
 
-      // ✅ Lier le user_id au sous-traitant
       if (newUserId) {
-        await supabase.from('soustraitants')
+        // ✅ Lier le user_id au sous-traitant
+        await supabase
+          .from('soustraitants')
           .update({ user_id: newUserId })
           .eq('id', artisan.id);
 
-        // ✅ Mettre à jour le profil avec user_type: 'artisan' OBLIGATOIRE
-        await supabase.from('profiles')
+        // ✅ Mettre à jour le profil
+        // ⚠️ nomsociete = null — ne pas mettre nomsocieteST ici car c'est réservé aux constructeurs
+        await supabase
+          .from('profiles')
           .upsert({
             id: newUserId,
             nom: artisan.nomST || '',
             prenom: artisan.PrenomST || '',
             mail: artisan.email,
             tel: artisan.telephone || '',
-            nomsociete: artisan.nomsocieteST || '',
-            user_type: 'artisan', // ✅ CRITIQUE — sans ça l'artisan voit la vue constructeur
+            nomsociete: null,        // ✅ null pour les artisans — ne pas mettre nomsocieteST
+            user_type: 'artisan',    // ✅ CRITIQUE
           }, { onConflict: 'id' });
 
-        console.log('✅ Profil artisan mis à jour avec user_type: artisan');
+        console.log('✅ Profil artisan mis à jour — user_type: artisan, nomsociete: null');
       }
 
       setInvitationSent(true);

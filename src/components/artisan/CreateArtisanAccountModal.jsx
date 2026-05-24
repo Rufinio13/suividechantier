@@ -43,7 +43,6 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
     try {
       console.log('🔐 Création compte artisan pour:', formData.email);
 
-      // 1️⃣ Créer le compte auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -51,8 +50,8 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
           data: {
             nom: sousTraitant.nomST || '',
             prenom: sousTraitant.PrenomST || '',
-            nomsociete: sousTraitant.nomsocieteST,
             role: 'artisan'
+            // ✅ pas de nomsociete ici
           }
         }
       });
@@ -66,43 +65,36 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
       if (!userId) throw new Error("Impossible de récupérer l'ID utilisateur");
 
       console.log('✅ Utilisateur créé:', userId);
-
-      // 2️⃣ Attendre que auth.users soit prêt
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // 3️⃣ ✅ Upsert profil avec user_type: 'artisan' OBLIGATOIRE
+      // ✅ Upsert profil
+      // ⚠️ nomsociete = null — ne pas mettre nomsocieteST, c'est réservé aux constructeurs
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
           id: userId,
           nom: sousTraitant.nomST || '',
           prenom: sousTraitant.PrenomST || '',
-          nomsociete: sousTraitant.nomsocieteST || '',
-          mail: formData.email,         // ✅ champ 'mail' pas 'email'
+          mail: formData.email,
           tel: sousTraitant.telephone || null,
-          user_type: 'artisan',         // ✅ CRITIQUE — détermine la vue après connexion
+          nomsociete: null,        // ✅ null pour les artisans
+          user_type: 'artisan',    // ✅ CRITIQUE
         }, { onConflict: 'id' });
 
       if (profileError) {
         console.error('⚠️ Erreur profil:', profileError);
-        // On continue quand même — le SetPassword.jsx corrigera au clic sur le lien
       } else {
-        console.log('✅ Profil artisan créé avec user_type: artisan');
+        console.log('✅ Profil artisan créé — user_type: artisan, nomsociete: null');
       }
 
-      // 4️⃣ ✅ Lier au sous-traitant avec user_id ET email
+      // ✅ Lier au sous-traitant
       let retries = 3;
       let updateError = null;
-
       while (retries > 0) {
         const { error } = await supabase
           .from('soustraitants')
-          .update({
-            user_id: userId,
-            email: formData.email
-          })
+          .update({ user_id: userId, email: formData.email })
           .eq('id', sousTraitant.id);
-
         if (!error) { updateError = null; break; }
         updateError = error;
         retries--;
@@ -110,20 +102,12 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
       }
 
       if (updateError) {
-        console.error('❌ Erreur liaison:', updateError);
-        if (updateError.code === '23503') {
-          throw new Error('Compte créé mais liaison échouée. Vérifiez que la confirmation email est désactivée dans Supabase.');
-        }
+        if (updateError.code === '23503') throw new Error('Compte créé mais liaison échouée. Vérifiez que la confirmation email est désactivée dans Supabase.');
         throw new Error(`Impossible de lier le compte: ${updateError.message}`);
       }
 
       console.log('🎉 Compte artisan créé et lié avec succès');
-
-      toast({
-        title: "Compte créé ✅",
-        description: `Compte artisan créé pour ${formData.email}`
-      });
-
+      toast({ title: "Compte créé ✅", description: `Compte artisan créé pour ${formData.email}` });
       onSuccess?.();
       onClose();
       setFormData({ email: '', password: '', confirmPassword: '' });
@@ -156,51 +140,26 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="email">
-              <Mail className="inline h-4 w-4 mr-2" />
-              Email <span className="text-red-500">*</span>
-            </Label>
-            <Input id="email" name="email" type="email" value={formData.email}
-              onChange={handleChange} required placeholder="artisan@example.com"
-              disabled={isSavingRef.current} />
+            <Label htmlFor="email"><Mail className="inline h-4 w-4 mr-2" />Email <span className="text-red-500">*</span></Label>
+            <Input id="email" name="email" type="email" value={formData.email} onChange={handleChange} required placeholder="artisan@example.com" disabled={isSavingRef.current} />
           </div>
-
           <div className="space-y-2">
-            <Label htmlFor="password">
-              <Lock className="inline h-4 w-4 mr-2" />
-              Mot de passe <span className="text-red-500">*</span>
-            </Label>
-            <Input id="password" name="password" type="password" value={formData.password}
-              onChange={handleChange} required minLength={6} placeholder="Minimum 6 caractères"
-              disabled={isSavingRef.current} />
+            <Label htmlFor="password"><Lock className="inline h-4 w-4 mr-2" />Mot de passe <span className="text-red-500">*</span></Label>
+            <Input id="password" name="password" type="password" value={formData.password} onChange={handleChange} required minLength={6} placeholder="Minimum 6 caractères" disabled={isSavingRef.current} />
           </div>
-
           <div className="space-y-2">
-            <Label htmlFor="confirmPassword">
-              <Lock className="inline h-4 w-4 mr-2" />
-              Confirmer le mot de passe <span className="text-red-500">*</span>
-            </Label>
-            <Input id="confirmPassword" name="confirmPassword" type="password" value={formData.confirmPassword}
-              onChange={handleChange} required minLength={6} placeholder="Confirmer le mot de passe"
-              disabled={isSavingRef.current} />
+            <Label htmlFor="confirmPassword"><Lock className="inline h-4 w-4 mr-2" />Confirmer le mot de passe <span className="text-red-500">*</span></Label>
+            <Input id="confirmPassword" name="confirmPassword" type="password" value={formData.confirmPassword} onChange={handleChange} required minLength={6} placeholder="Confirmer le mot de passe" disabled={isSavingRef.current} />
           </div>
-
           <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-            <p className="text-sm text-blue-800">
-              ℹ️ L'artisan pourra se connecter immédiatement avec ces identifiants
-            </p>
+            <p className="text-sm text-blue-800">ℹ️ L'artisan pourra se connecter immédiatement avec ces identifiants</p>
           </div>
-
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} disabled={isSavingRef.current}>
-              Annuler
-            </Button>
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSavingRef.current}>Annuler</Button>
             <Button type="submit" disabled={isSavingRef.current}>
-              {isSavingRef.current ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Création en cours...</>
-              ) : (
-                <><UserPlus className="mr-2 h-4 w-4" />Créer le compte</>
-              )}
+              {isSavingRef.current
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Création en cours...</>
+                : <><UserPlus className="mr-2 h-4 w-4" />Créer le compte</>}
             </Button>
           </DialogFooter>
         </form>

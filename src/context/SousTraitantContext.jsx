@@ -11,7 +11,44 @@ export function SousTraitantProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   const loadSousTraitants = async () => {
-    if (!profile?.nomsociete) {
+    if (!profile) {
+      console.log("SousTraitantContext : En attente de profile...");
+      setSousTraitants([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    // ✅ ARTISAN : charger uniquement son propre enregistrement via user_id
+    if (profile.user_type === 'artisan') {
+      if (!user?.id) {
+        setSousTraitants([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log("⏳ Chargement sous-traitant artisan pour user_id :", user.id);
+
+      const { data, error } = await supabase
+        .from("soustraitants")
+        .select("*")
+        .eq("user_id", user.id);
+
+      if (error) {
+        console.error("❌ loadSousTraitants (artisan) :", error);
+        setSousTraitants([]);
+      } else {
+        console.log("✅ Sous-traitant artisan chargé :", data?.length || 0, data);
+        setSousTraitants(data || []);
+      }
+
+      setLoading(false);
+      return;
+    }
+
+    // ✅ CONSTRUCTEUR : charger tous les sous-traitants de sa société
+    if (!profile.nomsociete) {
       console.log("SousTraitantContext : En attente de nomsociete...");
       setSousTraitants([]);
       setLoading(false);
@@ -19,7 +56,6 @@ export function SousTraitantProvider({ children }) {
     }
 
     console.log("⏳ Chargement sous-traitants pour société :", profile.nomsociete);
-    setLoading(true);
 
     const { data, error } = await supabase
       .from("soustraitants")
@@ -28,7 +64,7 @@ export function SousTraitantProvider({ children }) {
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error("❌ loadSousTraitants :", error);
+      console.error("❌ loadSousTraitants (constructeur) :", error);
       setSousTraitants([]);
     } else {
       console.log("✅ Sous-traitants chargés :", data?.length || 0);
@@ -38,33 +74,29 @@ export function SousTraitantProvider({ children }) {
     setLoading(false);
   };
 
-  // ✅ Chargement initial
+  // ✅ Chargement initial — dépend du user_type
   useEffect(() => {
-    loadSousTraitants();
-  }, [profile?.nomsociete]);
+    if (profile?.user_type === 'artisan') {
+      loadSousTraitants();
+    } else {
+      loadSousTraitants();
+    }
+  }, [profile?.user_type, profile?.nomsociete, user?.id]);
 
-  // ✅ NOUVEAU : Écouter la reconnexion Supabase
+  // ✅ Écouter la reconnexion Supabase
   useEffect(() => {
     const handleReconnect = () => {
       console.log('🔄 SousTraitantContext : Supabase reconnecté → Rechargement...');
-      
-      if (profile?.nomsociete) {
-        setTimeout(() => {
-          loadSousTraitants();
-        }, 500);
-      }
+      setTimeout(() => loadSousTraitants(), 500);
     };
 
     window.addEventListener('supabase-reconnected', handleReconnect);
-    
-    return () => {
-      window.removeEventListener('supabase-reconnected', handleReconnect);
-    };
-  }, [profile?.nomsociete]);
+    return () => window.removeEventListener('supabase-reconnected', handleReconnect);
+  }, [profile?.user_type, profile?.nomsociete, user?.id]);
 
   const addSousTraitant = async (st) => {
     console.log("🔵 addSousTraitant - Début");
-    
+
     if (!user || !profile?.nomsociete) {
       throw new Error("User ou société non définis");
     }
@@ -80,18 +112,13 @@ export function SousTraitantProvider({ children }) {
       nomsocieteST: st.nomsocieteST,
     };
 
-    console.log("📦 Payload ST:", payload);
-
     const { data, error } = await supabase
       .from("soustraitants")
       .insert([payload])
       .select()
       .single();
 
-    if (error) {
-      console.error("❌ Erreur Supabase:", error);
-      throw error;
-    }
+    if (error) { console.error("❌ Erreur Supabase:", error); throw error; }
 
     console.log("✅ Sous-traitant inséré :", data);
     setSousTraitants((prev) => [data, ...(prev || [])]);
@@ -100,7 +127,7 @@ export function SousTraitantProvider({ children }) {
 
   const updateSousTraitant = async (id, updates) => {
     console.log('📤 updateSousTraitant - ID:', id);
-    
+
     const cleanUpdates = { ...updates };
     delete cleanUpdates.id;
     delete cleanUpdates.created_at;
@@ -108,25 +135,18 @@ export function SousTraitantProvider({ children }) {
     delete cleanUpdates.user_id;
     delete cleanUpdates.nomsociete;
     delete cleanUpdates.nomsocieteST;
-    
+
     const { data, error } = await supabase
       .from("soustraitants")
       .update(cleanUpdates)
       .eq("id", id)
-      .eq("nomsociete", profile?.nomsociete)
       .select()
       .single();
 
-    if (error) {
-      console.error("❌ Erreur Supabase updateSousTraitant:", error);
-      throw error;
-    }
+    if (error) { console.error("❌ Erreur Supabase updateSousTraitant:", error); throw error; }
 
     console.log("✅ Sous-traitant mis à jour:", data);
-    setSousTraitants((prev) =>
-      (prev || []).map((s) => (s.id === id ? data : s))
-    );
-
+    setSousTraitants((prev) => (prev || []).map((s) => (s.id === id ? data : s)));
     return data;
   };
 
@@ -139,10 +159,7 @@ export function SousTraitantProvider({ children }) {
       .eq("id", id)
       .eq("nomsociete", profile?.nomsociete);
 
-    if (error) {
-      console.error("❌ deleteSousTraitant :", error);
-      throw error;
-    }
+    if (error) { console.error("❌ deleteSousTraitant :", error); throw error; }
 
     setSousTraitants((prev) => (prev || []).filter((s) => s.id !== id));
     console.log("✅ ST supprimé du state local");
@@ -167,8 +184,6 @@ export function SousTraitantProvider({ children }) {
 
 export function useSousTraitant() {
   const ctx = useContext(SousTraitantContext);
-  if (!ctx) {
-    throw new Error("useSousTraitant utilisé hors provider !");
-  }
+  if (!ctx) throw new Error("useSousTraitant utilisé hors provider !");
   return ctx;
 }
