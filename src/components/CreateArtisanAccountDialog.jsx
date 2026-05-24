@@ -9,6 +9,7 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
   const { toast } = useToast();
   const [isSending, setIsSending] = useState(false);
   const [invitationSent, setInvitationSent] = useState(false);
+  const [wasExisting, setWasExisting] = useState(false);
 
   if (!artisan) return null;
 
@@ -26,7 +27,6 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
     try {
       console.log('📧 Envoi invitation pour:', artisan.email);
 
-      // ✅ Appel Edge Function invite-artisan (utilise service_role en sécurité)
       const { data, error } = await supabase.functions.invoke('invite-artisan', {
         body: {
           email: artisan.email,
@@ -39,43 +39,32 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
       if (data?.error) throw new Error(data.error);
 
       const newUserId = data.userId;
-      console.log('✅ Invitation envoyée, userId:', newUserId);
+      const existing = data.existing;
+      setWasExisting(existing);
 
-      // ✅ Lier le user_id au sous-traitant si on l'a récupéré
+      console.log(`✅ Email envoyé (${existing ? 'reset' : 'invitation'}), userId:`, newUserId);
+
+      // ✅ Lier le user_id au sous-traitant
       if (newUserId) {
-        const { error: updateError } = await supabase
-          .from('soustraitants')
-          .update({ user_id: newUserId })
-          .eq('id', artisan.id);
-
-        if (updateError) {
-          console.error('⚠️ Erreur liaison user_id:', updateError);
-        } else {
-          console.log('✅ Sous-traitant lié au compte');
-        }
+        await supabase.from('soustraitants').update({ user_id: newUserId }).eq('id', artisan.id);
 
         // ✅ Mettre à jour le profil
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            nom: artisan.nomST || '',
-            prenom: artisan.PrenomST || '',
-            mail: artisan.email,
-            tel: artisan.telephone || '',
-            nomsociete: artisan.nomsocieteST,
-            user_type: 'artisan',
-          })
-          .eq('id', newUserId);
-
-        if (profileError) {
-          console.error('⚠️ Erreur mise à jour profil:', profileError);
-        }
+        await supabase.from('profiles').update({
+          nom: artisan.nomST || '',
+          prenom: artisan.PrenomST || '',
+          mail: artisan.email,
+          tel: artisan.telephone || '',
+          nomsociete: artisan.nomsocieteST,
+          user_type: 'artisan',
+        }).eq('id', newUserId);
       }
 
       setInvitationSent(true);
       toast({
-        title: "Invitation envoyée ✅",
-        description: `Un email a été envoyé à ${artisan.email} pour créer son mot de passe.`,
+        title: existing ? "Email de connexion envoyé ✅" : "Invitation envoyée ✅",
+        description: existing
+          ? `${artisan.email} recevra un lien pour se connecter.`
+          : `${artisan.email} recevra un email pour créer son mot de passe.`,
         duration: 5000
       });
 
@@ -93,10 +82,6 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
     }
   };
 
-  const handleSkip = () => {
-    onClose();
-  };
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[440px]">
@@ -106,7 +91,7 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
             Créer un accès pour {artisan.nomsocieteST}
           </DialogTitle>
           <DialogDescription>
-            Un email sera envoyé à l'artisan pour qu'il définisse son mot de passe et accède à l'application.
+            Un email sera envoyé à l'artisan pour qu'il accède à l'application.
           </DialogDescription>
         </DialogHeader>
 
@@ -120,7 +105,7 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
           {/* Pas d'email */}
           {!artisan.email && (
             <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">
-              ⚠️ Impossible d'envoyer une invitation sans email. Modifiez la fiche de l'artisan pour ajouter un email.
+              ⚠️ Impossible d'envoyer une invitation sans email. Modifiez la fiche de l'artisan.
             </div>
           )}
 
@@ -129,8 +114,14 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
             <div className="bg-green-50 border border-green-200 rounded-md p-3 flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
               <div className="text-sm text-green-800">
-                <p className="font-semibold">Invitation envoyée !</p>
-                <p>{artisan.email} recevra un email pour créer son mot de passe.</p>
+                <p className="font-semibold">
+                  {wasExisting ? 'Email de connexion envoyé !' : 'Invitation envoyée !'}
+                </p>
+                <p>
+                  {wasExisting
+                    ? `${artisan.email} recevra un lien pour se connecter directement.`
+                    : `${artisan.email} recevra un email pour créer son mot de passe.`}
+                </p>
               </div>
             </div>
           )}
@@ -140,7 +131,7 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
             <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-sm text-blue-800">
               <p className="font-medium mb-1">📧 Comment ça fonctionne :</p>
               <ol className="list-decimal list-inside space-y-1 text-xs">
-                <li>L'artisan reçoit un email d'invitation</li>
+                <li>L'artisan reçoit un email avec un lien</li>
                 <li>Il clique sur le lien et choisit son mot de passe</li>
                 <li>Il peut se connecter immédiatement</li>
               </ol>
@@ -149,19 +140,12 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
         </div>
 
         <DialogFooter className="gap-2">
-          <Button type="button" variant="outline" onClick={handleSkip} disabled={isSending}>
+          <Button type="button" variant="outline" onClick={onClose} disabled={isSending}>
             {invitationSent ? 'Fermer' : 'Non, plus tard'}
           </Button>
           {!invitationSent && (
-            <Button
-              onClick={handleSendInvitation}
-              disabled={isSending || !artisan.email}
-            >
-              {isSending ? (
-                'Envoi en cours...'
-              ) : (
-                <><Mail className="mr-2 h-4 w-4" /> Envoyer l'invitation</>
-              )}
+            <Button onClick={handleSendInvitation} disabled={isSending || !artisan.email}>
+              {isSending ? 'Envoi en cours...' : <><Mail className="mr-2 h-4 w-4" />Envoyer l'invitation</>}
             </Button>
           )}
         </DialogFooter>
