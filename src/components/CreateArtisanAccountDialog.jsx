@@ -31,7 +31,8 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
         body: {
           email: artisan.email,
           artisanNom: artisan.nomsocieteST || `${artisan.PrenomST || ''} ${artisan.nomST || ''}`.trim(),
-          redirectTo: `${window.location.origin}/reset-password`,
+          // ✅ Passer l'URL du site pour que la Edge Function construise la bonne URL
+          siteUrl: window.location.origin,
         }
       });
 
@@ -42,26 +43,36 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
       const existing = data.existing;
       setWasExisting(existing);
 
-      console.log(`✅ Email envoyé (${existing ? 'reset' : 'invitation'}), userId:`, newUserId);
+      console.log(`✅ Email envoyé (${existing ? 'recovery' : 'invitation'}), userId:`, newUserId);
 
       // ✅ Lier le user_id au sous-traitant
       if (newUserId) {
-        await supabase.from('soustraitants').update({ user_id: newUserId }).eq('id', artisan.id);
+        const { error: updateError } = await supabase
+          .from('soustraitants')
+          .update({ user_id: newUserId })
+          .eq('id', artisan.id);
+
+        if (updateError) console.error('⚠️ Erreur liaison user_id:', updateError);
 
         // ✅ Mettre à jour le profil
-        await supabase.from('profiles').update({
-          nom: artisan.nomST || '',
-          prenom: artisan.PrenomST || '',
-          mail: artisan.email,
-          tel: artisan.telephone || '',
-          nomsociete: artisan.nomsocieteST,
-          user_type: 'artisan',
-        }).eq('id', newUserId);
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            nom: artisan.nomST || '',
+            prenom: artisan.PrenomST || '',
+            mail: artisan.email,
+            tel: artisan.telephone || '',
+            nomsociete: artisan.nomsocieteST,
+            user_type: 'artisan',
+          })
+          .eq('id', newUserId);
+
+        if (profileError) console.error('⚠️ Erreur profil:', profileError);
       }
 
       setInvitationSent(true);
       toast({
-        title: existing ? "Email de connexion envoyé ✅" : "Invitation envoyée ✅",
+        title: existing ? "Email envoyé ✅" : "Invitation envoyée ✅",
         description: existing
           ? `${artisan.email} recevra un lien pour se connecter.`
           : `${artisan.email} recevra un email pour créer son mot de passe.`,
@@ -96,20 +107,17 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* Infos artisan */}
           <div className="bg-slate-50 border rounded-md p-3 text-sm space-y-1">
             <div><strong>Email :</strong> {artisan.email || <span className="text-red-600">❌ Aucun email</span>}</div>
             <div><strong>Contact :</strong> {artisan.PrenomST} {artisan.nomST}</div>
           </div>
 
-          {/* Pas d'email */}
           {!artisan.email && (
             <div className="bg-red-50 border border-red-200 rounded-md p-3 text-sm text-red-800">
               ⚠️ Impossible d'envoyer une invitation sans email. Modifiez la fiche de l'artisan.
             </div>
           )}
 
-          {/* Invitation envoyée */}
           {invitationSent && (
             <div className="bg-green-50 border border-green-200 rounded-md p-3 flex items-center gap-2">
               <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
@@ -119,14 +127,13 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
                 </p>
                 <p>
                   {wasExisting
-                    ? `${artisan.email} recevra un lien pour se connecter directement.`
+                    ? `${artisan.email} recevra un lien pour définir son mot de passe.`
                     : `${artisan.email} recevra un email pour créer son mot de passe.`}
                 </p>
               </div>
             </div>
           )}
 
-          {/* Explication */}
           {!invitationSent && artisan.email && (
             <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-sm text-blue-800">
               <p className="font-medium mb-1">📧 Comment ça fonctionne :</p>
@@ -145,7 +152,9 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
           </Button>
           {!invitationSent && (
             <Button onClick={handleSendInvitation} disabled={isSending || !artisan.email}>
-              {isSending ? 'Envoi en cours...' : <><Mail className="mr-2 h-4 w-4" />Envoyer l'invitation</>}
+              {isSending
+                ? 'Envoi en cours...'
+                : <><Mail className="mr-2 h-4 w-4" />Envoyer l'invitation</>}
             </Button>
           )}
         </DialogFooter>

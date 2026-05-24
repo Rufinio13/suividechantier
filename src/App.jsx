@@ -22,15 +22,16 @@ import { SAVList } from '@/pages/SAVList.jsx';
 import { ReferentielControleQualite } from '@/pages/ReferentielControleQualite.jsx';
 import { ReferentielCommande } from '@/pages/ReferentielCommande.jsx';
 import { Commandes } from '@/pages/Commandes.jsx';
-import { AppProvider } from '@/context/AppProvider.jsx'; // ✅ NOUVEAU
+import { AppProvider } from '@/context/AppProvider.jsx';
 import { Login } from '@/pages/Login.jsx';
 import { ResetPassword } from '@/pages/ResetPassword.jsx';
+import { SetPassword } from '@/pages/SetPassword.jsx'; // ✅ NOUVEAU
 import { useAuth } from '@/hooks/useAuth.jsx';
 import { MonCompte } from '@/pages/MonCompte.jsx';
 
 export function PrivateRoute({ children }) {
   const { user, profile, loading } = useAuth();
-  
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -41,11 +42,11 @@ export function PrivateRoute({ children }) {
       </div>
     );
   }
-  
+
   if (!user) return <Navigate to="/login" replace />;
-  
+
   const currentPath = window.location.pathname;
-  
+
   if (profile?.user_type === 'artisan') {
     if (!currentPath.startsWith('/artisan')) {
       return <Navigate to="/artisan" replace />;
@@ -55,7 +56,7 @@ export function PrivateRoute({ children }) {
       return <Navigate to="/" replace />;
     }
   }
-  
+
   return children;
 }
 
@@ -66,6 +67,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/set-password" element={<SetPassword />} /> {/* ✅ NOUVEAU */}
 
           <Route
             path="/"
