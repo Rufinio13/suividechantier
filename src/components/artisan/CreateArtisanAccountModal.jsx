@@ -10,7 +10,7 @@ import { UserPlus, Mail, Lock, Loader2 } from 'lucide-react';
 
 export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuccess }) {
   const { toast } = useToast();
-  const { profile } = useAuth(); // ✅ Récupérer le profil du constructeur connecté
+  const { user } = useAuth();
   const isSavingRef = useRef(false);
 
   const [formData, setFormData] = useState({
@@ -40,7 +40,23 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
     isSavingRef.current = true;
 
     try {
-      console.log('🔐 Création compte artisan pour:', formData.email, '| nomsociete:', profile?.nomsociete);
+      // ✅ Récupérer le profil constructeur DIRECTEMENT depuis Supabase
+      const { data: constructeurProfile, error: profileFetchError } = await supabase
+        .from('profiles')
+        .select('nomsociete')
+        .eq('id', user.id)
+        .single();
+
+      if (profileFetchError) throw new Error('Impossible de récupérer le profil constructeur');
+
+      const nomsociete = constructeurProfile?.nomsociete || '';
+      console.log('🔐 Création compte artisan | nomsociete constructeur:', nomsociete);
+
+      if (!nomsociete) {
+        toast({ title: "Erreur", description: "Votre profil n'a pas de société renseignée. Renseignez-la dans Mon Compte.", variant: "destructive" });
+        isSavingRef.current = false;
+        return;
+      }
 
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
@@ -51,7 +67,7 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
             prenom: sousTraitant.PrenomST || '',
             role: 'artisan',
             user_type: 'artisan',
-            nomsociete: profile?.nomsociete || '', // ✅ société du constructeur
+            nomsociete, // ✅ société du constructeur
           }
         }
       });
@@ -74,12 +90,12 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
         prenom: sousTraitant.PrenomST || '',
         mail: formData.email,
         tel: sousTraitant.telephone || null,
-        nomsociete: profile?.nomsociete || '', // ✅ société du constructeur
+        nomsociete, // ✅ société du constructeur
         user_type: 'artisan',
       }, { onConflict: 'id' });
 
       if (profileError) console.error('⚠️ Erreur profil:', profileError);
-      else console.log('✅ Profil : user_type=artisan, nomsociete=', profile?.nomsociete);
+      else console.log('✅ Profil : user_type=artisan, nomsociete=', nomsociete);
 
       // ✅ Lier au sous-traitant
       let retries = 3;
@@ -96,7 +112,7 @@ export function CreateArtisanAccountModal({ isOpen, onClose, sousTraitant, onSuc
 
       if (updateError) throw new Error(`Impossible de lier le compte: ${updateError.message}`);
 
-      console.log('🎉 Compte artisan créé et lié avec succès');
+      console.log('🎉 Compte artisan créé avec succès');
       toast({ title: "Compte créé ✅", description: `Compte artisan créé pour ${formData.email}` });
       onSuccess?.();
       onClose();
