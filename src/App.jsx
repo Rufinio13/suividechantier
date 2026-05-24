@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Layout } from '@/components/Layout.jsx';
 import { LayoutArtisan } from '@/components/LayoutArtisan.jsx';
 import { ErrorBoundary } from '@/components/ErrorBoundary.jsx';
@@ -25,12 +25,19 @@ import { Commandes } from '@/pages/Commandes.jsx';
 import { AppProvider } from '@/context/AppProvider.jsx';
 import { Login } from '@/pages/Login.jsx';
 import { ResetPassword } from '@/pages/ResetPassword.jsx';
-import { SetPassword } from '@/pages/SetPassword.jsx'; // ✅ NOUVEAU
+import { SetPassword } from '@/pages/SetPassword.jsx';
 import { useAuth } from '@/hooks/useAuth.jsx';
 import { MonCompte } from '@/pages/MonCompte.jsx';
 
 export function PrivateRoute({ children }) {
   const { user, profile, loading } = useAuth();
+  const location = useLocation();
+
+  // ✅ Ne jamais rediriger si on est sur /set-password ou /reset-password
+  // Ces pages gèrent leur propre auth via le token dans le hash
+  if (location.pathname === '/set-password' || location.pathname === '/reset-password') {
+    return children;
+  }
 
   if (loading) {
     return (
@@ -45,7 +52,7 @@ export function PrivateRoute({ children }) {
 
   if (!user) return <Navigate to="/login" replace />;
 
-  const currentPath = window.location.pathname;
+  const currentPath = location.pathname;
 
   if (profile?.user_type === 'artisan') {
     if (!currentPath.startsWith('/artisan')) {
@@ -65,9 +72,10 @@ function App() {
     <ErrorBoundary>
       <AppProvider>
         <Routes>
+          {/* ✅ Routes publiques — accessibles sans authentification */}
           <Route path="/login" element={<Login />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/set-password" element={<SetPassword />} /> {/* ✅ NOUVEAU */}
+          <Route path="/set-password" element={<SetPassword />} />
 
           <Route
             path="/"

@@ -22,37 +22,54 @@ export function SetPassword() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    // ✅ Supabase met les tokens dans le HASH de l'URL
-    // Ex: https://app.evabois.fr/set-password#access_token=xxx&type=invite
-    const hash = window.location.hash;
-    const params = new URLSearchParams(hash.replace('#', ''));
-    const accessToken = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
+    const init = async () => {
+      // ✅ Cas 1 : token dans le hash (lien email cliqué directement)
+      const hash = window.location.hash;
+      const params = new URLSearchParams(hash.replace('#', ''));
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
 
-    console.log('🔐 SetPassword - hash:', hash ? 'présent' : 'absent', '| access_token:', !!accessToken);
+      console.log('🔐 SetPassword init - access_token dans hash:', !!accessToken);
 
-    if (!accessToken) {
-      setError('Lien invalide ou expiré. Veuillez contacter votre conducteur de travaux.');
-      setChecking(false);
-      return;
-    }
+      if (accessToken) {
+        // Établir la session avec le token du lien
+        const { data, error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken || accessToken,
+        });
 
-    // ✅ Établir la session avec le token du lien
-    supabase.auth.setSession({
-      access_token: accessToken,
-      refresh_token: refreshToken || accessToken, // fallback si refresh absent
-    }).then(({ data, error: sessionError }) => {
-      if (sessionError || !data?.session) {
-        console.error('❌ Erreur setSession:', sessionError?.message);
-        setError('Lien invalide ou expiré. Veuillez contacter votre conducteur de travaux.');
-      } else {
-        console.log('✅ Session établie pour:', data.session.user?.email);
+        if (sessionError || !data?.session) {
+          console.error('❌ setSession échoué:', sessionError?.message);
+          setError('Lien invalide ou expiré. Veuillez contacter votre conducteur de travaux.');
+        } else {
+          console.log('✅ Session établie via hash token pour:', data.session.user?.email);
+          setIsReady(true);
+          // Nettoyer le hash de l'URL
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+        setChecking(false);
+        return;
+      }
+
+      // ✅ Cas 2 : pas de token dans le hash → vérifier si session déjà active
+      // (AppProvider a peut-être déjà établi la session via onAuthStateChange)
+      console.log('🔍 Pas de token dans le hash — vérification session existante...');
+
+      // Attendre un peu que AppProvider traite le token s'il est ailleurs
+      await new Promise(resolve => setTimeout(resolve, 800));
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session) {
+        console.log('✅ Session active trouvée pour:', sessionData.session.user?.email);
         setIsReady(true);
-        // ✅ Nettoyer le hash sans recharger
-        window.history.replaceState(null, '', window.location.pathname);
+      } else {
+        console.warn('❌ Aucune session — lien invalide ou expiré');
+        setError('Lien invalide ou expiré. Veuillez contacter votre conducteur de travaux.');
       }
       setChecking(false);
-    });
+    };
+
+    init();
   }, []);
 
   const handleSetPassword = async (e) => {
@@ -67,10 +84,14 @@ export function SetPassword() {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw updateError;
 
+      // ✅ Déconnecter après avoir défini le mot de passe
+      // pour que l'artisan se reconnecte proprement
+      await supabase.auth.signOut();
+
       setSuccess(true);
       toast({
         title: 'Compte activé ✅',
-        description: 'Votre mot de passe a été créé. Redirection en cours...',
+        description: 'Votre mot de passe a été créé. Connectez-vous maintenant.',
         duration: 4000
       });
 
@@ -111,7 +132,8 @@ export function SetPassword() {
               <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
               <p className="text-sm text-red-800">{error}</p>
             </div>
-            <Button className="w-full text-white border-0" style={{ background: '#9FC760' }} onClick={() => navigate('/login')}>
+            <Button className="w-full text-white border-0" style={{ background: '#9FC760' }}
+              onClick={() => navigate('/login')}>
               Retour à la connexion
             </Button>
           </CardContent>
