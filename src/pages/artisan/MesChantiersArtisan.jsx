@@ -47,7 +47,7 @@ export function MesChantiersArtisan() {
         
         const { data, error } = await supabase
   .from('documents_chantier')
-  .select('chantier_id, necessite_signature, ...')
+  .select('chantier_id, necessite_signature, signature_statut, artisan_assigne_signature, artisans_vus, partage_type, artisan_id')
   .in('chantier_id', chantierIds)
   .or(`partage_type.eq.tous,artisan_id.eq.${monSousTraitantId}`);
 
