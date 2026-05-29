@@ -12,12 +12,9 @@ import { ZoomIn, ZoomOut, Calendar } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
-import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { calculateDateFinLogic, calculateDureeOuvree } from '@/context/chantierContextLogics/tacheLogics';
-import { supabase } from '@/lib/supabaseClient';
-import { sendNotificationEmail, getArtisanEmailInfo } from '@/lib/sendNotificationEmail';
 
 const MIN_DAY_WIDTH = 16;
 const MAX_DAY_WIDTH = 48;
@@ -43,7 +40,6 @@ const getClosestWorkday = (date) => { if (isWeekend(date)) return nextMonday(dat
 export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTraitants }) {
   const { updateTache, chantiers: allChantiers } = useChantier();
   const { sousTraitants: allSousTraitants } = useSousTraitant();
-  const { user } = useAuth();
 
   const [dayWidth, setDayWidth] = useState(DEFAULT_DAY_WIDTH);
   const [chantierColWidth, setChantierColWidth] = useState(CHANTIER_COL_WIDTH_DESKTOP);
@@ -209,14 +205,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
     setFormData({ datedebut: tache.datedebut || '', duree: duree || '' });
   };
 
-  // ✅ Récupérer profil expéditeur
-  const getExpediteurProfile = async () => {
-    try {
-      const { data } = await supabase.from('profiles').select('nom, prenom, mail, tel, nomsociete, adresse, ville, code_postal').eq('id', user.id).single();
-      return data || null;
-    } catch { return null; }
-  };
-
+  // ✅ Save sans email — juste updateTache
   const handleSave = async () => {
     if (!selectedTask) return;
     if (!formData.datedebut || !formData.duree) { alert('La date de début et la durée sont obligatoires'); return; }
@@ -234,34 +223,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         datedebut: formData.datedebut, datefin: nouvelleDatatefin,
         terminee: selectedTask.terminee || false,
       });
-
-      // ✅ Email si dates modifiées et assigné à un sous-traitant
-      const dateDebutChangee = selectedTask.datedebut !== formData.datedebut;
-      const dateFinChangee = selectedTask.datefin !== nouvelleDatatefin;
-
-      if ((dateDebutChangee || dateFinChangee) && selectedTask.assignetype === 'soustraitant' && selectedTask.assigneid) {
-        const artisan = allSousTraitants?.find(st => st.id === selectedTask.assigneid);
-        const destinataire = await getArtisanEmailInfo(artisan, supabase);
-        const expediteur = await getExpediteurProfile();
-        const chantier = allChantiers?.find(c => c.id === selectedTask.chantierid);
-        const chantierNom = chantier?.nomchantier || 'Chantier';
-
-        if (destinataire?.email) {
-          await sendNotificationEmail('modification_tache', destinataire.email, {
-            artisanPrenom: destinataire.prenom,
-            aCompte: destinataire.aCompte,
-            tacheNom: selectedTask.nom,
-            chantierNom,
-            ancienDebut: format(parseISO(selectedTask.datedebut), 'dd/MM/yyyy', { locale: fr }),
-            ancienneFin: format(parseISO(selectedTask.datefin), 'dd/MM/yyyy', { locale: fr }),
-            dateDebut: format(parseISO(formData.datedebut), 'dd/MM/yyyy', { locale: fr }),
-            dateFin: format(parseISO(nouvelleDatatefin), 'dd/MM/yyyy', { locale: fr }),
-            expediteur,
-          });
-          console.log('📧 Email modification date (GlobalGantt) envoyé à:', destinataire.email);
-        }
-      }
-
       setSelectedTask(null);
     } catch (error) {
       console.error('❌ Erreur mise à jour tâche:', error);

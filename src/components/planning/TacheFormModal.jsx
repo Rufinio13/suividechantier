@@ -10,10 +10,7 @@ import { calculateDateFinLogic, calculateDureeOuvree } from "@/context/chantierC
 import { useSousTraitant } from "@/context/SousTraitantContext";
 import { useFournisseur } from "@/context/FournisseurContext";
 import { useChantier } from "@/context/ChantierContext";
-import { useAuth } from "@/hooks/useAuth";
 import { AlertTriangle, CheckCircle, Trash2 } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
-import { sendNotificationEmail, getArtisanEmailInfo } from "@/lib/sendNotificationEmail";
 
 export function TacheFormModal({
   isOpen, onClose, tache, chantierId, lots: globalLots,
@@ -22,7 +19,6 @@ export function TacheFormModal({
   const { sousTraitants } = useSousTraitant();
   const { fournisseurs } = useFournisseur();
   const { chantiers } = useChantier();
-  const { user } = useAuth();
 
   const tacheConflictInfo = useMemo(() => {
     if (!tache || !tache.assigneid || tache.assignetype !== 'soustraitant' || !tache.datedebut || !tache.datefin) return null;
@@ -110,16 +106,6 @@ export function TacheFormModal({
 
   const handleChange = e => { const { name, value } = e.target; setFormData(prev => ({ ...prev, [name]: value })); };
 
-  // ✅ Récupérer profil expéditeur
-  const getExpediteurProfile = async () => {
-    try {
-      const { data } = await supabase.from('profiles')
-        .select('nom, prenom, mail, tel, nomsociete, adresse, ville, code_postal')
-        .eq('id', user.id).single();
-      return data || null;
-    } catch { return null; }
-  };
-
   const handleSubmit = async e => {
     e.preventDefault();
     if (!formData.lotid) { alert("Veuillez sélectionner un lot."); return; }
@@ -143,40 +129,6 @@ export function TacheFormModal({
     try {
       if (tache) await updateTache(tache.id, payload);
       else await addTache(payload);
-
-      // ✅ Email si assigné à un sous-traitant
-      if (formData.assignetype === 'soustraitant' && formData.assigneid) {
-        const artisan = sousTraitants.find(st => st.id === formData.assigneid);
-        const destinataire = await getArtisanEmailInfo(artisan, supabase);
-        const expediteur = await getExpediteurProfile();
-        const chantier = chantiers.find(c => c.id === chantierId);
-        const chantierNom = chantier?.nomchantier || 'Chantier';
-        const dateDebutFormatted = format(parseISO(formData.datedebut), 'dd/MM/yyyy', { locale: fr });
-        const dateFinFormatted = format(parseISO(datefin), 'dd/MM/yyyy', { locale: fr });
-
-        if (destinataire?.email) {
-          if (!tache) {
-            await sendNotificationEmail('nouvelle_tache', destinataire.email, {
-              artisanPrenom: destinataire.prenom, aCompte: destinataire.aCompte,
-              tacheNom: formData.nom, description: formData.description || null,
-              chantierNom, dateDebut: dateDebutFormatted, dateFin: dateFinFormatted, expediteur,
-            });
-          } else {
-            const dateDebutChangee = tache.datedebut !== formData.datedebut;
-            const dateFinChangee = tache.datefin !== datefin;
-            if (dateDebutChangee || dateFinChangee) {
-              await sendNotificationEmail('modification_tache', destinataire.email, {
-                artisanPrenom: destinataire.prenom, aCompte: destinataire.aCompte,
-                tacheNom: formData.nom, chantierNom,
-                ancienDebut: format(parseISO(tache.datedebut), 'dd/MM/yyyy', { locale: fr }),
-                ancienneFin: format(parseISO(tache.datefin), 'dd/MM/yyyy', { locale: fr }),
-                dateDebut: dateDebutFormatted, dateFin: dateFinFormatted, expediteur,
-              });
-            }
-          }
-        }
-      }
-
       setTimeout(() => onClose(), 100);
     } catch (err) {
       console.error("❌ Erreur save tâche:", err);

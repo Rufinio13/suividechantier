@@ -5,10 +5,6 @@ import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { ZoomIn, ZoomOut } from 'lucide-react';
 import { useChantier } from '@/context/ChantierContext';
-import { useSousTraitant } from '@/context/SousTraitantContext';
-import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/lib/supabaseClient';
-import { sendNotificationEmail, getArtisanEmailInfo } from '@/lib/sendNotificationEmail';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -41,8 +37,6 @@ const countJoursOuvres = (startDate, endDate) => {
 export function GanttChart({ taches, chantierId, onEditTache }) {
   const [dayWidth, setDayWidth] = useState(DEFAULT_DAY_WIDTH);
   const { updateTache, chantiers, conflictsByChantier } = useChantier();
-  const { sousTraitants } = useSousTraitant();
-  const { user } = useAuth();
 
   const tachesDuChantier = useMemo(
     () => taches.filter(t => t.chantierid === chantierId && t.datedebut && t.datefin),
@@ -73,20 +67,10 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
   const overallEndDate = useMemo(() => ganttItems.length ? endOfDay(ganttItems.reduce((max, item) => (item.end > max ? item.end : max), ganttItems[0].end)) : endOfDay(addDays(new Date(), 30)), [ganttItems]);
   const totalDays = useMemo(() => differenceInDays(overallEndDate, overallStartDate) + 1, [overallEndDate, overallStartDate]);
 
-  // ✅ Récupérer profil expéditeur
-  const getExpediteurProfile = useCallback(async () => {
-    try {
-      const { data } = await supabase.from('profiles').select('nom, prenom, mail, tel, nomsociete, adresse, ville, code_postal').eq('id', user.id).single();
-      return data || null;
-    } catch { return null; }
-  }, [user]);
-
+  // ✅ Drag sans email — juste updateTache
   const handleDragEnd = useCallback(async (event, info, item) => {
     const daysDragged = Math.round(info.offset.x / dayWidth);
     if (daysDragged === 0) return;
-
-    const ancienDebut = format(item.start, 'dd/MM/yyyy', { locale: fr });
-    const ancienneFin = format(item.end, 'dd/MM/yyyy', { locale: fr });
 
     const newStartDate = addDays(item.start, daysDragged);
     const joursOuvres = countJoursOuvres(item.start, item.end);
@@ -103,31 +87,7 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
       datefin: format(newEndDate, 'yyyy-MM-dd'),
       duree: joursOuvres.toString()
     });
-
-    // ✅ Email si assigné à un sous-traitant
-    if (item.rawTache.assignetype === 'soustraitant' && item.rawTache.assigneid) {
-      const artisan = sousTraitants.find(st => st.id === item.rawTache.assigneid);
-      const destinataire = await getArtisanEmailInfo(artisan, supabase);
-      const expediteur = await getExpediteurProfile();
-      const chantier = chantiers.find(c => c.id === chantierId);
-      const chantierNom = chantier?.nomchantier || 'Chantier';
-
-      if (destinataire?.email) {
-        await sendNotificationEmail('modification_tache', destinataire.email, {
-          artisanPrenom: destinataire.prenom,
-          aCompte: destinataire.aCompte,
-          tacheNom: item.name,
-          chantierNom,
-          ancienDebut,
-          ancienneFin,
-          dateDebut: format(newStartDate, 'dd/MM/yyyy', { locale: fr }),
-          dateFin: format(newEndDate, 'dd/MM/yyyy', { locale: fr }),
-          expediteur,
-        });
-        console.log('📧 Email modification date (drag) envoyé à:', destinataire.email);
-      }
-    }
-  }, [dayWidth, updateTache, sousTraitants, getExpediteurProfile, chantiers, chantierId]);
+  }, [dayWidth, updateTache]);
 
   const handleDownloadPDF = async () => {
     const ganttElement = document.getElementById('gantt-container');
