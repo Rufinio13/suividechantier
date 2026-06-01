@@ -74,22 +74,15 @@ export function SousTraitantProvider({ children }) {
     setLoading(false);
   };
 
-  // ✅ Chargement initial — dépend du user_type
   useEffect(() => {
-    if (profile?.user_type === 'artisan') {
-      loadSousTraitants();
-    } else {
-      loadSousTraitants();
-    }
+    loadSousTraitants();
   }, [profile?.user_type, profile?.nomsociete, user?.id]);
 
-  // ✅ Écouter la reconnexion Supabase
   useEffect(() => {
     const handleReconnect = () => {
       console.log('🔄 SousTraitantContext : Supabase reconnecté → Rechargement...');
       setTimeout(() => loadSousTraitants(), 500);
     };
-
     window.addEventListener('supabase-reconnected', handleReconnect);
     return () => window.removeEventListener('supabase-reconnected', handleReconnect);
   }, [profile?.user_type, profile?.nomsociete, user?.id]);
@@ -128,13 +121,16 @@ export function SousTraitantProvider({ children }) {
   const updateSousTraitant = async (id, updates) => {
     console.log('📤 updateSousTraitant - ID:', id);
 
+    // ✅ Récupérer le sous-traitant actuel pour avoir le user_id
+    const stActuel = sousTraitants.find(s => s.id === id);
+
     const cleanUpdates = { ...updates };
     delete cleanUpdates.id;
     delete cleanUpdates.created_at;
     delete cleanUpdates.updated_at;
     delete cleanUpdates.user_id;
     delete cleanUpdates.nomsociete;
-    delete cleanUpdates.nomsocieteST;
+    // ✅ nomsocieteST N'EST PLUS supprimé — le constructeur peut modifier le nom
 
     const { data, error } = await supabase
       .from("soustraitants")
@@ -144,6 +140,28 @@ export function SousTraitantProvider({ children }) {
       .single();
 
     if (error) { console.error("❌ Erreur Supabase updateSousTraitant:", error); throw error; }
+
+    // ✅ Si l'artisan a un compte, synchroniser nom/prénom dans profiles
+    if (stActuel?.user_id) {
+      const profileUpdates = {};
+      if (cleanUpdates.nomST !== undefined) profileUpdates.nom = cleanUpdates.nomST || '';
+      if (cleanUpdates.PrenomST !== undefined) profileUpdates.prenom = cleanUpdates.PrenomST || '';
+      if (cleanUpdates.email !== undefined) profileUpdates.mail = cleanUpdates.email || '';
+      if (cleanUpdates.telephone !== undefined) profileUpdates.tel = cleanUpdates.telephone || '';
+
+      if (Object.keys(profileUpdates).length > 0) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update(profileUpdates)
+          .eq('id', stActuel.user_id);
+
+        if (profileError) {
+          console.error('⚠️ Erreur sync profiles:', profileError);
+        } else {
+          console.log('✅ Profil artisan synchronisé:', profileUpdates);
+        }
+      }
+    }
 
     console.log("✅ Sous-traitant mis à jour:", data);
     setSousTraitants((prev) => (prev || []).map((s) => (s.id === id ? data : s)));

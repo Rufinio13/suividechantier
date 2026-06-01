@@ -34,10 +34,10 @@ export function SousTraitantDetails() {
   const [isCreateAccountOpen, setIsCreateAccountOpen] = useState(false);
   const [hasAccount, setHasAccount] = useState(false);
   
-  // ✅ Protection anti-double-submit
   const isSavingRef = useRef(false);
 
   const [formData, setFormData] = useState({
+    nomsocieteST: '', // ✅ AJOUTÉ
     nomST: '',
     PrenomST: '',
     adresseST: '',
@@ -46,7 +46,6 @@ export function SousTraitantDetails() {
   });
   const [selectedLotNames, setSelectedLotNames] = useState([]);
 
-  // ✅ Vérifier si le sous-traitant a un compte
   useEffect(() => {
     if (sousTraitant?.user_id) {
       checkIfHasAccount(sousTraitant.user_id);
@@ -59,13 +58,11 @@ export function SousTraitantDetails() {
     try {
       const { data } = await supabase
         .from('profiles')
-        .select('id, user_type')      // ✅ 'user_type' est le bon champ
+        .select('id, user_type')
         .eq('id', userId)
         .maybeSingle();
-      
-      const accountExists = !!data && data.user_type === 'artisan';  // ✅ bon champ
+      const accountExists = !!data && data.user_type === 'artisan';
       setHasAccount(accountExists);
-      console.log('✅ Compte artisan existant:', accountExists, data?.user_type);
     } catch (err) {
       console.error('❌ Erreur vérification compte:', err);
       setHasAccount(false);
@@ -75,6 +72,7 @@ export function SousTraitantDetails() {
   useEffect(() => {
     if (sousTraitant) {
       setFormData({
+        nomsocieteST: sousTraitant.nomsocieteST || '', // ✅ AJOUTÉ
         nomST: sousTraitant.nomST || '',
         PrenomST: sousTraitant.PrenomST || '',
         adresseST: sousTraitant.adresseST || '',
@@ -96,49 +94,27 @@ export function SousTraitantDetails() {
     );
   };
 
-  // ✅ Protection anti-double-submit pour les lots
   const saveAssignLots = async () => {
-    if (!sousTraitant) return;
-    
-    if (isSavingRef.current) {
-      console.log('⚠️ Sauvegarde déjà en cours, ignoré');
-      return;
-    }
-
-    console.log('💾 Sauvegarde lots assignés:', selectedLotNames);
+    if (!sousTraitant || isSavingRef.current) return;
     isSavingRef.current = true;
-
     try {
-      await updateSousTraitant(sousTraitant.id, { 
-        assigned_lots: selectedLotNames 
-      });
+      await updateSousTraitant(sousTraitant.id, { assigned_lots: selectedLotNames });
       setIsAssignLotsOpen(false);
       toast({ title: "Lots enregistrés ✅" });
     } catch (error) {
-      console.error('❌ Erreur saveAssignLots:', error);
       toast({ title: "Erreur", description: "Impossible d'assigner les lots", variant: "destructive" });
     } finally {
-      setTimeout(() => {
-        isSavingRef.current = false;
-      }, 1000);
+      setTimeout(() => { isSavingRef.current = false; }, 1000);
     }
   };
 
-  // ✅ Protection anti-double-submit pour les infos
   const saveEditInfo = async (e) => {
     e.preventDefault();
-    if (!sousTraitant) return;
-    
-    if (isSavingRef.current) {
-      console.log('⚠️ Sauvegarde déjà en cours, ignoré');
-      return;
-    }
-
-    console.log('💾 Sauvegarde infos générales:', formData);
+    if (!sousTraitant || isSavingRef.current) return;
     isSavingRef.current = true;
-
     try {
       await updateSousTraitant(sousTraitant.id, {
+        nomsocieteST: formData.nomsocieteST, // ✅ AJOUTÉ
         nomST: formData.nomST,
         PrenomST: formData.PrenomST,
         adresseST: formData.adresseST,
@@ -148,27 +124,20 @@ export function SousTraitantDetails() {
       toast({ title: "Mis à jour ✅" });
       setIsEditInfoOpen(false);
     } catch (error) {
-      console.error('❌ Erreur saveEditInfo:', error);
       toast({ title: "Erreur", description: "Impossible de mettre à jour", variant: "destructive" });
     } finally {
-      setTimeout(() => {
-        isSavingRef.current = false;
-      }, 1000);
+      setTimeout(() => { isSavingRef.current = false; }, 1000);
     }
   };
 
   const handleDelete = async () => {
     if (!sousTraitant) return;
     if (!window.confirm(`Supprimer ${sousTraitant.nomsocieteST}?`)) return;
-
-    console.log('🗑️ Suppression sous-traitant:', sousTraitant.id);
-
     try {
       await deleteSousTraitant(sousTraitant.id);
       toast({ title: "Supprimé ✅" });
       navigate("/sous-traitants");
     } catch (error) {
-      console.error('❌ Erreur handleDelete:', error);
       toast({ title: "Erreur", description: "Impossible de supprimer", variant: "destructive" });
     }
   };
@@ -180,7 +149,6 @@ export function SousTraitantDetails() {
 
   return (
     <div className="space-y-6 p-4">
-      {/* HEADER */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
           <Button variant="outline" size="sm" asChild className="mb-2">
@@ -196,14 +164,12 @@ export function SousTraitantDetails() {
             </div>
           </div>
         </div>
-
         <div className="flex gap-2">
           <Button onClick={() => setIsEditInfoOpen(true)} variant="outline"><Edit className="mr-2 h-4 w-4"/>Infos</Button>
           <Button onClick={handleDelete} variant="destructive"><Trash2 className="mr-2 h-4 w-4"/>Del</Button>
         </div>
       </div>
 
-      {/* LOTS */}
       <Card>
         <CardHeader className="flex flex-row justify-between items-center">
           <CardTitle>Lots / Compétences</CardTitle>
@@ -225,11 +191,8 @@ export function SousTraitantDetails() {
         </CardContent>
       </Card>
 
-      {/* ✅ NOUVEAU : COMPTE ARTISAN */}
       <Card>
-        <CardHeader>
-          <CardTitle>Compte Artisan</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Compte Artisan</CardTitle></CardHeader>
         <CardContent>
           {hasAccount ? (
             <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-md">
@@ -242,17 +205,10 @@ export function SousTraitantDetails() {
           ) : (
             <div className="space-y-3">
               <div className="p-3 bg-slate-50 border rounded-md">
-                <p className="text-sm text-muted-foreground">
-                  Cet artisan n'a pas encore de compte pour accéder à l'application.
-                </p>
+                <p className="text-sm text-muted-foreground">Cet artisan n'a pas encore de compte.</p>
               </div>
-              <Button 
-                onClick={() => setIsCreateAccountOpen(true)}
-                variant="outline"
-                className="w-full"
-              >
-                <UserPlus className="mr-2 h-4 w-4" />
-                Créer un compte artisan
+              <Button onClick={() => setIsCreateAccountOpen(true)} variant="outline" className="w-full">
+                <UserPlus className="mr-2 h-4 w-4" />Créer un compte artisan
               </Button>
             </div>
           )}
@@ -267,13 +223,18 @@ export function SousTraitantDetails() {
             <DialogDescription>Modifiez les informations du sous-traitant</DialogDescription>
           </DialogHeader>
           <form onSubmit={saveEditInfo} className="space-y-3 py-3">
+            {/* ✅ Champ nomsocieteST ajouté */}
             <div className="space-y-2">
-              <Label htmlFor="nomST">Nom</Label>
-              <Input id="nomST" name="nomST" value={formData.nomST} onChange={handleFormChange} />
+              <Label htmlFor="nomsocieteST">Nom de la société <span className="text-red-500">*</span></Label>
+              <Input id="nomsocieteST" name="nomsocieteST" value={formData.nomsocieteST} onChange={handleFormChange} required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="PrenomST">Prénom</Label>
               <Input id="PrenomST" name="PrenomST" value={formData.PrenomST} onChange={handleFormChange} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nomST">Nom</Label>
+              <Input id="nomST" name="nomST" value={formData.nomST} onChange={handleFormChange} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="adresseST">Adresse</Label>
@@ -307,11 +268,7 @@ export function SousTraitantDetails() {
           <div className="max-h-[55vh] overflow-auto space-y-2 py-3">
             {globalLots.map(lot => (
               <div key={lot.id} className="flex items-center gap-2 hover:bg-muted/40 p-2 rounded-md">
-                <Checkbox
-                  checked={selectedLotNames.includes(lot.lot)}
-                  onCheckedChange={() => handleLotToggle(lot.lot)}
-                  id={`lot-${lot.id}`}
-                />
+                <Checkbox checked={selectedLotNames.includes(lot.lot)} onCheckedChange={() => handleLotToggle(lot.lot)} id={`lot-${lot.id}`} />
                 <Label htmlFor={`lot-${lot.id}`} className="text-sm cursor-pointer">{lot.lot}</Label>
               </div>
             ))}
@@ -325,16 +282,12 @@ export function SousTraitantDetails() {
         </DialogContent>
       </Dialog>
 
-      {/* ✅ MODAL CRÉATION COMPTE */}
       <CreateArtisanAccountModal
         isOpen={isCreateAccountOpen}
         onClose={() => setIsCreateAccountOpen(false)}
         sousTraitant={sousTraitant}
         onSuccess={() => {
-          // Recharger pour vérifier le nouveau compte
-          if (sousTraitant?.user_id) {
-            checkIfHasAccount(sousTraitant.user_id);
-          }
+          if (sousTraitant?.user_id) checkIfHasAccount(sousTraitant.user_id);
           toast({ title: "Compte créé ✅", description: "L'artisan peut maintenant se connecter" });
         }}
       />
