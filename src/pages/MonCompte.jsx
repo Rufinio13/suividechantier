@@ -15,6 +15,7 @@ export function MonCompte() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [userType, setUserType] = useState(null); // ✅ pour savoir si artisan ou constructeur
 
   const [profile, setProfile] = useState({
     nom: '',
@@ -40,21 +41,24 @@ export function MonCompte() {
         setLoading(true);
         const { data, error } = await supabase
           .from('profiles')
-          .select('nom, prenom, mail, tel, nomsociete, adresse, ville, code_postal')
+          .select('nom, prenom, mail, tel, nomsociete, adresse, ville, code_postal, user_type')
           .eq('id', user.id)
           .single();
 
         if (error) throw error;
-        if (data) setProfile({
-          nom: data.nom || '',
-          prenom: data.prenom || '',
-          mail: data.mail || '',
-          tel: data.tel || '',
-          nomsociete: data.nomsociete || '',
-          adresse: data.adresse || '',
-          ville: data.ville || '',
-          code_postal: data.code_postal || '',
-        });
+        if (data) {
+          setUserType(data.user_type);
+          setProfile({
+            nom: data.nom || '',
+            prenom: data.prenom || '',
+            mail: data.mail || '',
+            tel: data.tel || '',
+            nomsociete: data.nomsociete || '',
+            adresse: data.adresse || '',
+            ville: data.ville || '',
+            code_postal: data.code_postal || '',
+          });
+        }
       } catch (error) {
         console.error('Erreur chargement profil:', error);
         toast({ title: 'Erreur', description: 'Impossible de charger le profil', variant: 'destructive' });
@@ -71,18 +75,33 @@ export function MonCompte() {
     e.preventDefault();
     setSaving(true);
     try {
+      // ✅ Pour un artisan : NE PAS mettre à jour nomsociete
+      // nomsociete = société du constructeur qui l'a créé → ne doit jamais être modifié
+      const updatePayload = userType === 'artisan'
+        ? {
+            nom: profile.nom,
+            prenom: profile.prenom,
+            mail: profile.mail,
+            tel: profile.tel,
+            adresse: profile.adresse,
+            ville: profile.ville,
+            code_postal: profile.code_postal,
+            // ✅ nomsociete intentionnellement absent
+          }
+        : {
+            nom: profile.nom,
+            prenom: profile.prenom,
+            mail: profile.mail,
+            tel: profile.tel,
+            nomsociete: profile.nomsociete, // ✅ constructeur peut modifier sa société
+            adresse: profile.adresse,
+            ville: profile.ville,
+            code_postal: profile.code_postal,
+          };
+
       const { error } = await supabase
         .from('profiles')
-        .update({
-          nom: profile.nom,
-          prenom: profile.prenom,
-          mail: profile.mail,
-          tel: profile.tel,
-          nomsociete: profile.nomsociete,
-          adresse: profile.adresse,
-          ville: profile.ville,
-          code_postal: profile.code_postal,
-        })
+        .update(updatePayload)
         .eq('id', user.id);
 
       if (error) throw error;
@@ -176,11 +195,27 @@ export function MonCompte() {
               </div>
             </div>
 
+            {/* ✅ Champ société : modifiable pour constructeur, lecture seule pour artisan */}
             <div className="space-y-2">
               <Label htmlFor="nomsociete">Société</Label>
-              <Input id="nomsociete" value={profile.nomsociete}
-                onChange={(e) => setProfile(p => ({ ...p, nomsociete: e.target.value }))}
-                placeholder="Nom de votre société" />
+              {userType === 'artisan' ? (
+                <Input
+                  id="nomsociete"
+                  value={profile.nomsociete}
+                  disabled
+                  className="bg-slate-50 text-slate-500 cursor-not-allowed"
+                  title="Ce champ est géré par votre constructeur"
+                />
+              ) : (
+                <Input id="nomsociete" value={profile.nomsociete}
+                  onChange={(e) => setProfile(p => ({ ...p, nomsociete: e.target.value }))}
+                  placeholder="Nom de votre société" />
+              )}
+              {userType === 'artisan' && (
+                <p className="text-xs text-muted-foreground">
+                  La société est gérée par votre constructeur.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
