@@ -68,11 +68,11 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess, onArt
       // Vérifier dans profiles
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, role')
+        .select('id, user_type')
         .eq('id', userId)
         .maybeSingle();
 
-      const hasAccount = !!data && !error && data.role === 'artisan';
+      const hasAccount = !!data && !error && data.user_type === 'artisan';
       setHasAuthAccount(hasAccount);
       console.log(`✅ Artisan ${userId} a un compte:`, hasAccount);
     } catch (err) {
