@@ -4,9 +4,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Mail, UserPlus, CheckCircle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/lib/supabaseClient";
+import { useAuth } from "@/hooks/useAuth.jsx";
 
 export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess }) {
   const { toast } = useToast();
+  const { profile } = useAuth();
   const [isSending, setIsSending] = useState(false);
   const [invitationSent, setInvitationSent] = useState(false);
   const [wasExisting, setWasExisting] = useState(false);
@@ -19,8 +21,6 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
       return;
     }
 
-    console.log('🔍 artisan.nomsociete:', artisan.nomsociete);
-
     setIsSending(true);
     try {
       const { data, error } = await supabase.functions.invoke('invite-artisan', {
@@ -28,7 +28,7 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
           email: artisan.email,
           artisanNom: artisan.nomsocieteST || `${artisan.PrenomST || ''} ${artisan.nomST || ''}`.trim(),
           siteUrl: window.location.origin,
-          nomsociete: artisan.nomsociete || '', // ✅ depuis artisan prop
+          nomsociete: profile?.nomsociete || '', // ✅ nom du constructeur connecté
           // ✅ Passer les données artisan pour que la Edge Function mette à jour le profil
           artisanData: {
             nomST: artisan.nomST || '',
