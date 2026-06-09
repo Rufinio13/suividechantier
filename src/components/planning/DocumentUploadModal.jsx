@@ -123,32 +123,19 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
         });
       }
 
-      // ✅ Email
-      const expediteur = await getExpediteurProfile();
-      const artisanCibleId = typeDocument === 'marche_travaux' ? artisanId : (partageType === 'specifique' ? artisanId : null);
-      const emailData = {
-        nomFichier: file.name, chantierNom,
-        typeDocument: TYPE_LABELS[typeDocument] || typeDocument,
-        necessite_signature: typeDocument === 'marche_travaux' ? true : necessiteSignature,
-        urlFichier, expediteur,
-      };
-
-      if (artisanCibleId) {
-        const artisan = sousTraitants.find(st => st.id === artisanCibleId);
+      if (typeDocument === 'marche_travaux') {
+        const expediteur = await getExpediteurProfile();
+        const artisan = sousTraitants.find(st => st.id === artisanId);
         const destinataire = await getArtisanEmailInfo(artisan, supabase);
         if (destinataire?.email) {
           await sendNotificationEmail('nouveau_document', destinataire.email, {
-            ...emailData, artisanPrenom: destinataire.prenom, aCompte: destinataire.aCompte,
+            nomFichier: file.name, chantierNom,
+            typeDocument: TYPE_LABELS.marche_travaux,
+            necessite_signature: true,
+            urlFichier, expediteur,
+            artisanPrenom: destinataire.prenom,
+            aCompte: destinataire.aCompte,
           });
-        }
-      } else if (partageType === 'tous') {
-        for (const artisan of artisansDuChantier) {
-          const destinataire = await getArtisanEmailInfo(artisan, supabase);
-          if (destinataire?.email) {
-            await sendNotificationEmail('nouveau_document', destinataire.email, {
-              ...emailData, artisanPrenom: destinataire.prenom, aCompte: destinataire.aCompte, necessite_signature: false,
-            });
-          }
         }
       }
 
