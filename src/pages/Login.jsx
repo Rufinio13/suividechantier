@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/use-toast';
 import { AlertCircle, Mail } from 'lucide-react';
+import logoEvabois from '@/assets/logo-evabois.png';
 
 export function Login() {
   const { signIn, loading } = useAuth();
@@ -50,7 +51,9 @@ export function Login() {
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-50">
-      <Card className="w-full max-w-md shadow-lg">
+      <div className="w-full max-w-md flex flex-col items-center gap-4">
+        <img src={logoEvabois} alt="EVAbois" className="w-full object-contain" />
+      <Card className="w-full shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl text-center">
             {showForgotPassword ? 'Mot de passe oublié' : 'Connexion'}
@@ -116,6 +119,7 @@ export function Login() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
