@@ -151,7 +151,7 @@ export function ChantierDetails() {
 
           {/* ✅ TABS - Planning → Commandes → Documents → Marchés → CQ → CR */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 gap-2 h-auto p-2">
+            <TabsList className="flex w-full overflow-x-auto gap-1 h-auto p-2 justify-start">
               <TabsTrigger value="planning" className="flex items-center justify-center">
                 <ListChecks className="mr-2 h-4 w-4" /> 
                 <span className="hidden sm:inline">Planning</span>

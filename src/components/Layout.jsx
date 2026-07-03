@@ -120,9 +120,17 @@ export function Layout() {
         </div>
       </motion.aside>
 
+      {/* Overlay mobile — ferme le menu en tapant à côté */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* PAGE CONTENT */}
       <main className="transition-all duration-300 ease-in-out lg:ml-64 min-h-screen">
-        <div className="p-4 sm:p-6 lg:p-8">
+        <div className="p-4 pt-16 sm:pt-6 sm:p-6 lg:p-8">
           <Outlet />
         </div>
       </main>
