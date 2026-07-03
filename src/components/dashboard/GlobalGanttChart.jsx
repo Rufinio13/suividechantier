@@ -235,21 +235,23 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
 
   return (
     <>
+      {/* Légende au-dessus du tableau */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs mb-3 px-1">
+        <span className="font-semibold text-slate-700">Légende :</span>
+        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-green-500 rounded"></div><span>À faire</span></div>
+        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-yellow-500 rounded"></div><span>Terminée par artisan</span></div>
+        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-500 rounded"></div><span>Validée</span></div>
+        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-orange-500 rounded"></div><span>En retard</span></div>
+        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-600 rounded"></div><span>Conflit artisan</span></div>
+      </div>
+
       <div className="overflow-x-auto pb-4 bg-slate-50 p-1 rounded-lg shadow-inner relative">
         <div className="absolute top-1 right-1 z-30 flex space-x-1">
           <Button variant="outline" size="icon" onClick={handleZoomIn} disabled={dayWidth >= MAX_DAY_WIDTH} className="h-7 w-7"><ZoomIn className="h-3.5 w-3.5" /></Button>
           <Button variant="outline" size="icon" onClick={handleZoomOut} disabled={dayWidth <= MIN_DAY_WIDTH} className="h-7 w-7"><ZoomOut className="h-3.5 w-3.5" /></Button>
         </div>
-        <div className="absolute top-1 left-1 z-30 flex items-center gap-3 text-xs bg-white/90 px-2 py-1 rounded-md shadow-sm">
-          <span className="font-semibold text-slate-700">Légende :</span>
-          <div className="flex items-center gap-1"><div className="w-3 h-3 bg-green-500 rounded"></div><span>À faire</span></div>
-          <div className="flex items-center gap-1"><div className="w-3 h-3 bg-yellow-500 rounded"></div><span>Terminée par artisan</span></div>
-          <div className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-500 rounded"></div><span>Validée</span></div>
-          <div className="flex items-center gap-1"><div className="w-3 h-3 bg-orange-500 rounded"></div><span>En retard</span></div>
-          <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-600 rounded"></div><span>Conflit artisan</span></div>
-        </div>
 
-        <div className="flex mt-10">
+        <div className="flex mt-2">
           <div className="flex-shrink-0 bg-slate-200" style={{ width: chantierColWidth }}>
             <div className="h-7 border-r border-slate-300 border-b border-slate-300 flex items-center justify-center bg-slate-200 sticky top-0 z-20"><span className="text-[10px] font-semibold text-slate-700">CHANTIER</span></div>
             <div className="h-6 border-r border-slate-300 border-b border-slate-300 bg-slate-200 sticky top-7 z-20"></div>
