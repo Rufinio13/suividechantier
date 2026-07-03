@@ -12,7 +12,7 @@ export function FournisseurCard({ fournisseur, onEdit, onDelete }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       whileHover={{ y: -5, boxShadow: "0px 10px 20px rgba(0,0,0,0.1)" }}
-      className="card-hover h-full"
+      className="card-hover h-full w-full"
     >
       <Card className="h-full w-full overflow-hidden border-2 hover:border-primary/50 transition-all flex flex-col">
         <CardHeader className="pb-3 flex justify-between items-start gap-2">
@@ -61,7 +61,7 @@ export function FournisseurCard({ fournisseur, onEdit, onDelete }) {
           {fournisseur.assignedlots?.length > 0 && (
             <div className="flex items-center text-gray-600">
               <Box className="mr-2 h-4 w-4 flex-shrink-0" />
-              <span title={fournisseur.assignedlots.join(", ")}>
+              <span className="truncate" title={fournisseur.assignedlots.join(", ")}>
                 Lots assignés: {fournisseur.assignedlots.join(", ")}
               </span>
             </div>
