@@ -26,18 +26,18 @@ export function ChantierCard({ chantier }) {
       whileHover={{ y: -5, boxShadow: "0px 10px 20px rgba(0,0,0,0.1)" }}
       className="card-hover h-full"
     >
-      <Link to={`/chantiers/${chantier.id}`} className="h-full flex">
+      <Link to={`/chantiers/${chantier.id}`} className="h-full flex w-full">
         <Card className="h-full w-full overflow-hidden border-2 hover:border-primary/50 transition-all flex flex-col">
           <CardHeader className="pb-3">
-            <div className="flex justify-between items-start">
+            <div className="flex justify-between items-start gap-2">
               <CardTitle
-                className="text-lg font-bold text-primary truncate"
+                className="text-lg font-bold text-primary truncate min-w-0"
                 title={chantier.nomchantier}
               >
                 {chantier.nomchantier}
               </CardTitle>
               <span
-                className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusColor(
+                className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusColor(
                   chantier.statut
                 )}`}
               >
