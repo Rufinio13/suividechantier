@@ -5,8 +5,7 @@ import { useChantier } from '@/context/ChantierContext.jsx';
 import { useSAV } from '@/context/SAVContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ChantierCard } from '@/components/ChantierCard.jsx';
-import { HardHat, Plus, Clock, CheckCircle, GanttChartSquare, Wrench } from 'lucide-react';
+import { Clock, CheckCircle, GanttChartSquare, Wrench } from 'lucide-react';
 import { GlobalGanttChart } from '@/components/dashboard/GlobalGanttChart.jsx';
 import { subWeeks, startOfDay } from 'date-fns';
 import { useAuth } from '@/hooks/useAuth';
@@ -168,52 +167,6 @@ export function Dashboard() {
         </Card>
       </motion.div>
 
-      {/* Chantiers récents */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.2 }}
-      >
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold uppercase tracking-wide" style={{ color: '#683B11', letterSpacing: '0.5px' }}>
-            Chantiers récents
-          </h2>
-          <Link to="/chantiers">
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-[#e8e2d9] hover:bg-[#f7f4ef]"
-              style={{ color: '#9FC760', fontWeight: 600 }}
-            >
-              Voir tous
-            </Button>
-          </Link>
-        </div>
-
-        {chantiersRecents.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {chantiersRecents.map(chantier => (
-              <ChantierCard key={chantier.id} chantier={chantier} />
-            ))}
-          </div>
-        ) : (
-          <Card className="border border-[#e8e2d9] shadow-sm bg-white">
-            <CardContent className="flex flex-col items-center justify-center py-8">
-              <HardHat className="h-12 w-12 mb-4" style={{ color: '#A3806D' }} />
-              <p className="text-center mb-4" style={{ color: '#A3806D' }}>Aucun chantier récent</p>
-              <Link to="/chantiers?action=new">
-                <Button
-                  className="text-white border-0"
-                  style={{ background: '#9FC760' }}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Créer un chantier
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        )}
-      </motion.div>
     </div>
   );
 }
