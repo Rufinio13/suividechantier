@@ -50,9 +50,9 @@ export function Login() {
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-gray-50">
-      <div className="w-full max-w-md flex flex-col items-center gap-4">
-        <img src={logoEvabois} alt="EVAbois" className="w-full object-contain" />
+    <div className="flex justify-center items-center min-h-screen bg-gray-50 px-4 py-8">
+      <div className="w-full max-w-sm flex flex-col items-center gap-6">
+        <img src={logoEvabois} alt="EVAbois" className="w-40 object-contain" />
       <Card className="w-full shadow-lg">
         <CardHeader>
           <CardTitle className="text-2xl text-center">
