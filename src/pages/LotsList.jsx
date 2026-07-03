@@ -66,7 +66,7 @@ export function LotsList() {
         <div className="text-center py-12">Aucun lot trouvé</div>
       ) : (
         <motion.div
-          className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"
+          className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ staggerChildren: 0.05 }}

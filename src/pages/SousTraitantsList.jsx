@@ -84,7 +84,7 @@ export function SousTraitantsList() {
         </div>
       ) : (
         <motion.div
-          className="grid gap-6 md:grid-cols-2 lg:grid-cols-3"
+          className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ staggerChildren: 0.05 }}
@@ -92,9 +92,9 @@ export function SousTraitantsList() {
           {filtered.map(st => (
             <Card key={st.id} className="flex flex-col cursor-pointer hover:shadow-md transition border rounded-2xl">
               <CardHeader className="flex justify-between items-center">
-                <CardTitle className="flex-1 flex justify-between items-center">
-                  {st.nomsocieteST}
-                  <div className="flex gap-1">
+                <CardTitle className="flex-1 flex justify-between items-center gap-2 min-w-0">
+                  <span className="truncate min-w-0">{st.nomsocieteST}</span>
+                  <div className="flex gap-1 flex-shrink-0">
                     <Button size="icon" variant="ghost" onClick={() => openModal(st)}>
                       <Edit className="h-4 w-4" />
                     </Button>

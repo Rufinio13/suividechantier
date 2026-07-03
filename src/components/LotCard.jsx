@@ -18,14 +18,14 @@ export function LotCard({ lot, onEdit, onDelete }) {
   return (
     <Card className="shadow-sm hover:shadow-md transition border rounded-2xl overflow-hidden">
       <CardHeader className="flex justify-between items-center">
-        <CardTitle className="flex-1 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted text-sm font-bold">
+        <CardTitle className="flex-1 flex items-center justify-between gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="inline-flex flex-shrink-0 items-center justify-center w-8 h-8 rounded-full bg-muted text-sm font-bold">
               {getInitials(lot.lot)}
             </span>
-            <span>{lot.lot}</span>
+            <span className="truncate">{lot.lot}</span>
           </div>
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-shrink-0">
             <Button size="icon" variant="ghost" onClick={onEdit}>
               <Edit className="h-4 w-4" />
             </Button>

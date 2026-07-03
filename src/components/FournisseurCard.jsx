@@ -15,11 +15,11 @@ export function FournisseurCard({ fournisseur, onEdit, onDelete }) {
       className="card-hover h-full"
     >
       <Card className="h-full w-full overflow-hidden border-2 hover:border-primary/50 transition-all flex flex-col">
-        <CardHeader className="pb-3 flex justify-between items-start">
-          <CardTitle className="text-lg font-bold text-primary truncate" title={fournisseur.nomsocieteF}>
+        <CardHeader className="pb-3 flex justify-between items-start gap-2">
+          <CardTitle className="text-lg font-bold text-primary truncate min-w-0" title={fournisseur.nomsocieteF}>
             {fournisseur.nomsocieteF}
           </CardTitle>
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-shrink-0">
             <Button size="icon" variant="ghost" onClick={() => onEdit?.(fournisseur)}>
               <Edit className="h-4 w-4" />
             </Button>
