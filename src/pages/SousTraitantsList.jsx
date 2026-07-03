@@ -50,7 +50,7 @@ export function SousTraitantsList() {
   }
 
   return (
-    <div className="space-y-6 p-4">
+    <div className="space-y-6">
 
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
@@ -90,7 +90,7 @@ export function SousTraitantsList() {
           transition={{ staggerChildren: 0.05 }}
         >
           {filtered.map(st => (
-            <Card key={st.id} className="flex flex-col cursor-pointer hover:shadow-md transition border rounded-2xl">
+            <Card key={st.id} className="flex flex-col cursor-pointer hover:shadow-md transition border rounded-2xl overflow-hidden w-full">
               <CardHeader className="flex justify-between items-center">
                 <CardTitle className="flex-1 flex justify-between items-center gap-2 min-w-0">
                   <span className="truncate min-w-0">{st.nomsocieteST}</span>
@@ -105,15 +105,15 @@ export function SousTraitantsList() {
                 </CardTitle>
               </CardHeader>
 
-              <CardContent className="text-sm space-y-1">
+              <CardContent className="text-sm space-y-1 overflow-hidden">
                 {st.PrenomST || st.nomST ? (
-                  <p className="text-muted-foreground">{st.PrenomST} {st.nomST}</p>
+                  <p className="text-muted-foreground truncate">{st.PrenomST} {st.nomST}</p>
                 ) : null}
-                {st.email && <p>Email : {st.email}</p>}
-                {st.telephone && <p>Tél : {st.telephone}</p>}
-                {st.adresseST && <p>Adresse : {st.adresseST}</p>}
+                {st.email && <p className="truncate">Email : {st.email}</p>}
+                {st.telephone && <p className="truncate">Tél : {st.telephone}</p>}
+                {st.adresseST && <p className="truncate">Adresse : {st.adresseST}</p>}
                 {st.assigned_lots?.length > 0 && (
-                  <p>
+                  <p className="break-words">
                     <strong>Lots assignés :</strong> {st.assigned_lots.join(", ")}
                   </p>
                 )}

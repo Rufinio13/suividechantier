@@ -41,7 +41,7 @@ export function LotsList() {
   }
 
   return (
-    <div className="space-y-6 p-4">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <h1 className="text-3xl font-bold">Lots</h1>

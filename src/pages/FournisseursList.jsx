@@ -68,7 +68,7 @@ export function FournisseursList() {
   }
 
   return (
-    <div className="space-y-6 p-4">
+    <div className="space-y-6">
 
       {/* HEADER */}
       <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
