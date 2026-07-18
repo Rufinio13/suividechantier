@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Mail, UserPlus, CheckCircle } from "lucide-react";
+import { Mail, UserPlus, CheckCircle, Copy, Check } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth.jsx";
@@ -12,6 +12,8 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
   const [isSending, setIsSending] = useState(false);
   const [invitationSent, setInvitationSent] = useState(false);
   const [wasExisting, setWasExisting] = useState(false);
+  const [inviteLink, setInviteLink] = useState(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   if (!artisan) return null;
 
@@ -44,6 +46,7 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
       const newUserId = data.userId;
       const existing = data.existing;
       setWasExisting(existing);
+      setInviteLink(data.loginUrl || null);
 
       // ✅ Lier user_id dans soustraitants (RLS autorisé car c'est le constructeur connecté)
       if (newUserId) {
@@ -72,8 +75,26 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
     }
   };
 
+  const handleCopyLink = async () => {
+    if (!inviteLink) return;
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch (err) {
+      toast({ title: "Erreur ❌", description: "Impossible de copier le lien", variant: "destructive" });
+    }
+  };
+
+  const handleClose = () => {
+    setInvitationSent(false);
+    setInviteLink(null);
+    setLinkCopied(false);
+    onClose();
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -98,13 +119,36 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
           )}
 
           {invitationSent && (
-            <div className="bg-green-50 border border-green-200 rounded-md p-3 flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-              <div className="text-sm text-green-800">
-                <p className="font-semibold">{wasExisting ? 'Email de connexion envoyé !' : 'Invitation envoyée !'}</p>
-                <p>{artisan.email} recevra un email pour accéder à l'application.</p>
+            <>
+              <div className="bg-green-50 border border-green-200 rounded-md p-3 flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                <div className="text-sm text-green-800">
+                  <p className="font-semibold">{wasExisting ? 'Email de connexion envoyé !' : 'Invitation envoyée !'}</p>
+                  <p>{artisan.email} recevra un email pour accéder à l'application.</p>
+                </div>
               </div>
-            </div>
+
+              {inviteLink && (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-slate-500">
+                    Si l'artisan ne reçoit pas l'email (spam), transmettez-lui ce lien directement :
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={inviteLink}
+                      onFocus={(e) => e.target.select()}
+                      className="flex-1 min-w-0 rounded-md border bg-slate-50 px-2 py-1.5 text-xs text-slate-600 truncate"
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={handleCopyLink} className="shrink-0">
+                      {linkCopied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-amber-700">⚠️ Ce lien est valable 24 heures et n'est utilisable qu'une seule fois.</p>
+                </div>
+              )}
+            </>
           )}
 
           {!invitationSent && artisan.email && (
@@ -120,7 +164,7 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
         </div>
 
         <DialogFooter className="gap-2">
-          <Button type="button" variant="outline" onClick={onClose} disabled={isSending}>
+          <Button type="button" variant="outline" onClick={handleClose} disabled={isSending}>
             {invitationSent ? 'Fermer' : 'Non, plus tard'}
           </Button>
           {!invitationSent && (

@@ -49,35 +49,33 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess, onArt
       });
       
       // ✅ Vérifier si cet artisan a un compte
-      if (initialData.user_id) {
-        checkIfHasAuthAccount(initialData.user_id);
-      } else {
-        setHasAuthAccount(false);
-      }
+      checkIfHasAuthAccount(initialData);
     }
   }, [initialData]);
 
-  // ✅ Vérifier si le user_id existe dans auth.users ET profiles
-  const checkIfHasAuthAccount = async (userId) => {
-    if (!userId) {
-      setHasAuthAccount(false);
+  // ✅ Vérification via la Edge Function (clé service role) : la lecture directe de
+  // profiles pour un autre utilisateur est bloquée par les RLS côté client, ce qui
+  // faisait échouer silencieusement la détection.
+  const checkIfHasAuthAccount = async (artisan) => {
+    if (!artisan.email) {
+      setHasAuthAccount(!!artisan.user_id);
       return;
     }
-
     try {
-      // Vérifier dans profiles
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, user_type')
-        .eq('id', userId)
-        .maybeSingle();
+      const { data, error } = await supabase.functions.invoke('check-artisan-account', {
+        body: { email: artisan.email },
+      });
+      if (error) throw error;
 
-      const hasAccount = !!data && !error && data.user_type === 'artisan';
-      setHasAuthAccount(hasAccount);
-      console.log(`✅ Artisan ${userId} a un compte:`, hasAccount);
+      setHasAuthAccount(!!data?.hasAccount);
+
+      // Auto-réparation du lien manquant
+      if (data?.hasAccount && data.userId && data.userId !== artisan.user_id) {
+        await supabase.from('soustraitants').update({ user_id: data.userId }).eq('id', artisan.id);
+      }
     } catch (err) {
       console.error('❌ Erreur vérification compte:', err);
-      setHasAuthAccount(false);
+      setHasAuthAccount(!!artisan.user_id);
     }
   };
 

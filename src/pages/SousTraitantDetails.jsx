@@ -47,25 +47,36 @@ export function SousTraitantDetails() {
   const [selectedLotNames, setSelectedLotNames] = useState([]);
 
   useEffect(() => {
-    if (sousTraitant?.user_id) {
-      checkIfHasAccount(sousTraitant.user_id);
+    if (sousTraitant) {
+      checkIfHasAccount();
     } else {
       setHasAccount(false);
     }
-  }, [sousTraitant]);
+  }, [sousTraitant?.id, sousTraitant?.user_id, sousTraitant?.email]);
 
-  const checkIfHasAccount = async (userId) => {
+  // ✅ Vérification via la Edge Function (clé service role) : la lecture directe de
+  // profiles pour un autre utilisateur est bloquée par les RLS côté client, ce qui
+  // faisait échouer silencieusement la détection.
+  const checkIfHasAccount = async () => {
+    if (!sousTraitant.email) {
+      setHasAccount(!!sousTraitant.user_id);
+      return;
+    }
     try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, user_type')
-        .eq('id', userId)
-        .maybeSingle();
-      const accountExists = !!data && data.user_type === 'artisan';
-      setHasAccount(accountExists);
+      const { data, error } = await supabase.functions.invoke('check-artisan-account', {
+        body: { email: sousTraitant.email },
+      });
+      if (error) throw error;
+
+      setHasAccount(!!data?.hasAccount);
+
+      // Auto-réparation du lien manquant
+      if (data?.hasAccount && data.userId && data.userId !== sousTraitant.user_id) {
+        await supabase.from('soustraitants').update({ user_id: data.userId }).eq('id', sousTraitant.id);
+      }
     } catch (err) {
       console.error('❌ Erreur vérification compte:', err);
-      setHasAccount(false);
+      setHasAccount(!!sousTraitant.user_id);
     }
   };
 

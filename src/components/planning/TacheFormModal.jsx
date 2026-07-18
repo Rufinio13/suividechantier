@@ -163,7 +163,7 @@ export function TacheFormModal({
             <Label htmlFor="description">Description</Label>
             <Textarea id="description" name="description" value={formData.description} onChange={handleChange} rows={2} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="datedebut">Date de début <span className="text-red-500">*</span></Label>
               <Input type="date" id="datedebut" name="datedebut" value={formData.datedebut} onChange={handleChange} required />
@@ -246,7 +246,7 @@ export function TacheFormModal({
               )}
             </div>
           )}
-          <DialogFooter className="flex justify-between">
+          <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between gap-2">
             <div>
               {tache && deleteTache && (
                 <Button type="button" variant="destructive" onClick={handleDelete} className="gap-2">
