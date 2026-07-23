@@ -95,7 +95,7 @@ export function PointControleFormModal({
             />
           </div>
           
-          <DialogFooter className="pt-4 border-t">
+          <DialogFooter className="pt-4 border-t gap-2">
             <DialogClose asChild>
               <Button type="button" variant="outline" disabled={isSubmitting}>
                 <X className="mr-2 h-4 w-4" /> Annuler

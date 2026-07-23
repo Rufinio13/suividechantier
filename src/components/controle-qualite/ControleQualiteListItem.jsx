@@ -97,11 +97,13 @@ export function PointControleResultatItem({
     <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="p-3 border rounded-md bg-slate-50 hover:shadow-sm transition-shadow">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-        <div className="flex-grow mb-2 sm:mb-0">
-          <div className="flex items-center">
-            <p className="text-sm font-medium text-slate-800">{point.libelle}</p>
-            <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setIsPointFormModalOpen(true); }} className="h-6 w-6 ml-2 text-slate-500 hover:text-slate-700"><EditIcon size={14} /></Button>
-            <Button variant="ghost" size="icon" onClick={handleDeletePoint} className="h-6 w-6 ml-1 text-red-400 hover:text-red-600"><Trash2 size={14} /></Button>
+        <div className="flex-grow mb-2 sm:mb-0 min-w-0">
+          <div className="flex items-center flex-wrap gap-x-1">
+            <p className="text-sm font-medium text-slate-800 break-words min-w-0">{point.libelle}</p>
+            <div className="flex items-center flex-shrink-0">
+              <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); setIsPointFormModalOpen(true); }} className="h-6 w-6 ml-1 text-slate-500 hover:text-slate-700"><EditIcon size={14} /></Button>
+              <Button variant="ghost" size="icon" onClick={handleDeletePoint} className="h-6 w-6 ml-1 text-red-400 hover:text-red-600"><Trash2 size={14} /></Button>
+            </div>
           </div>
           {point.description && <p className="text-xs text-slate-500 mt-0.5">{point.description}</p>}
         </div>
@@ -172,19 +174,19 @@ export function PointControleResultatItem({
               </div>
             )}
             {currentData.resultat === 'NC' && (
-              <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-200">
-                <div className="flex items-center space-x-2">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-3 border-t border-slate-200">
+                <div className="flex items-center space-x-2 min-w-0">
                   <input type="checkbox" id={`repriseValidee-${point.id}`} checked={currentData.repriseValidee || false}
                     onChange={(e) => {
                       if (e.target.checked) {
                         onResultatChange(point.id, 'C', currentData.explicationNC, currentData.photos, currentData.plans, currentData.dateReprisePrevisionnelle, true, currentData.soustraitant_id);
                       } else { handleChange('repriseValidee', false); }
                     }}
-                    className="h-4 w-4 text-primary border-gray-300 rounded focus:ring-primary" />
+                    className="h-4 w-4 flex-shrink-0 text-primary border-gray-300 rounded focus:ring-primary" />
                   <Label htmlFor={`repriseValidee-${point.id}`} className="text-xs font-medium text-slate-700 cursor-pointer">Reprise validée (passe en Conforme)</Label>
                 </div>
                 {emailSent ? (
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 rounded-md">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 rounded-md self-start sm:self-auto">
                     <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
                     <span className="text-xs text-green-700 font-medium whitespace-nowrap">
                       {currentData.soustraitant_id ? 'Artisan notifié ✅' : 'NC enregistrée ✅'}
@@ -192,7 +194,7 @@ export function PointControleResultatItem({
                   </div>
                 ) : (
                   <Button onClick={handleEnregistrerNC} disabled={isSending} size="sm"
-                    className="text-white border-0 whitespace-nowrap flex-shrink-0" style={{ background: '#E05050' }}>
+                    className="text-white border-0 whitespace-nowrap flex-shrink-0 self-start sm:self-auto" style={{ background: '#E05050' }}>
                     <Save className="mr-1.5 h-3.5 w-3.5" />
                     {isSending ? 'Envoi...' : currentData.soustraitant_id ? 'Enregistrer et notifier' : 'Enregistrer'}
                   </Button>

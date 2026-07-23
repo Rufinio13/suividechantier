@@ -1,10 +1,10 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useAuth } from '@/hooks/useAuth';
 import { useChantier } from '@/context/ChantierContext';
-import { useSousTraitant } from '@/context/SousTraitantContext';
 import { useReferentielCQ } from '@/context/ReferentielCQContext';
+import { useArtisanPreview } from '@/context/ArtisanPreviewContext';
+import { useMonSousTraitantId } from '@/hooks/useMonSousTraitantId';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -17,20 +17,16 @@ import { supabase } from '@/lib/supabaseClient';
 
 export function ChantierDetailsArtisan() {
   const { id } = useParams();
-  const { profile } = useAuth();
+  const preview = useArtisanPreview();
+  const basePath = preview?.basePath || '/artisan';
   const { chantiers, taches, loading } = useChantier();
-  const { sousTraitants } = useSousTraitant();
   const { controles, modelesCQ } = useReferentielCQ();
-  
+
   const [activeTab, setActiveTab] = useState('documents');
   const [docsASignerCount, setDocsASignerCount] = useState(0);
   const [nouveauxDocsCount, setNouveauxDocsCount] = useState(0);
 
-  const monSousTraitantId = useMemo(() => {
-    if (!profile?.id || !sousTraitants?.length) return null;
-    const myST = sousTraitants.find(st => st.user_id === profile.id);
-    return myST?.id || null;
-  }, [profile, sousTraitants]);
+  const monSousTraitantId = useMonSousTraitantId();
 
   const chantier = useMemo(
     () => chantiers?.find((c) => c.id === id),
@@ -166,7 +162,7 @@ export function ChantierDetailsArtisan() {
         <h2 className="text-2xl font-bold mb-2">Chantier non accessible</h2>
         <p className="text-muted-foreground mb-6">Vous n'avez pas accès à ce chantier.</p>
         <Button asChild>
-          <Link to="/artisan/chantiers"><ArrowLeft className="mr-2 h-4 w-4" /> Retour à mes chantiers</Link>
+          <Link to={`${basePath}/chantiers`}><ArrowLeft className="mr-2 h-4 w-4" /> Retour à mes chantiers</Link>
         </Button>
       </div>
     );
@@ -182,7 +178,7 @@ export function ChantierDetailsArtisan() {
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
         <div>
           <Button variant="outline" size="sm" asChild className="mb-3">
-            <Link to="/artisan/chantiers"><ArrowLeft className="mr-2 h-4 w-4" /> Retour</Link>
+            <Link to={`${basePath}/chantiers`}><ArrowLeft className="mr-2 h-4 w-4" /> Retour</Link>
           </Button>
           <h1 className="text-3xl font-bold tracking-tight">{chantier.nomchantier}</h1>
         </div>
@@ -248,9 +244,10 @@ export function ChantierDetailsArtisan() {
           <TachesArtisanTab chantierId={id} soustraitantId={monSousTraitantId} />
         </TabsContent>
         <TabsContent value="documents" className="mt-6">
-          <DocumentsArtisanTab 
-            chantierId={id} 
+          <DocumentsArtisanTab
+            chantierId={id}
             soustraitantId={monSousTraitantId}
+            disableSignature={!!preview}
             onDocumentView={() => {
               setTimeout(() => setActiveTab('documents'), 500);
             }}

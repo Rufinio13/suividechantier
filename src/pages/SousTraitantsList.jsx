@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Plus, Search, Edit, Trash2, Building2 } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Building2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -95,6 +95,14 @@ export function SousTraitantsList() {
                 <CardTitle className="flex-1 flex justify-between items-center gap-2 min-w-0">
                   <span className="truncate min-w-0">{st.nomsocieteST}</span>
                   <div className="flex gap-1 flex-shrink-0">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      title="Voir son espace"
+                      onClick={() => window.open(`/apercu-artisan/${st.id}`, '_blank')}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
                     <Button size="icon" variant="ghost" onClick={() => openModal(st)}>
                       <Edit className="h-4 w-4" />
                     </Button>

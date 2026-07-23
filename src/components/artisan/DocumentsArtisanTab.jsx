@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
@@ -65,7 +65,7 @@ const DOCUMENT_CATEGORIES = [
   },
 ];
 
-export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
+export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignature = false }) {
   const { toast } = useToast();
   const { profile } = useAuth();
   const [documents, setDocuments] = useState([]);
@@ -116,6 +116,34 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
   useEffect(() => {
     loadDocuments();
   }, [chantierId, soustraitantId]);
+
+  // ✅ Marquer les documents comme vus quand on quitte la page (plus au téléchargement)
+  // — sauf un marché de travaux tant qu'il n'est pas signé, qui doit rester signalé.
+  const documentsRef = useRef(documents);
+  useEffect(() => {
+    documentsRef.current = documents;
+  }, [documents]);
+
+  const soustraitantIdRef = useRef(soustraitantId);
+  useEffect(() => {
+    soustraitantIdRef.current = soustraitantId;
+  }, [soustraitantId]);
+
+  useEffect(() => {
+    return () => {
+      const stId = soustraitantIdRef.current;
+      const idsAMarquerVus = documentsRef.current
+        .filter(doc => {
+          const isNouveau = !doc.necessite_signature &&
+            (!doc.artisans_vus || !doc.artisans_vus.includes(stId));
+          const marcheNonSigne = doc.type_document === 'marche_travaux' && doc.signature_statut !== 'signe';
+          return isNouveau && !marcheNonSigne;
+        })
+        .map(doc => doc.id);
+
+      idsAMarquerVus.forEach(id => marquerDocumentVu(id));
+    };
+  }, []);
 
   // ✅ Grouper les documents par type
   const documentsByType = useMemo(() => {
@@ -179,10 +207,6 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
       if (updateError) throw updateError;
 
       console.log('✅ Document marqué comme vu');
-      
-      setTimeout(() => {
-        loadDocuments();
-      }, 500);
     } catch (error) {
       console.error('Erreur marquage document vu:', error);
     }
@@ -238,10 +262,6 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-
-        if (!doc.necessite_signature) {
-          await marquerDocumentVu(doc.id);
-        }
 
       } catch (error) {
         console.error('Erreur téléchargement document:', error);
@@ -428,19 +448,27 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
             </div>
           )}
 
-          <SignatureCanvas
-            onSignatureCapture={setSignatureData}
-            onClear={() => setSignatureData(null)}
-          />
+          {disableSignature ? (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-md text-sm text-amber-800">
+              La signature d'un document engage l'artisan personnellement : elle n'est pas disponible depuis l'aperçu agence. Seul l'artisan peut signer, connecté avec son propre compte.
+            </div>
+          ) : (
+            <SignatureCanvas
+              onSignatureCapture={setSignatureData}
+              onClear={() => setSignatureData(null)}
+            />
+          )}
 
-          <div className="p-3 bg-slate-50 border rounded-md text-xs text-slate-600">
-            <p className="font-medium mb-1">En signant ce document :</p>
-            <ul className="list-disc list-inside space-y-1">
-              <li>Vous certifiez avoir lu et accepté le contenu du document</li>
-              <li>Votre signature sera horodatée et incluse dans le PDF</li>
-              <li>Le document signé sera accessible au constructeur</li>
-            </ul>
-          </div>
+          {!disableSignature && (
+            <div className="p-3 bg-slate-50 border rounded-md text-xs text-slate-600">
+              <p className="font-medium mb-1">En signant ce document :</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Vous certifiez avoir lu et accepté le contenu du document</li>
+                <li>Votre signature sera horodatée et incluse dans le PDF</li>
+                <li>Le document signé sera accessible au constructeur</li>
+              </ul>
+            </div>
+          )}
 
           <div className="flex gap-2">
             <Button
@@ -452,16 +480,18 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId }) {
               }}
               className="flex-1"
             >
-              Annuler
+              {disableSignature ? 'Fermer' : 'Annuler'}
             </Button>
-            <Button
-              onClick={handleSignDocument}
-              disabled={!signatureData || signing}
-              className="flex-1 bg-green-600 hover:bg-green-700"
-            >
-              <CheckCircle className="mr-2 h-4 w-4" />
-              {signing ? 'Signature...' : 'Signer le document'}
-            </Button>
+            {!disableSignature && (
+              <Button
+                onClick={handleSignDocument}
+                disabled={!signatureData || signing}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle className="mr-2 h-4 w-4" />
+                {signing ? 'Signature...' : 'Signer le document'}
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>

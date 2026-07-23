@@ -2,6 +2,8 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
+import { useArtisanPreview } from '@/context/ArtisanPreviewContext';
+import { useMonSousTraitantId } from '@/hooks/useMonSousTraitantId';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CalendrierView } from '@/components/planning/CalendrierView';
 import { TacheDetailModalArtisan } from '@/components/TacheDetailModalArtisan';
@@ -11,21 +13,18 @@ import { supabase } from '@/lib/supabaseClient';
 
 export function DashboardArtisan() {
   const { profile } = useAuth();
+  const preview = useArtisanPreview();
   const { chantiers, taches, lots, loading: chantierLoading, loadTaches } = useChantier();
-  const { sousTraitants, loading: stLoading } = useSousTraitant();
+  const { loading: stLoading } = useSousTraitant();
 
   const [selectedTache, setSelectedTache] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
-  
+
   // ✅ Ref pour éviter que le setInterval écrase les notifications déjà marquées vues
   const vuesLocalement = useRef(new Set());
 
-  const monSousTraitantId = useMemo(() => {
-    if (!profile?.id || !sousTraitants?.length) return null;
-    const myST = sousTraitants.find(st => st.user_id === profile.id);
-    return myST?.id || null;
-  }, [profile, sousTraitants]);
+  const monSousTraitantId = useMonSousTraitantId();
 
   useEffect(() => {
     const loadNotifications = async () => {
@@ -157,7 +156,9 @@ export function DashboardArtisan() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Mon planning</h1>
-        <p className="text-muted-foreground">Bienvenue, {profile?.prenom} {profile?.nom}</p>
+        <p className="text-muted-foreground">
+          {preview ? `Planning de ${preview.artisanNom || "l'artisan"}` : `Bienvenue, ${profile?.prenom} ${profile?.nom}`}
+        </p>
       </div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>

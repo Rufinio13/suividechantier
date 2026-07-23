@@ -23,6 +23,7 @@ import { ReferentielControleQualite } from '@/pages/ReferentielControleQualite.j
 import { ReferentielCommande } from '@/pages/ReferentielCommande.jsx';
 import { Commandes } from '@/pages/Commandes.jsx';
 import { AppProvider } from '@/context/AppProvider.jsx';
+import { ApercuArtisan } from '@/pages/ApercuArtisan.jsx';
 import { Login } from '@/pages/Login.jsx';
 import { ResetPassword } from '@/pages/ResetPassword.jsx';
 import { SetPassword } from '@/pages/SetPassword.jsx';
@@ -116,6 +117,22 @@ function App() {
             <Route path="sav" element={<SAVArtisanList />} />
             <Route path="sav/:id" element={<SAVArtisanDetails />} />
             <Route path="mon-compte" element={<MonCompte />} />
+          </Route>
+
+          {/* ✅ Aperçu agence de l'espace d'un artisan (lecture + actions, sans se connecter avec son compte) */}
+          <Route
+            path="/apercu-artisan/:artisanId"
+            element={
+              <PrivateRoute>
+                <ApercuArtisan />
+              </PrivateRoute>
+            }
+          >
+            <Route index element={<DashboardArtisan />} />
+            <Route path="chantiers" element={<MesChantiersArtisan />} />
+            <Route path="chantiers/:id" element={<ChantierDetailsArtisan />} />
+            <Route path="sav" element={<SAVArtisanList />} />
+            <Route path="sav/:id" element={<SAVArtisanDetails />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

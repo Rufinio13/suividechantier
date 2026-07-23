@@ -1,9 +1,9 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useAuth } from '@/hooks/useAuth';
 import { useSAV } from '@/context/SAVContext';
-import { useSousTraitant } from '@/context/SousTraitantContext';
+import { useArtisanPreview } from '@/context/ArtisanPreviewContext';
+import { useMonSousTraitantId } from '@/hooks/useMonSousTraitantId';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -20,9 +20,9 @@ import { v4 as uuidv4 } from 'uuid';
 export function SAVArtisanDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const preview = useArtisanPreview();
+  const basePath = preview?.basePath || '/artisan';
   const { demandesSAV, updateSAV, toggleDescriptionLigne } = useSAV();
-  const { sousTraitants } = useSousTraitant();
   const { toast } = useToast();
 
   const [dateIntervention, setDateIntervention] = useState('');
@@ -30,11 +30,7 @@ export function SAVArtisanDetails() {
   const [photos, setPhotos] = useState([]);
   const [uploading, setUploading] = useState(false);
 
-  const monSousTraitantId = useMemo(() => {
-    if (!profile?.id || !sousTraitants?.length) return null;
-    const myST = sousTraitants.find(st => st.user_id === profile.id);
-    return myST?.id || null;
-  }, [profile, sousTraitants]);
+  const monSousTraitantId = useMonSousTraitantId();
 
   const sav = useMemo(
     () => demandesSAV?.find((s) => s.id === id),
@@ -182,7 +178,7 @@ export function SAVArtisanDetails() {
         description: 'Le constructeur sera notifié',
       });
 
-      navigate('/artisan/sav');
+      navigate(`${basePath}/sav`);
     } catch (error) {
       console.error('Erreur marquage terminé:', error);
       toast({
@@ -198,7 +194,7 @@ export function SAVArtisanDetails() {
       <div className="text-center py-10">
         <h2 className="text-2xl font-bold">SAV non trouvé</h2>
         <Button asChild className="mt-4">
-          <Link to="/artisan/sav">
+          <Link to={`${basePath}/sav`}>
             <ArrowLeft className="mr-2 h-4 w-4" />Retour
           </Link>
         </Button>
@@ -214,7 +210,7 @@ export function SAVArtisanDetails() {
           Vous n'avez pas accès à ce SAV
         </p>
         <Button asChild className="mt-4">
-          <Link to="/artisan/sav">
+          <Link to={`${basePath}/sav`}>
             <ArrowLeft className="mr-2 h-4 w-4" />Retour
           </Link>
         </Button>
@@ -232,7 +228,7 @@ export function SAVArtisanDetails() {
       {/* HEADER */}
       <div>
         <Button variant="outline" size="sm" asChild className="mb-3">
-          <Link to="/artisan/sav">
+          <Link to={`${basePath}/sav`}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Retour
           </Link>
         </Button>

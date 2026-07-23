@@ -341,20 +341,20 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
               }`}
             >
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center justify-between">
-                  <span>{pnc.libelle}</span>
+                <CardTitle className="text-lg flex flex-wrap items-center justify-between gap-2">
+                  <span className="min-w-0 break-words">{pnc.libelle}</span>
                   {pnc.artisan_repris ? (
-                    <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded-full font-normal">
+                    <span className="text-xs bg-yellow-500 text-white px-2 py-1 rounded-full font-normal flex-shrink-0">
                       <CheckCircle className="inline h-3 w-3 mr-1" />
                       En attente validation
                     </span>
                   ) : estPlanifie ? (
-                    <span className="text-xs bg-blue-500 text-white px-2 py-1 rounded-full font-normal">
+                    <span className="text-xs bg-blue-500 text-white px-2 py-1 rounded-full font-normal flex-shrink-0">
                       <Calendar className="inline h-3 w-3 mr-1" />
                       Planifiée
                     </span>
                   ) : (
-                    <span className="text-xs bg-orange-500 text-white px-2 py-1 rounded-full font-normal">
+                    <span className="text-xs bg-orange-500 text-white px-2 py-1 rounded-full font-normal flex-shrink-0">
                       <AlertTriangle className="inline h-3 w-3 mr-1" />
                       À planifier
                     </span>

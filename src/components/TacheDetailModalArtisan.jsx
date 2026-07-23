@@ -9,16 +9,19 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
+import { useArtisanPreview } from '@/context/ArtisanPreviewContext';
 
-export function TacheDetailModalArtisan({ 
-  isOpen, 
-  onClose, 
-  tache, 
+export function TacheDetailModalArtisan({
+  isOpen,
+  onClose,
+  tache,
   lot,
   chantier,
-  onSuccess 
+  onSuccess
 }) {
   const { toast } = useToast();
+  const preview = useArtisanPreview();
+  const basePath = preview?.basePath || '/artisan';
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [photos, setPhotos] = useState(tache?.artisan_photos || []);
   const [uploadingPhotos, setUploadingPhotos] = useState([]);
@@ -155,7 +158,7 @@ export function TacheDetailModalArtisan({
               <div className="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                 <p className="text-xs text-orange-600 font-medium mb-1">Chantier</p>
                 <Link 
-                  to={`/artisan/chantiers/${chantier.id}`}
+                  to={`${basePath}/chantiers/${chantier.id}`}
                   onClick={onClose}
                   className="text-lg font-bold text-orange-700 hover:text-orange-800 flex items-center gap-2 group"
                 >

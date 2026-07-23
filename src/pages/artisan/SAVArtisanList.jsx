@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useAuth } from '@/hooks/useAuth';
 import { useSAV } from '@/context/SAVContext';
-import { useSousTraitant } from '@/context/SousTraitantContext';
+import { useArtisanPreview } from '@/context/ArtisanPreviewContext';
+import { useMonSousTraitantId } from '@/hooks/useMonSousTraitantId';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -15,19 +15,14 @@ import { fr } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
 
 export function SAVArtisanList() {
-  const { profile } = useAuth();
+  const preview = useArtisanPreview();
+  const basePath = preview?.basePath || '/artisan';
   const { demandesSAV, toggleDescriptionLigne, updateSAV, loading } = useSAV();
-  const { sousTraitants } = useSousTraitant();
   const { toast } = useToast();
 
   const [datesIntervention, setDatesIntervention] = useState({});
 
-  // Trouver l'ID du sous-traitant
-  const monSousTraitantId = useMemo(() => {
-    if (!profile?.id || !sousTraitants?.length) return null;
-    const myST = sousTraitants.find(st => st.user_id === profile.id);
-    return myST?.id || null;
-  }, [profile, sousTraitants]);
+  const monSousTraitantId = useMonSousTraitantId();
 
   // Mes SAV (assignés et non validés par constructeur)
   const mesSAV = useMemo(() => {
@@ -193,7 +188,7 @@ export function SAVArtisanList() {
                         asChild
                         className="h-8 w-8"
                       >
-                        <Link to={`/artisan/sav/${sav.id}`}>
+                        <Link to={`${basePath}/sav/${sav.id}`}>
                           <Edit className="h-4 w-4" />
                         </Link>
                       </Button>

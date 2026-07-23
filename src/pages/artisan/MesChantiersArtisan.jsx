@@ -1,28 +1,23 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useAuth } from '@/hooks/useAuth';
 import { useChantier } from '@/context/ChantierContext';
-import { useSousTraitant } from '@/context/SousTraitantContext';
 import { useReferentielCQ } from '@/context/ReferentielCQContext';
+import { useArtisanPreview } from '@/context/ArtisanPreviewContext';
+import { useMonSousTraitantId } from '@/hooks/useMonSousTraitantId';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Building2, MapPin, AlertTriangle, FileSignature, FileText } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabaseClient';
 
 export function MesChantiersArtisan() {
-  const { profile } = useAuth();
+  const preview = useArtisanPreview();
+  const basePath = preview?.basePath || '/artisan';
   const { chantiers, taches, loading } = useChantier();
-  const { sousTraitants } = useSousTraitant();
   const { modelesCQ, controles } = useReferentielCQ();
   const [documentsData, setDocumentsData] = useState({});
 
-  // Trouver l'ID du sous-traitant
-  const monSousTraitantId = useMemo(() => {
-    if (!profile?.id || !sousTraitants?.length) return null;
-    const myST = sousTraitants.find(st => st.user_id === profile.id);
-    return myST?.id || null;
-  }, [profile, sousTraitants]);
+  const monSousTraitantId = useMonSousTraitantId();
 
   // Mes chantiers
   const mesChantiers = useMemo(() => {
@@ -239,7 +234,7 @@ export function MesChantiersArtisan() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
               >
-                <Link to={`/artisan/chantiers/${chantier.id}`}>
+                <Link to={`${basePath}/chantiers/${chantier.id}`}>
                   <Card className={`h-full hover:shadow-lg transition-shadow cursor-pointer border-l-4 ${
                     nbNC > 0 ? 'border-l-red-500' : 'border-l-orange-500'
                   }`}>

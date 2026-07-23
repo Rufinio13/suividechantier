@@ -96,17 +96,17 @@ export function ControleQualiteSousCategorieItem({
         className={`cursor-pointer transition-colors py-2 px-4 ${isComplete ? 'hover:bg-emerald-100/70' : 'hover:bg-slate-100/50'}`}
         onClick={toggleExpand}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 flex-1">
-            <Button 
-              variant="ghost" 
-              size="icon" 
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={(e) => { e.stopPropagation(); toggleExpand(); }}
-              className="h-7 w-7"
+              className="h-7 w-7 flex-shrink-0"
             >
               {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </Button>
-            
+
             {isEditingNom ? (
               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                 <input
@@ -144,7 +144,7 @@ export function ControleQualiteSousCategorieItem({
               </div>
             )}
             
-            <div className="flex items-center gap-2 ml-2">
+            <div className="flex flex-wrap items-center gap-2 sm:ml-2">
               <span className={`px-2 py-0.5 text-xs font-medium rounded ${isComplete ? 'bg-emerald-200 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>
                 {stats.totalPoints} point{stats.totalPoints > 1 ? 's' : ''}
               </span>
@@ -166,12 +166,12 @@ export function ControleQualiteSousCategorieItem({
             </div>
           </div>
           
-          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
             {!sousCategorie.isChantierSpecificContainer && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={(e) => { e.stopPropagation(); handleAddPointClick(); }} 
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => { e.stopPropagation(); handleAddPointClick(); }}
                 className="h-7 w-7 text-green-500 hover:text-green-700"
                 title="Ajouter un point de contrôle"
               >
@@ -180,13 +180,13 @@ export function ControleQualiteSousCategorieItem({
             )}
 
             {!sousCategorie.isChantierSpecificContainer && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  onSupprimerSousCategorie(); 
-                }} 
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSupprimerSousCategorie();
+                }}
                 className="h-7 w-7 text-red-400 hover:text-red-600"
                 title="Supprimer cette sous-catégorie pour ce chantier"
               >

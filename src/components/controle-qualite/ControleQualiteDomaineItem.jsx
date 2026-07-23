@@ -88,17 +88,17 @@ export function ControleQualiteDomaineItem({
         className={`cursor-pointer transition-colors py-3 ${isComplete ? 'hover:bg-emerald-100' : 'hover:bg-slate-50'}`}
         onClick={toggleExpand}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 flex-1">
-            <Button 
-              variant="ghost" 
-              size="icon" 
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={(e) => { e.stopPropagation(); toggleExpand(); }}
-              className="h-8 w-8"
+              className="h-8 w-8 flex-shrink-0"
             >
               {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
             </Button>
-            
+
             {isEditingNom ? (
               <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                 <input
@@ -137,7 +137,7 @@ export function ControleQualiteDomaineItem({
             )}
 
             {/* ✅ BADGES STATISTIQUES */}
-            <div className="flex items-center gap-2 ml-4">
+            <div className="flex flex-wrap items-center gap-2 sm:ml-4">
               <span className={`px-2 py-0.5 text-xs font-medium rounded ${isComplete ? 'bg-emerald-200 text-emerald-800' : 'bg-slate-100 text-slate-700'}`}>
                 {stats.totalPoints} point{stats.totalPoints > 1 ? 's' : ''}
               </span>
@@ -159,27 +159,27 @@ export function ControleQualiteDomaineItem({
             </div>
           </div>
           
-          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={(e) => { 
-                e.stopPropagation(); 
+          <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
                 onAddSousCategorie?.(domaine.id, domaine.nom);
-              }} 
+              }}
               className="h-8 w-8 text-green-500 hover:text-green-700"
               title="Ajouter une sous-catégorie"
             >
               <Plus className="h-4 w-4" />
             </Button>
 
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={(e) => { 
-                e.stopPropagation(); 
-                onSupprimerCategorie(); 
-              }} 
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSupprimerCategorie();
+              }}
               className="h-8 w-8 text-red-400 hover:text-red-600"
               title="Supprimer cette catégorie pour ce chantier"
             >

@@ -1,14 +1,15 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Calendar, Building2, Menu, X, LogOut, Wrench, User } from 'lucide-react';
+import { Calendar, Building2, Menu, X, LogOut, Wrench, User, Eye, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useChantier } from '@/context/ChantierContext';
-import { useSousTraitant } from '@/context/SousTraitantContext';
 import { useReferentielCQ } from '@/context/ReferentielCQContext';
+import { useArtisanPreview } from '@/context/ArtisanPreviewContext';
+import { useMonSousTraitantId } from '@/hooks/useMonSousTraitantId';
 import { supabase } from '@/lib/supabaseClient';
 import logoEvabois from '@/assets/logo-evabois.png';
 
@@ -26,15 +27,12 @@ export function LayoutArtisan() {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut, profile } = useAuth();
-  const { sousTraitants } = useSousTraitant();
+  const preview = useArtisanPreview();
   const { controles, modelesCQ } = useReferentielCQ();
   const { taches } = useChantier();
 
-  const monSousTraitantId = useMemo(() => {
-    if (!profile?.id || !sousTraitants?.length) return null;
-    const myST = sousTraitants.find(st => st.user_id === profile.id);
-    return myST?.id || null;
-  }, [profile, sousTraitants]);
+  const basePath = preview?.basePath || '/artisan';
+  const monSousTraitantId = useMonSousTraitantId();
 
   const mesChantierIds = useMemo(() => {
     if (!monSousTraitantId || !taches) return [];
@@ -233,7 +231,7 @@ export function LayoutArtisan() {
   const navItems = [
     {
       name: 'Mon calendrier',
-      href: '/artisan',
+      href: basePath,
       icon: Calendar,
       exact: true,
       badges: [
@@ -244,7 +242,7 @@ export function LayoutArtisan() {
     },
     {
       name: 'Mes chantiers',
-      href: '/artisan/chantiers',
+      href: `${basePath}/chantiers`,
       icon: Building2,
       badges: [
         { count: ncCount, variant: 'destructive', label: 'NC' },
@@ -252,8 +250,8 @@ export function LayoutArtisan() {
         { count: nouveauxDocsCount, variant: 'info', label: 'Nouveaux' }
       ]
     },
-    { name: 'SAV', href: '/artisan/sav', icon: Wrench, badge: savCount },
-    { name: 'Mon Compte', href: '/artisan/mon-compte', icon: User, badges: [] },
+    { name: 'SAV', href: `${basePath}/sav`, icon: Wrench, badge: savCount },
+    ...(preview ? [] : [{ name: 'Mon Compte', href: '/artisan/mon-compte', icon: User, badges: [] }]),
   ];
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen);
@@ -269,6 +267,10 @@ export function LayoutArtisan() {
     } finally {
       setIsLoggingOut(false);
     }
+  };
+
+  const handleExitPreview = () => {
+    navigate(`/sous-traitants/${preview.artisanId}`);
   };
 
   const isItemActive = (item) => {
@@ -293,7 +295,7 @@ export function LayoutArtisan() {
       >
         <div className="h-full flex flex-col">
           <div className="flex items-center justify-center h-20 px-4 border-b border-[#e8e2d9]">
-            <Link to="/artisan">
+            <Link to={basePath}>
               <img src={logoEvabois} alt="EVAbois" className="h-12 object-contain" />
             </Link>
           </div>
@@ -345,15 +347,26 @@ export function LayoutArtisan() {
           </nav>
 
           <div className="p-4 border-t border-[#e8e2d9]">
-            <Button
-              variant="outline"
-              className="w-full justify-start text-[#5a4a3a] border-[#e8e2d9] hover:bg-[#f7f4ef] hover:text-[#683B11] bg-white"
-              onClick={handleSignOut}
-              disabled={isLoggingOut}
-            >
-              <LogOut className="mr-2 h-4 w-4 text-[#A3806D]" />
-              {isLoggingOut ? 'Déconnexion...' : 'Déconnexion'}
-            </Button>
+            {preview ? (
+              <Button
+                variant="outline"
+                className="w-full justify-start text-[#5a4a3a] border-[#e8e2d9] hover:bg-[#f7f4ef] hover:text-[#683B11] bg-white"
+                onClick={handleExitPreview}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4 text-[#A3806D]" />
+                Quitter l'aperçu
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full justify-start text-[#5a4a3a] border-[#e8e2d9] hover:bg-[#f7f4ef] hover:text-[#683B11] bg-white"
+                onClick={handleSignOut}
+                disabled={isLoggingOut}
+              >
+                <LogOut className="mr-2 h-4 w-4 text-[#A3806D]" />
+                {isLoggingOut ? 'Déconnexion...' : 'Déconnexion'}
+              </Button>
+            )}
           </div>
         </div>
       </motion.aside>
@@ -367,6 +380,19 @@ export function LayoutArtisan() {
       )}
 
       <main className="transition-all duration-300 ease-in-out lg:ml-64 min-h-screen">
+        {preview && (
+          <div className="sticky top-0 z-20 bg-amber-100 border-b border-amber-300 px-4 py-2 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 text-sm text-amber-900">
+              <Eye className="h-4 w-4 flex-shrink-0" />
+              <span>
+                Aperçu de l'espace de <strong>{preview.artisanNom || 'l\'artisan'}</strong> — vous restez connecté avec votre compte agence.
+              </span>
+            </div>
+            <Button size="sm" variant="outline" className="bg-white" onClick={handleExitPreview}>
+              <ArrowLeft className="mr-2 h-3.5 w-3.5" /> Quitter l'aperçu
+            </Button>
+          </div>
+        )}
         <div className="p-4 pt-16 sm:pt-6 sm:p-6 lg:p-8">
           <Outlet />
         </div>
