@@ -145,7 +145,6 @@ export function ImageUploadCR({
           type="file"
           accept="image/*"
           multiple
-          capture="environment"
           onChange={handleFileUpload}
           className="hidden"
           disabled={uploading}

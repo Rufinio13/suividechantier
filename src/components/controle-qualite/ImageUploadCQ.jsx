@@ -152,7 +152,6 @@ export function ImageUploadCQ({
             type="file"
             accept="image/*"
             multiple
-            capture={type === 'photo' ? 'environment' : undefined}
             onChange={handleFileSelect}
             className="hidden"
           />
