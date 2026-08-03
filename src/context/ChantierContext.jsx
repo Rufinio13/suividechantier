@@ -323,6 +323,8 @@ export function ChantierProvider({ children }) {
         terminee: safeUpdates.terminee ?? false,
         constructeur_valide: safeUpdates.constructeur_valide ?? null,
         constructeur_valide_date: safeUpdates.constructeur_valide_date ?? null,
+        date_intervention_validee: safeUpdates.date_intervention_validee ?? null,
+        date_intervention_validee_date: safeUpdates.date_intervention_validee_date ?? null,
       })
       .eq("id", id)
       .select("*")

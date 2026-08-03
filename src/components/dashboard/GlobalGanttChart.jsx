@@ -8,7 +8,7 @@ import {
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { ZoomIn, ZoomOut, Calendar } from 'lucide-react';
+import { ZoomIn, ZoomOut, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
@@ -44,6 +44,8 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
   const [dayWidth, setDayWidth] = useState(DEFAULT_DAY_WIDTH);
   const [chantierColWidth, setChantierColWidth] = useState(CHANTIER_COL_WIDTH_DESKTOP);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [dayTasksList, setDayTasksList] = useState([]);
+  const [dayTaskIndex, setDayTaskIndex] = useState(0);
   const [formData, setFormData] = useState({ datedebut: '', duree: '' });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -199,10 +201,25 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
     }
   }, [allDays, dayWidth, targetScrollDay]);
 
-  const handleTaskClick = (tache, chantierName) => {
+  const selectTaskAtIndex = (tasksForDay, index, chantierName) => {
+    const tache = tasksForDay[index];
     const duree = tache.datedebut && tache.datefin ? calculateDureeOuvree(tache.datedebut, tache.datefin) : '';
+    setDayTasksList(tasksForDay);
+    setDayTaskIndex(index);
     setSelectedTask({ ...tache, chantierName });
     setFormData({ datedebut: tache.datedebut || '', duree: duree || '' });
+  };
+
+  const handleTaskClick = (tasksForDay, chantierName) => {
+    selectTaskAtIndex(tasksForDay, 0, chantierName);
+  };
+
+  const handlePrevTask = () => {
+    if (dayTaskIndex > 0) selectTaskAtIndex(dayTasksList, dayTaskIndex - 1, selectedTask.chantierName);
+  };
+
+  const handleNextTask = () => {
+    if (dayTaskIndex < dayTasksList.length - 1) selectTaskAtIndex(dayTasksList, dayTaskIndex + 1, selectedTask.chantierName);
   };
 
   // ✅ Save sans email — juste updateTache
@@ -223,12 +240,14 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         datedebut: formData.datedebut, datefin: nouvelleDatatefin,
         terminee: selectedTask.terminee || false,
       });
-      setSelectedTask(null);
+      handleCloseDialog();
     } catch (error) {
       console.error('❌ Erreur mise à jour tâche:', error);
       alert('Erreur lors de la mise à jour de la tâche');
     } finally { setIsSaving(false); }
   };
+
+  const handleCloseDialog = () => { setSelectedTask(null); setDayTasksList([]); setDayTaskIndex(0); };
 
   const getChantierNom = (chantierId) => { const c = allChantiers?.find(c => c.id === chantierId); return c?.nomchantier || 'Chantier inconnu'; };
   const getArtisanNom = (soustraitantId) => { if (!soustraitantId) return 'Non assigné'; const st = allSousTraitants?.find(s => s.id === soustraitantId); return st ? (st.nomsocieteST || `${st.PrenomST} ${st.nomST}`) : 'Inconnu'; };
@@ -321,14 +340,24 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                         const hasConflict = conflictsByDay[dayKey]?.has(chantier.id);
                         const firstTask = tasksForDay[0];
                         const boxColor = getTaskColor(firstTask, hasConflict);
+                        const extraCount = tasksForDay.length - 1;
+                        const tooltipTitle = tasksForDay.length > 1
+                          ? `${tasksForDay.map(t => `- ${t.nom}`).join('\n')}\nClic pour modifier`
+                          : `${firstTask.nom}\nClic pour modifier`;
                         return (
                           <motion.div key={`${chantier.id}-day-${dayIndex}`}
                             className={`absolute ${boxColor} rounded-sm cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-slate-400 pointer-events-auto`}
                             style={{ left: getDayPosition(dayIndex), width: dayWidth, top: rowTop + 6, height: ROW_HEIGHT - 12, zIndex: 5 }}
                             initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }}
                             transition={{ duration: 0.2, delay: chantierIndex * 0.02 + dayIndex * 0.001 }}
-                            onClick={() => handleTaskClick(firstTask, chantier.name)}
-                            title={`${firstTask.nom}\nClic pour modifier`} />
+                            onClick={() => handleTaskClick(tasksForDay, chantier.name)}
+                            title={tooltipTitle}>
+                            {extraCount > 0 && (
+                              <span className="absolute inset-0 flex items-center justify-center h-3.5 w-3.5 m-auto rounded-full bg-slate-800 text-white text-[8px] font-bold leading-none z-10">
+                                {tasksForDay.length}
+                              </span>
+                            )}
+                          </motion.div>
                         );
                       })}
                     </React.Fragment>
@@ -342,9 +371,22 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
 
       <AnimatePresence>
         {selectedTask && (
-          <Dialog open={!!selectedTask} onOpenChange={() => setSelectedTask(null)}>
+          <Dialog open={!!selectedTask} onOpenChange={handleCloseDialog}>
             <DialogContent className="sm:max-w-[520px]">
-              <DialogHeader><DialogTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" />Modifier la tâche</DialogTitle></DialogHeader>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" />Modifier la tâche</DialogTitle>
+              </DialogHeader>
+              {dayTasksList.length > 1 && (
+                <div className="flex items-center justify-between -mt-2 mb-1">
+                  <Button type="button" variant="outline" size="icon" className="h-7 w-7" onClick={handlePrevTask} disabled={dayTaskIndex === 0}>
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-xs font-medium text-slate-500">Tâche {dayTaskIndex + 1} / {dayTasksList.length} ce jour-là</span>
+                  <Button type="button" variant="outline" size="icon" className="h-7 w-7" onClick={handleNextTask} disabled={dayTaskIndex === dayTasksList.length - 1}>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
               <div className="space-y-4 py-4">
                 <div className="space-y-2 p-3 bg-slate-50 rounded-md border">
                   <div><Label className="text-xs text-slate-500">Nom de la tâche</Label><p className="font-semibold text-slate-900">{selectedTask.nom}</p></div>
@@ -370,7 +412,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                 )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setSelectedTask(null)} disabled={isSaving}>Annuler</Button>
+                <Button variant="outline" onClick={handleCloseDialog} disabled={isSaving}>Annuler</Button>
                 <Button onClick={handleSave} disabled={isSaving}>{isSaving ? 'Enregistrement...' : 'Enregistrer'}</Button>
               </DialogFooter>
             </DialogContent>

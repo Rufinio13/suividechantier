@@ -44,6 +44,7 @@ export function TacheFormModal({
   const [formData, setFormData] = useState({
     nom: "", description: "", lotid: "", datedebut: "", duree: "",
     datefin: "", assigneid: "", assignetype: "", terminee: false, constructeur_valide: false,
+    date_intervention_validee: false,
   });
 
   const sortedLots = useMemo(() => [...(globalLots || [])].sort((a, b) => (a.lot || "").localeCompare(b.lot || "")), [globalLots]);
@@ -58,12 +59,14 @@ export function TacheFormModal({
         datedebut: tache.datedebut || "", duree, datefin: tache.datefin || "",
         assigneid: tache.assigneid || "", assignetype: tache.assignetype || "",
         terminee: tache.terminee || false, constructeur_valide: tache.constructeur_valide || false,
+        date_intervention_validee: tache.date_intervention_validee || false,
       });
     } else {
       setFormData({
         nom: "", description: "", lotid: sortedLots?.[0]?.id || "",
         datedebut: prefilledDate || "", duree: "", datefin: "",
         assigneid: "", assignetype: "", terminee: false, constructeur_valide: false,
+        date_intervention_validee: false,
       });
     }
   }, [isOpen, tache, sortedLots, prefilledDate]);
@@ -124,6 +127,10 @@ export function TacheFormModal({
     if (tache) {
       payload.constructeur_valide = formData.constructeur_valide || false;
       payload.constructeur_valide_date = formData.constructeur_valide ? new Date().toISOString() : null;
+      payload.date_intervention_validee = formData.date_intervention_validee || false;
+      payload.date_intervention_validee_date = formData.date_intervention_validee
+        ? (tache.date_intervention_validee ? tache.date_intervention_validee_date : new Date().toISOString())
+        : null;
     }
 
     try {
@@ -194,6 +201,19 @@ export function TacheFormModal({
           </div>
           {tache && (
             <div>
+              <div className={`flex items-center space-x-2 p-3 rounded border mb-3 ${formData.date_intervention_validee ? 'bg-green-50 border-green-200' : 'bg-slate-50 border-gray-300'}`}>
+                <input type="checkbox" id="date_intervention_validee" checked={formData.date_intervention_validee || false}
+                  onChange={(e) => setFormData(prev => ({ ...prev, date_intervention_validee: e.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300 cursor-pointer" />
+                <Label htmlFor="date_intervention_validee" className={`cursor-pointer font-medium ${formData.date_intervention_validee ? 'text-green-900' : ''}`}>
+                  Date intervention / livraison validée par sous-traitant / fournisseur
+                </Label>
+              </div>
+              {formData.date_intervention_validee && tache.date_intervention_validee_date && (
+                <p className="text-xs text-green-700 ml-7 -mt-2 mb-3">
+                  Validée le {format(new Date(tache.date_intervention_validee_date), 'dd/MM/yyyy à HH:mm')}
+                </p>
+              )}
               {(tache.artisan_termine || tache.constructeur_valide) && (
                 <div className="space-y-2 mb-3 p-3 rounded-md border bg-gray-50 border-gray-300">
                   <div className="flex items-center gap-2">
