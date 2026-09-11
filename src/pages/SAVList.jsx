@@ -133,7 +133,7 @@ export function SAVList() {
   };
 
   const handleSubmitSAV = async (data) => {
-    const cleanedData = { ...data, soustraitant_id: data.soustraitant_id || null };
+    const cleanedData = { ...data, soustraitant_id: data.soustraitant_id || null, datePrevisionnelle: data.datePrevisionnelle || null };
     const isNew = !editingSAV?.id;
     const ancienArtisanId = editingSAV?.soustraitant_id || null;
     const nouvelArtisanId = cleanedData.soustraitant_id;
