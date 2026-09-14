@@ -1,10 +1,13 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { parseISO, differenceInDays, format, addDays, startOfDay, endOfDay, isPast, isWeekend, isSameDay, eachDayOfInterval } from 'date-fns';
+import { parseISO, differenceInDays, format, addDays, startOfDay, endOfDay, isPast, isSameDay, eachDayOfInterval } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { ZoomIn, ZoomOut } from 'lucide-react';
 import { useChantier } from '@/context/ChantierContext';
+import { useSousTraitant } from '@/context/SousTraitantContext';
+import { useConfirm } from '@/hooks/useConfirm';
+import { isJourOuvre, countJoursOuvres, diffJoursOuvres } from '@/lib/joursOuvres';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -12,31 +15,13 @@ const MIN_DAY_WIDTH = 20;
 const MAX_DAY_WIDTH = 120;
 const DEFAULT_DAY_WIDTH = 40;
 
-const JOURS_FERIES = [
-  '2025-01-01', '2025-04-21', '2025-05-01', '2025-05-08', '2025-05-29', '2025-06-09',
-  '2025-07-14', '2025-08-15', '2025-11-01', '2025-11-11', '2025-12-25',
-  '2026-01-01', '2026-04-06', '2026-05-01', '2026-05-08', '2026-05-14', '2026-05-25',
-  '2026-07-14', '2026-08-15', '2026-11-01', '2026-11-11', '2026-12-25',
-];
-
-const isJourFerie = (date) => JOURS_FERIES.includes(format(date, 'yyyy-MM-dd'));
-const isJourOuvre = (date) => !isWeekend(date) && !isJourFerie(date);
 const isToday = (date) => isSameDay(date, new Date());
-
-const countJoursOuvres = (startDate, endDate) => {
-  let count = 0;
-  let current = startOfDay(startDate);
-  const end = startOfDay(endDate);
-  while (current <= end) {
-    if (isJourOuvre(current)) count++;
-    current = addDays(current, 1);
-  }
-  return count;
-};
 
 export function GanttChart({ taches, chantierId, onEditTache }) {
   const [dayWidth, setDayWidth] = useState(DEFAULT_DAY_WIDTH);
-  const { updateTache, chantiers, conflictsByChantier } = useChantier();
+  const { updateTache, shiftTachesSuivantes, chantiers, conflictsByChantier } = useChantier();
+  const { isArtisanIndisponible } = useSousTraitant();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const tachesDuChantier = useMemo(
     () => taches.filter(t => t.chantierid === chantierId && t.datedebut && t.datefin),
@@ -49,19 +34,22 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
       const tacheDateDebut = parseISO(tache.datedebut);
       const tacheDateFin = parseISO(tache.datefin);
       let joursEnConflit = new Set();
+      let joursIndisponible = new Set();
       if (tache.assignetype === 'soustraitant' && tache.assigneid) {
         try {
           const days = eachDayOfInterval({ start: startOfDay(tacheDateDebut), end: startOfDay(tacheDateFin) });
           for (const day of days) {
-            const key = `${tache.assigneid}-${format(day, 'yyyy-MM-dd')}`;
+            const dateStr = format(day, 'yyyy-MM-dd');
+            const key = `${tache.assigneid}-${dateStr}`;
             const conflict = conflictsByChantier[key];
-            if (conflict && conflict.chantierids && conflict.chantierids.length > 1) joursEnConflit.add(format(day, 'yyyy-MM-dd'));
+            if (conflict && conflict.chantierids && conflict.chantierids.length > 1) joursEnConflit.add(dateStr);
+            if (isArtisanIndisponible(tache.assigneid, dateStr)) joursIndisponible.add(dateStr);
           }
         } catch (err) { console.error("Erreur check conflit:", err); }
       }
-      return { id: tache.id, name: tache.nom, start: tacheDateDebut, end: tacheDateFin, rawTache: tache, joursEnConflit };
+      return { id: tache.id, name: tache.nom, start: tacheDateDebut, end: tacheDateFin, rawTache: tache, joursEnConflit, joursIndisponible };
     }).sort((a, b) => a.start - b.start);
-  }, [tachesDuChantier, conflictsByChantier, chantierId]);
+  }, [tachesDuChantier, conflictsByChantier, chantierId, isArtisanIndisponible]);
 
   const overallStartDate = useMemo(() => ganttItems.length ? startOfDay(ganttItems[0].start) : startOfDay(new Date()), [ganttItems]);
   const overallEndDate = useMemo(() => ganttItems.length ? endOfDay(ganttItems.reduce((max, item) => (item.end > max ? item.end : max), ganttItems[0].end)) : endOfDay(addDays(new Date(), 30)), [ganttItems]);
@@ -81,13 +69,25 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
       if (joursOuvresComptes < joursOuvres) newEndDate = addDays(newEndDate, 1);
     }
 
+    const ancienneDateDebut = format(item.start, 'yyyy-MM-dd');
     await updateTache(item.id, {
       ...item.rawTache,
       datedebut: format(newStartDate, 'yyyy-MM-dd'),
       datefin: format(newEndDate, 'yyyy-MM-dd'),
       duree: joursOuvres.toString()
     });
-  }, [dayWidth, updateTache]);
+
+    if (shiftTachesSuivantes) {
+      const diffOuvres = diffJoursOuvres(item.start, newStartDate);
+      if (diffOuvres !== 0) {
+        const sens = diffOuvres > 0 ? "plus tard" : "plus tôt";
+        const confirmShift = await confirm(
+          `Cette tâche a été décalée de ${Math.abs(diffOuvres)} jour(s) ouvré(s) ${sens}.\n\nDécaler également toutes les interventions suivantes de ce chantier du même nombre de jours ouvrés ?`
+        );
+        if (confirmShift) await shiftTachesSuivantes(chantierId, ancienneDateDebut, item.id, diffOuvres);
+      }
+    }
+  }, [dayWidth, updateTache, shiftTachesSuivantes, chantierId, confirm]);
 
   const handleDownloadPDF = async () => {
     const ganttElement = document.getElementById('gantt-container');
@@ -130,7 +130,7 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
 
   const getColorForSegment = (tache, segmentDate) => {
     const dateStr = format(segmentDate, 'yyyy-MM-dd');
-    if (tache.joursEnConflit.has(dateStr)) return 'bg-red-600';
+    if (tache.joursEnConflit.has(dateStr) || tache.joursIndisponible.has(dateStr)) return 'bg-red-600';
     else if (tache.rawTache.artisan_termine && !tache.rawTache.constructeur_valide) return 'bg-yellow-500';
     else if (tache.rawTache.constructeur_valide || tache.rawTache.terminee) return 'bg-blue-500';
     else if (isPast(tache.end)) return 'bg-orange-500';
@@ -223,8 +223,9 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
         <span className="flex items-center gap-1"><div className="w-4 h-4 rounded bg-yellow-500"></div>Terminée par artisan</span>
         <span className="flex items-center gap-1"><div className="w-4 h-4 rounded bg-blue-500"></div>Validée</span>
         <span className="flex items-center gap-1"><div className="w-4 h-4 rounded bg-orange-500"></div>En retard</span>
-        <span className="flex items-center gap-1"><div className="w-4 h-4 rounded bg-red-600"></div>Conflit artisan</span>
+        <span className="flex items-center gap-1"><div className="w-4 h-4 rounded bg-red-600"></div>Conflit / Artisan indisponible</span>
       </div>
+      {ConfirmDialog}
     </div>
   );
 }

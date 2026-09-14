@@ -5,20 +5,23 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { parseISO, isValid, format, eachDayOfInterval, startOfDay } from "date-fns";
+import { diffJoursOuvres } from "@/lib/joursOuvres";
 import { fr } from "date-fns/locale";
 import { calculateDateFinLogic, calculateDureeOuvree } from "@/context/chantierContextLogics/tacheLogics";
 import { useSousTraitant } from "@/context/SousTraitantContext";
 import { useFournisseur } from "@/context/FournisseurContext";
 import { useChantier } from "@/context/ChantierContext";
+import { useConfirm } from "@/hooks/useConfirm";
 import { AlertTriangle, CheckCircle, Trash2 } from "lucide-react";
 
 export function TacheFormModal({
   isOpen, onClose, tache, chantierId, lots: globalLots,
   addTache, updateTache, deleteTache, conflictsByChantier = {}, prefilledDate = null
 }) {
-  const { sousTraitants } = useSousTraitant();
+  const { sousTraitants, isArtisanIndisponible } = useSousTraitant();
   const { fournisseurs } = useFournisseur();
-  const { chantiers } = useChantier();
+  const { chantiers, shiftTachesSuivantes } = useChantier();
+  const { confirm, ConfirmDialog } = useConfirm();
 
   const tacheConflictInfo = useMemo(() => {
     if (!tache || !tache.assigneid || tache.assignetype !== 'soustraitant' || !tache.datedebut || !tache.datefin) return null;
@@ -48,6 +51,23 @@ export function TacheFormModal({
   });
 
   const sortedLots = useMemo(() => [...(globalLots || [])].sort((a, b) => (a.lot || "").localeCompare(b.lot || "")), [globalLots]);
+
+  const indisponibiliteInfo = useMemo(() => {
+    if (!formData.assigneid || formData.assignetype !== 'soustraitant' || !formData.datedebut || !formData.datefin) return null;
+    try {
+      const start = startOfDay(parseISO(formData.datedebut));
+      const end = startOfDay(parseISO(formData.datefin));
+      if (!isValid(start) || !isValid(end)) return null;
+      const days = eachDayOfInterval({ start, end });
+      for (const day of days) {
+        const dateStr = format(day, "yyyy-MM-dd");
+        if (isArtisanIndisponible(formData.assigneid, dateStr)) {
+          return { message: `Artisan indisponible le ${format(day, 'dd/MM/yyyy')}` };
+        }
+      }
+    } catch (err) { console.error("Erreur parsing indisponibilité:", err); }
+    return null;
+  }, [formData.assigneid, formData.assignetype, formData.datedebut, formData.datefin, isArtisanIndisponible]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -134,8 +154,23 @@ export function TacheFormModal({
     }
 
     try {
-      if (tache) await updateTache(tache.id, payload);
-      else await addTache(payload);
+      if (tache) {
+        const ancienneDateDebut = tache.datedebut;
+        await updateTache(tache.id, payload);
+
+        if (ancienneDateDebut && payload.datedebut !== ancienneDateDebut && shiftTachesSuivantes) {
+          const diffOuvres = diffJoursOuvres(parseISO(ancienneDateDebut), parseISO(payload.datedebut));
+          if (diffOuvres !== 0) {
+            const sens = diffOuvres > 0 ? "plus tard" : "plus tôt";
+            const confirmShift = await confirm(
+              `La date de cette tâche a été décalée de ${Math.abs(diffOuvres)} jour(s) ouvré(s) ${sens}.\n\nDécaler également toutes les interventions suivantes de ce chantier du même nombre de jours ouvrés ?`
+            );
+            if (confirmShift) await shiftTachesSuivantes(chantierId, ancienneDateDebut, tache.id, diffOuvres);
+          }
+        }
+      } else {
+        await addTache(payload);
+      }
       setTimeout(() => onClose(), 100);
     } catch (err) {
       console.error("❌ Erreur save tâche:", err);
@@ -152,6 +187,7 @@ export function TacheFormModal({
   };
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{tache ? "Modifier la tâche" : "Ajouter une tâche"}</DialogTitle></DialogHeader>
@@ -160,6 +196,12 @@ export function TacheFormModal({
             <div className="p-3 bg-red-50 border-2 border-red-500 rounded-md flex items-start gap-2">
               <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
               <div className="text-sm text-red-800 font-medium">{tacheConflictInfo.message}</div>
+            </div>
+          )}
+          {indisponibiliteInfo && (
+            <div className="p-3 bg-red-50 border-2 border-red-500 rounded-md flex items-start gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-red-800 font-medium">{indisponibiliteInfo.message}</div>
             </div>
           )}
           <div className="space-y-2">
@@ -282,5 +324,7 @@ export function TacheFormModal({
         </form>
       </DialogContent>
     </Dialog>
+    {ConfirmDialog}
+    </>
   );
 }

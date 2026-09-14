@@ -15,7 +15,7 @@ export function DashboardArtisan() {
   const { profile } = useAuth();
   const preview = useArtisanPreview();
   const { chantiers, taches, lots, loading: chantierLoading, loadTaches } = useChantier();
-  const { loading: stLoading } = useSousTraitant();
+  const { loading: stLoading, indisponibilites, addIndisponibilite, removeIndisponibilite } = useSousTraitant();
 
   const [selectedTache, setSelectedTache] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -82,6 +82,29 @@ export function DashboardArtisan() {
     mesChantiers.forEach((c, i) => { colorMap[c.id] = colors[i % colors.length]; });
     return colorMap;
   }, [mesChantiers]);
+
+  const mesIndisponibiliteDates = useMemo(() => {
+    if (!monSousTraitantId) return new Set();
+    return new Set(
+      indisponibilites
+        .filter(i => i.soustraitant_id === monSousTraitantId)
+        .map(i => i.date)
+    );
+  }, [indisponibilites, monSousTraitantId]);
+
+  const handleToggleIndisponibilite = async (dateStr) => {
+    if (!monSousTraitantId) return;
+    try {
+      if (mesIndisponibiliteDates.has(dateStr)) {
+        await removeIndisponibilite(monSousTraitantId, dateStr);
+      } else {
+        await addIndisponibilite(monSousTraitantId, dateStr);
+      }
+    } catch (error) {
+      console.error('Erreur mise à jour indisponibilité:', error);
+      alert("Erreur lors de la mise à jour de votre disponibilité.");
+    }
+  };
 
   const handleTacheClick = async (tache) => {
     const notifsAMarquer = notifications.filter(n => n.tache_id === tache.id && !n.vu);
@@ -170,24 +193,25 @@ export function DashboardArtisan() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {mesTaches.length > 0 ? (
-              <CalendrierView
-                taches={mesTaches}
-                lots={lots}
-                conflictsByChantier={{}}
-                onEditTache={handleTacheClick}
-                onAddTache={() => {}}
-                chantierColors={chantierColors}
-                chantierNoms={chantierNoms}
-                readOnly={true}
-                isArtisanView={true}
-                notifications={notifications}
-              />
-            ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                <Calendar className="mx-auto h-12 w-12 mb-4" />
-                <p>Aucune tâche assignée pour le moment.</p>
-              </div>
+            <CalendrierView
+              taches={mesTaches}
+              lots={lots}
+              conflictsByChantier={{}}
+              onEditTache={handleTacheClick}
+              onAddTache={() => {}}
+              chantierColors={chantierColors}
+              chantierNoms={chantierNoms}
+              readOnly={true}
+              isArtisanView={true}
+              notifications={notifications}
+              indisponibiliteDates={mesIndisponibiliteDates}
+              onToggleIndisponibilite={handleToggleIndisponibilite}
+              canManageIndisponibilites={true}
+            />
+            {mesTaches.length === 0 && (
+              <p className="text-center text-sm text-muted-foreground mt-4">
+                Aucune tâche assignée pour le moment. Vous pouvez cliquer sur un jour pour indiquer une indisponibilité.
+              </p>
             )}
           </CardContent>
         </Card>

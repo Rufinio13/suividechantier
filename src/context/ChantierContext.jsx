@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useMemo, useRef 
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
 import { parseISO, format, eachDayOfInterval, startOfDay } from "date-fns";
+import { addJoursOuvres } from "@/lib/joursOuvres";
 
 export const ChantierContext = createContext();
 
@@ -353,6 +354,25 @@ export function ChantierProvider({ children }) {
     return data;
   };
 
+  // Décale de `diffJoursOuvres` jours OUVRÉS (week-ends et fériés ignorés) toutes les tâches
+  // d'un chantier dont la date de début est postérieure à `fromDate` (utilisé après un
+  // changement de date sur une tâche donnée).
+  const shiftTachesSuivantes = async (chantierId, fromDate, excludeId, diffJoursOuvres) => {
+    if (!diffJoursOuvres || !chantierId || !fromDate) return [];
+
+    const suivantes = taches
+      .filter(t => t.chantierid === chantierId && t.id !== excludeId && t.datedebut && t.datedebut > fromDate)
+      .sort((a, b) => a.datedebut.localeCompare(b.datedebut));
+
+    const updated = [];
+    for (const t of suivantes) {
+      const newDatedebut = format(addJoursOuvres(parseISO(t.datedebut), diffJoursOuvres), 'yyyy-MM-dd');
+      const newDatefin = t.datefin ? format(addJoursOuvres(parseISO(t.datefin), diffJoursOuvres), 'yyyy-MM-dd') : t.datefin;
+      updated.push(await updateTache(t.id, { ...t, datedebut: newDatedebut, datefin: newDatefin }));
+    }
+    return updated;
+  };
+
   const deleteTache = async (id) => {
     const { data, error } = await supabase
       .from("taches")
@@ -532,7 +552,7 @@ export function ChantierProvider({ children }) {
       sousTraitants, loadSousTraitants, addSousTraitant, updateSousTraitant, deleteSousTraitant,
       fournisseurs, loadFournisseurs, addFournisseur, updateFournisseur, deleteFournisseur,
       sav, loadSAV, addSAV, updateSAV, deleteSAV,
-      taches, loadTaches, addTache, updateTache, deleteTache,
+      taches, loadTaches, addTache, updateTache, deleteTache, shiftTachesSuivantes,
       lots, loadLots,
       conflictsByChantier
     }}>

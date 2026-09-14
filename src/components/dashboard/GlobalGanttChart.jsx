@@ -8,7 +8,7 @@ import {
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { ZoomIn, ZoomOut, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ZoomIn, ZoomOut, Calendar, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
@@ -38,8 +38,8 @@ const isCurrentWeek = (weekStart) => isSameWeek(weekStart, new Date(), { weekSta
 const getClosestWorkday = (date) => { if (isWeekend(date)) return nextMonday(date); return date; };
 
 export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTraitants }) {
-  const { updateTache, chantiers: allChantiers } = useChantier();
-  const { sousTraitants: allSousTraitants } = useSousTraitant();
+  const { updateTache, chantiers: allChantiers, conflictsByChantier } = useChantier();
+  const { sousTraitants: allSousTraitants, isArtisanIndisponible } = useSousTraitant();
 
   const [dayWidth, setDayWidth] = useState(DEFAULT_DAY_WIDTH);
   const [chantierColWidth, setChantierColWidth] = useState(CHANTIER_COL_WIDTH_DESKTOP);
@@ -249,6 +249,38 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
 
   const handleCloseDialog = () => { setSelectedTask(null); setDayTasksList([]); setDayTaskIndex(0); };
 
+  const selectedTaskAlert = useMemo(() => {
+    if (!selectedTask || selectedTask.assignetype !== 'soustraitant' || !selectedTask.assigneid || !selectedTask.datedebut || !selectedTask.datefin) return null;
+    try {
+      const start = startOfDay(parseISO(selectedTask.datedebut));
+      const end = startOfDay(parseISO(selectedTask.datefin));
+      const days = eachDayOfInterval({ start, end });
+
+      for (const day of days) {
+        const dateStr = format(day, 'yyyy-MM-dd');
+        const key = `${selectedTask.assigneid}-${dateStr}`;
+        const conflict = conflictsByChantier[key];
+        if (conflict && conflict.chantierids && conflict.chantierids.length > 1) {
+          const otherIds = conflict.chantierids.filter(id => id !== selectedTask.chantierid);
+          if (otherIds.length > 0) {
+            const otherNames = otherIds.map(id => allChantiers.find(c => c.id === id)?.nomchantier).filter(Boolean);
+            return { message: `Artisan en conflit le ${format(day, 'dd/MM/yyyy')} avec: ${otherNames.join(', ')}` };
+          }
+        }
+      }
+
+      for (const day of days) {
+        const dateStr = format(day, 'yyyy-MM-dd');
+        if (isArtisanIndisponible(selectedTask.assigneid, dateStr)) {
+          return { message: `Artisan indisponible le ${format(day, 'dd/MM/yyyy')}` };
+        }
+      }
+    } catch (err) {
+      console.error('Erreur parsing alerte tâche:', err);
+    }
+    return null;
+  }, [selectedTask, conflictsByChantier, allChantiers, isArtisanIndisponible]);
+
   const getChantierNom = (chantierId) => { const c = allChantiers?.find(c => c.id === chantierId); return c?.nomchantier || 'Chantier inconnu'; };
   const getArtisanNom = (soustraitantId) => { if (!soustraitantId) return 'Non assigné'; const st = allSousTraitants?.find(s => s.id === soustraitantId); return st ? (st.nomsocieteST || `${st.PrenomST} ${st.nomST}`) : 'Inconnu'; };
 
@@ -261,7 +293,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         <div className="flex items-center gap-1"><div className="w-3 h-3 bg-yellow-500 rounded"></div><span>Terminée par artisan</span></div>
         <div className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-500 rounded"></div><span>Validée</span></div>
         <div className="flex items-center gap-1"><div className="w-3 h-3 bg-orange-500 rounded"></div><span>En retard</span></div>
-        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-600 rounded"></div><span>Conflit artisan</span></div>
+        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-600 rounded"></div><span>Conflit / Artisan indisponible</span></div>
       </div>
 
       <div className="overflow-x-auto pb-4 bg-slate-50 p-1 rounded-lg shadow-inner relative">
@@ -338,8 +370,11 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                         const tasksForDay = chantier.daysTasks.get(dayKey);
                         if (!tasksForDay || tasksForDay.length === 0) return null;
                         const hasConflict = conflictsByDay[dayKey]?.has(chantier.id);
+                        const hasIndisponible = tasksForDay.some(t =>
+                          t.assignetype === 'soustraitant' && t.assigneid && isArtisanIndisponible(t.assigneid, dayKey)
+                        );
                         const firstTask = tasksForDay[0];
-                        const boxColor = getTaskColor(firstTask, hasConflict);
+                        const boxColor = getTaskColor(firstTask, hasConflict || hasIndisponible);
                         const extraCount = tasksForDay.length - 1;
                         const tooltipTitle = tasksForDay.length > 1
                           ? `${tasksForDay.map(t => `- ${t.nom}`).join('\n')}\nClic pour modifier`
@@ -388,6 +423,12 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                 </div>
               )}
               <div className="space-y-4 py-4">
+                {selectedTaskAlert && (
+                  <div className="p-3 bg-red-50 border-2 border-red-500 rounded-md flex items-start gap-2">
+                    <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-red-800 font-medium">{selectedTaskAlert.message}</div>
+                  </div>
+                )}
                 <div className="space-y-2 p-3 bg-slate-50 rounded-md border">
                   <div><Label className="text-xs text-slate-500">Nom de la tâche</Label><p className="font-semibold text-slate-900">{selectedTask.nom}</p></div>
                   <div><Label className="text-xs text-slate-500">Chantier (client)</Label><p className="font-medium text-slate-800">{getChantierNom(selectedTask.chantierid)}</p></div>

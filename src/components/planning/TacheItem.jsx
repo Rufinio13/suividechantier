@@ -7,9 +7,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Calendar, Edit, Trash2, User, Truck, AlertTriangle, CheckCircle, Camera } from 'lucide-react';
 import { useChantier } from '@/context/ChantierContext';
+import { useSousTraitant } from '@/context/SousTraitantContext';
 
 export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
   const { sousTraitants, fournisseurs, updateTache, chantiers } = useChantier();
+  const { isArtisanIndisponible } = useSousTraitant();
 
   const formatDate = (dateString) => {
     try {
@@ -89,16 +91,41 @@ export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
 
   const hasConflict = !!tacheConflictInfo;
 
+  // --------------------- INDISPONIBILITÉ ARTISAN ---------------------
+  const tacheIndisponibiliteInfo = useMemo(() => {
+    if (!tache.assigneid || tache.assignetype !== 'soustraitant' || !tache.datedebut || !tache.datefin) return null;
+
+    try {
+      const start = startOfDay(parseISO(tache.datedebut));
+      const end = startOfDay(parseISO(tache.datefin));
+      const days = eachDayOfInterval({ start, end });
+
+      for (const day of days) {
+        const dateStr = format(day, "yyyy-MM-dd");
+        if (isArtisanIndisponible(tache.assigneid, dateStr)) {
+          return { message: `Artisan indisponible le ${format(day, 'dd/MM/yyyy')}.` };
+        }
+      }
+    } catch (err) {
+      console.error("Erreur parsing indisponibilité:", err);
+    }
+
+    return null;
+  }, [tache, isArtisanIndisponible]);
+
+  const hasIndisponibilite = !!tacheIndisponibiliteInfo;
+  const hasProblem = hasConflict || hasIndisponibilite;
+
   // ✅ Classes conditionnelles selon statut
   const getCardClasses = () => {
-    if (hasConflict) return 'p-4 border rounded-lg hover:bg-gray-50 transition-colors border-red-600 bg-red-50';
+    if (hasProblem) return 'p-4 border rounded-lg hover:bg-gray-50 transition-colors border-red-600 bg-red-50';
     if (tache.artisan_termine && !tache.constructeur_valide) return 'p-4 border rounded-lg hover:bg-gray-50 transition-colors border-yellow-500 bg-yellow-50';
     if (isRetard) return 'p-4 border rounded-lg hover:bg-gray-50 transition-colors border-orange-500 bg-orange-50';
     return 'p-4 border rounded-lg hover:bg-gray-50 transition-colors';
   };
 
   const getTitleClasses = () => {
-    if (hasConflict) return 'font-medium text-red-700';
+    if (hasProblem) return 'font-medium text-red-700';
     if (tache.artisan_termine && !tache.constructeur_valide) return 'font-medium text-yellow-700';
     if (isRetard) return 'font-medium text-orange-700';
     return 'font-medium';
@@ -180,7 +207,7 @@ export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
         <div className="flex items-center text-sm text-muted-foreground">
           <Calendar className="mr-2 h-4 w-4" />
           <span>Du {formatDate(tache.datedebut)} au {formatDate(tache.datefin)}</span>
-          {isRetard && !hasConflict && (
+          {isRetard && !hasProblem && (
             <span className="ml-2 text-xs font-semibold text-orange-600">(En retard)</span>
           )}
         </div>
@@ -190,7 +217,7 @@ export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
             id={`terminee-${tache.id}`}
             checked={tache.constructeur_valide || tache.terminee || false}
             onCheckedChange={handleTermineeChange}
-            disabled={hasConflict}
+            disabled={hasProblem}
           />
           <Label htmlFor={`terminee-${tache.id}`} className="text-sm font-medium">
             {tache.artisan_termine && !tache.constructeur_valide ? 'Valider' : 'Terminé'}
@@ -214,6 +241,14 @@ export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
         <div className="mt-2 p-2 bg-red-200 border border-red-400 rounded-md text-xs text-red-800 flex items-center">
           <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
           {tacheConflictInfo.message}
+        </div>
+      )}
+
+      {/* INDISPONIBILITÉ ARTISAN */}
+      {hasIndisponibilite && (
+        <div className="mt-2 p-2 bg-red-200 border border-red-400 rounded-md text-xs text-red-800 flex items-center">
+          <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
+          {tacheIndisponibiliteInfo.message}
         </div>
       )}
     </motion.div>

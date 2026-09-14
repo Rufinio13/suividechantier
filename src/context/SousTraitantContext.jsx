@@ -9,11 +9,33 @@ export function SousTraitantProvider({ children }) {
 
   const [sousTraitants, setSousTraitants] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [indisponibilites, setIndisponibilites] = useState([]);
+
+  const loadIndisponibilites = async (soustraitantIds) => {
+    const ids = (soustraitantIds || []).filter(Boolean);
+    if (ids.length === 0) {
+      setIndisponibilites([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("indisponibilites_artisan")
+      .select("*")
+      .in("soustraitant_id", ids);
+
+    if (error) {
+      console.error("❌ loadIndisponibilites :", error);
+      setIndisponibilites([]);
+    } else {
+      setIndisponibilites(data || []);
+    }
+  };
 
   const loadSousTraitants = async () => {
     if (!profile) {
       console.log("SousTraitantContext : En attente de profile...");
       setSousTraitants([]);
+      setIndisponibilites([]);
       setLoading(false);
       return;
     }
@@ -24,6 +46,7 @@ export function SousTraitantProvider({ children }) {
     if (profile.user_type === 'artisan') {
       if (!user?.id) {
         setSousTraitants([]);
+        setIndisponibilites([]);
         setLoading(false);
         return;
       }
@@ -43,6 +66,7 @@ export function SousTraitantProvider({ children }) {
         setSousTraitants(data || []);
       }
 
+      await loadIndisponibilites((data || []).map(s => s.id));
       setLoading(false);
       return;
     }
@@ -51,6 +75,7 @@ export function SousTraitantProvider({ children }) {
     if (!profile.nomsociete) {
       console.log("SousTraitantContext : En attente de nomsociete...");
       setSousTraitants([]);
+      setIndisponibilites([]);
       setLoading(false);
       return;
     }
@@ -71,6 +96,7 @@ export function SousTraitantProvider({ children }) {
       setSousTraitants(data || []);
     }
 
+    await loadIndisponibilites((data || []).map(s => s.id));
     setLoading(false);
   };
 
@@ -168,6 +194,42 @@ export function SousTraitantProvider({ children }) {
     return data;
   };
 
+  const indisponibiliteSet = React.useMemo(() => {
+    const s = new Set();
+    (indisponibilites || []).forEach(i => s.add(`${i.soustraitant_id}-${i.date}`));
+    return s;
+  }, [indisponibilites]);
+
+  const isArtisanIndisponible = (soustraitantId, dateStr) =>
+    indisponibiliteSet.has(`${soustraitantId}-${dateStr}`);
+
+  const addIndisponibilite = async (soustraitantId, dateStr) => {
+    const { data, error } = await supabase
+      .from("indisponibilites_artisan")
+      .insert([{ soustraitant_id: soustraitantId, date: dateStr }])
+      .select()
+      .single();
+
+    if (error) { console.error("❌ addIndisponibilite :", error); throw error; }
+
+    setIndisponibilites((prev) => [...prev, data]);
+    return data;
+  };
+
+  const removeIndisponibilite = async (soustraitantId, dateStr) => {
+    const { error } = await supabase
+      .from("indisponibilites_artisan")
+      .delete()
+      .eq("soustraitant_id", soustraitantId)
+      .eq("date", dateStr);
+
+    if (error) { console.error("❌ removeIndisponibilite :", error); throw error; }
+
+    setIndisponibilites((prev) =>
+      prev.filter((i) => !(i.soustraitant_id === soustraitantId && i.date === dateStr))
+    );
+  };
+
   const deleteSousTraitant = async (id) => {
     console.log("📤 Delete ST :", id);
 
@@ -193,6 +255,10 @@ export function SousTraitantProvider({ children }) {
         addSousTraitant,
         updateSousTraitant,
         deleteSousTraitant,
+        indisponibilites: indisponibilites || [],
+        isArtisanIndisponible,
+        addIndisponibilite,
+        removeIndisponibilite,
       }}
     >
       {children}

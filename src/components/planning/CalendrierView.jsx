@@ -4,6 +4,7 @@ import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useSousTraitant } from '@/context/SousTraitantContext';
 
 const JOURS_FERIES = [
   '2025-01-01', '2025-04-21', '2025-05-01', '2025-05-08', '2025-05-29', '2025-06-09',
@@ -12,18 +13,22 @@ const JOURS_FERIES = [
   '2026-07-14', '2026-08-15', '2026-11-01', '2026-11-11', '2026-12-25',
 ];
 
-export function CalendrierView({ 
-  taches = [], 
-  lots = [], 
-  conflictsByChantier = {}, 
-  onEditTache, 
+export function CalendrierView({
+  taches = [],
+  lots = [],
+  conflictsByChantier = {},
+  onEditTache,
   onAddTache,
   chantierColors = null,
   chantierNoms = null,
   readOnly = false,
   isArtisanView = false,
-  notifications = []
+  notifications = [],
+  indisponibiliteDates = null,
+  onToggleIndisponibilite = null,
+  canManageIndisponibilites = false
 }) {
+  const { isArtisanIndisponible } = useSousTraitant();
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const goToPreviousMonth = () => setCurrentDate(prev => subMonths(prev, 1));
@@ -31,9 +36,15 @@ export function CalendrierView({
   const goToToday = () => setCurrentDate(new Date());
 
   const handleDayClick = (day) => {
-    if (readOnly || !onAddTache) return;
-    
     const dateStr = format(day, 'yyyy-MM-dd');
+
+    if (canManageIndisponibilites && onToggleIndisponibilite) {
+      onToggleIndisponibilite(dateStr);
+      return;
+    }
+
+    if (readOnly || !onAddTache) return;
+
     console.log('📅 Clic sur date:', dateStr);
     onAddTache(dateStr);
   };
@@ -68,22 +79,26 @@ export function CalendrierView({
     const today = startOfDay(new Date());
 
     let hasConflictThisDay = false;
+    let hasIndisponibiliteThisDay = false;
     if (tache.assignetype === 'soustraitant' && tache.assigneid) {
       try {
         const key = `${tache.assigneid}-${dayStr}`;
         const conflict = conflictsByChantier[key];
-        
+
         if (conflict && conflict.chantierids && conflict.chantierids.length > 1) {
           hasConflictThisDay = true;
+        }
+        if (isArtisanIndisponible(tache.assigneid, dayStr)) {
+          hasIndisponibiliteThisDay = true;
         }
       } catch (err) {
         console.error("Erreur check conflit:", err);
       }
     }
 
-    if (hasConflictThisDay) {
+    if (hasConflictThisDay || hasIndisponibiliteThisDay) {
       return 'bg-red-100 border-red-400 text-red-800';
-    } 
+    }
     else if (tache.artisan_termine && !tache.constructeur_valide) {
       return 'bg-yellow-100 border-yellow-400 text-yellow-800';
     }
@@ -216,6 +231,8 @@ export function CalendrierView({
               const isFerie = JOURS_FERIES.includes(dayStr);
               const isNonOuvre = isWeekendDay || isFerie;
               const tachesForDay = getTachesForDay(day);
+              const isIndisponible = !!indisponibiliteDates?.has(dayStr);
+              const canClickDay = canManageIndisponibilites ? !isNonOuvre : (!readOnly && !isNonOuvre);
 
               return (
                 <div
@@ -225,8 +242,10 @@ export function CalendrierView({
                     !isCurrentMonth && 'bg-muted/20',
                     isToday && 'bg-blue-50',
                     isNonOuvre && isCurrentMonth && !isToday && 'bg-slate-100',
-                    !readOnly && isCurrentMonth && !isNonOuvre && 'cursor-pointer hover:bg-slate-50'
+                    isIndisponible && isCurrentMonth && 'bg-gray-300',
+                    canClickDay && isCurrentMonth && 'cursor-pointer hover:opacity-90'
                   )}
+                  title={canManageIndisponibilites && isCurrentMonth && !isNonOuvre ? (isIndisponible ? 'Cliquer pour vous rendre disponible' : 'Cliquer pour vous déclarer indisponible') : undefined}
                   onClick={() => {
                     if (isCurrentMonth && !isNonOuvre) {
                       handleDayClick(day);
@@ -240,6 +259,12 @@ export function CalendrierView({
                   )}>
                     {format(day, 'd')}
                   </div>
+
+                  {isIndisponible && tachesForDay.length === 0 && (
+                    <div className="text-[10px] text-gray-600 font-medium text-center mt-2">
+                      Indisponible
+                    </div>
+                  )}
 
                   <div className="space-y-1">
                     {tachesForDay.map((tache, idx) => (
@@ -300,7 +325,16 @@ export function CalendrierView({
           </span>
           <span className="flex items-center gap-1">
             <div className="w-4 h-4 rounded bg-red-600"></div>
-            Conflit artisan
+            Conflit / Artisan indisponible
+          </span>
+        </div>
+      )}
+
+      {canManageIndisponibilites && (
+        <div className="flex flex-wrap gap-3 text-xs items-center">
+          <span className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-gray-300"></div>
+            Indisponible — cliquez sur un jour pour basculer votre disponibilité
           </span>
         </div>
       )}
