@@ -89,11 +89,14 @@ export function SousTraitantsList() {
           animate={{ opacity: 1 }}
           transition={{ staggerChildren: 0.05 }}
         >
-          {filtered.map(st => (
-            <Card key={st.id} className="flex flex-col cursor-pointer hover:shadow-md transition border rounded-2xl overflow-hidden w-full">
-              <CardHeader className="flex justify-between items-center">
-                <CardTitle className="flex-1 flex justify-between items-center gap-2 min-w-0">
-                  <span className="truncate min-w-0">{st.nomsocieteST}</span>
+          {filtered.map(st => {
+            const nomComplet = `${st.PrenomST || ""} ${st.nomST || ""}`.trim();
+            return (
+              <Card key={st.id} className="h-full w-full flex flex-col cursor-pointer hover:shadow-md transition border rounded-2xl overflow-hidden">
+                <CardHeader className="pb-3 flex justify-between items-start gap-2">
+                  <CardTitle className="text-lg font-bold truncate min-w-0" title={st.nomsocieteST}>
+                    {st.nomsocieteST}
+                  </CardTitle>
                   <div className="flex gap-1 flex-shrink-0">
                     <Button
                       size="icon"
@@ -110,24 +113,24 @@ export function SousTraitantsList() {
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
-                </CardTitle>
-              </CardHeader>
+                </CardHeader>
 
-              <CardContent className="text-sm space-y-1 overflow-hidden">
-                {st.PrenomST || st.nomST ? (
-                  <p className="text-muted-foreground truncate">{st.PrenomST} {st.nomST}</p>
-                ) : null}
-                {st.email && <p className="truncate">Email : {st.email}</p>}
-                {st.telephone && <p className="truncate">Tél : {st.telephone}</p>}
-                {st.adresseST && <p className="truncate">Adresse : {st.adresseST}</p>}
-                {st.assigned_lots?.length > 0 && (
-                  <p className="break-words">
-                    <strong>Lots assignés :</strong> {st.assigned_lots.join(", ")}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                <CardContent className="flex-grow space-y-2.5 text-sm">
+                  {nomComplet && (
+                    <p className="text-muted-foreground truncate" title={nomComplet}>{nomComplet}</p>
+                  )}
+                  {st.email && <p className="truncate" title={st.email}>Email : {st.email}</p>}
+                  {st.telephone && <p className="truncate" title={st.telephone}>Tél : {st.telephone}</p>}
+                  {st.adresseST && <p className="truncate" title={st.adresseST}>Adresse : {st.adresseST}</p>}
+                  {st.assigned_lots?.length > 0 && (
+                    <p className="break-words">
+                      <strong>Lots assignés :</strong> {st.assigned_lots.join(", ")}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </motion.div>
       )}
 
