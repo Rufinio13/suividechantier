@@ -24,6 +24,28 @@ const TYPE_LABELS = {
   etudes: 'Études', permis_construire: 'Permis de construire', autre: 'Autre',
 };
 
+export const TYPES_PLAN = [
+  { value: 'fondation_go', label: 'Fondation / GO' },
+  { value: 'menuiseries_facade', label: 'Menuiseries / Façade' },
+  { value: 'coupe', label: 'Coupe' },
+  { value: 'cellule', label: 'Cellule' },
+  { value: 'plomberie', label: 'Plomberie' },
+  { value: 'mob', label: 'MOB' },
+  { value: 'electricite', label: 'Électricité' },
+  { value: 'revetement_sol', label: 'Revêtement de sol' },
+  { value: 'terrasse', label: 'Terrasse' },
+  { value: 'toiture', label: 'Toiture' },
+  { value: 'plan_masse', label: 'Plan Masse' },
+  { value: 'vmc', label: 'VMC' },
+  { value: 'etudes', label: 'Études' },
+  { value: 'cuisine', label: 'Cuisine' },
+  { value: 'escalier', label: 'Escalier' },
+  { value: 'fumisterie', label: 'Fumisterie' },
+  { value: 'chauffage', label: 'Chauffage' },
+];
+
+export const TYPE_PLAN_LABELS = TYPES_PLAN.reduce((acc, t) => ({ ...acc, [t.value]: t.label }), {});
+
 export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -31,6 +53,7 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
 
   const [file, setFile] = useState(null);
   const [typeDocument, setTypeDocument] = useState('autre');
+  const [typePlan, setTypePlan] = useState('');
   const [lotId, setLotId] = useState('');
   const [partageType, setPartageType] = useState('tous');
   const [artisanId, setArtisanId] = useState('');
@@ -63,7 +86,7 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
   const handleFileChange = (e) => { const f = e.target.files?.[0]; if (f) setFile(f); };
 
   const handleTypeDocumentChange = (newType) => {
-    setTypeDocument(newType); setLotId(''); setArtisanId(''); setPartageType('tous'); setNecessiteSignature(false);
+    setTypeDocument(newType); setTypePlan(''); setLotId(''); setArtisanId(''); setPartageType('tous'); setNecessiteSignature(false);
   };
 
   const getExpediteurProfile = async () => {
@@ -78,6 +101,7 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!file) { toast({ title: 'Erreur', description: 'Veuillez sélectionner un fichier', variant: 'destructive' }); return; }
+    if (typeDocument === 'plan' && !typePlan) { toast({ title: 'Erreur', description: 'Veuillez sélectionner le type de plan', variant: 'destructive' }); return; }
     if (typeDocument === 'marche_travaux') {
       if (!lotId) { toast({ title: 'Erreur', description: 'Veuillez sélectionner un lot', variant: 'destructive' }); return; }
       if (!artisanId) { toast({ title: 'Erreur', description: 'Veuillez sélectionner un artisan', variant: 'destructive' }); return; }
@@ -104,7 +128,8 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
       const documentData = {
         chantier_id: chantierId, nom_fichier: file.name, url_fichier: urlFichier,
         storage_path: filePath, type_fichier: fileExt, taille_fichier: file.size,
-        type_document: typeDocument, lot_id: typeDocument === 'marche_travaux' ? lotId : null,
+        type_document: typeDocument, type_plan: typeDocument === 'plan' ? typePlan : null,
+        lot_id: typeDocument === 'marche_travaux' ? lotId : null,
         partage_type: typeDocument === 'marche_travaux' ? 'specifique' : partageType,
         artisan_id: typeDocument === 'marche_travaux' ? artisanId : (partageType === 'specifique' ? artisanId : null),
         uploaded_by: user.id,
@@ -141,7 +166,7 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
 
       toast({ title: 'Document ajouté ✅', description: `${file.name} a été partagé` });
       onSuccess?.(); onClose();
-      setFile(null); setTypeDocument('autre'); setLotId(''); setPartageType('tous'); setArtisanId(''); setNecessiteSignature(false);
+      setFile(null); setTypeDocument('autre'); setTypePlan(''); setLotId(''); setPartageType('tous'); setArtisanId(''); setNecessiteSignature(false);
     } catch (error) {
       console.error('Erreur upload:', error);
       toast({ title: 'Erreur ❌', description: 'Impossible d\'uploader le document', variant: 'destructive' });
@@ -180,6 +205,16 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
               {TYPES_DOCUMENTS.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
             </select>
           </div>
+          {typeDocument === 'plan' && (
+            <div>
+              <Label htmlFor="type-plan">Type de plan *</Label>
+              <select id="type-plan" value={typePlan} onChange={(e) => setTypePlan(e.target.value)} required
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 mt-2">
+                <option value="">Sélectionner un type de plan...</option>
+                {TYPES_PLAN.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+              </select>
+            </div>
+          )}
           {typeDocument === 'marche_travaux' && (
             <>
               <div className="p-3 bg-orange-50 border border-orange-200 rounded-md text-sm">

@@ -8,7 +8,7 @@ import {
 import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useChantier } from '@/context/ChantierContext';
-import { DocumentUploadModal } from './DocumentUploadModal';
+import { DocumentUploadModal, TYPE_PLAN_LABELS, TYPES_PLAN } from './DocumentUploadModal';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -31,6 +31,7 @@ export function DocumentsTab({ chantierId }) {
     bon_commande: true, plan: true, marche_travaux: true,
     etudes: true, permis_construire: true, autre: true,
   });
+  const [planFilter, setPlanFilter] = useState(null);
 
   const fetchDocuments = async () => {
     try {
@@ -62,6 +63,13 @@ export function DocumentsTab({ chantierId }) {
     });
     return grouped;
   }, [documents]);
+
+  const planTypesPresent = useMemo(() => {
+    const plans = documentsByType.plan || [];
+    return TYPES_PLAN
+      .map(t => ({ ...t, count: plans.filter(doc => doc.type_plan === t.value).length }))
+      .filter(t => t.count > 0);
+  }, [documentsByType]);
 
   const toggleCategory = (categoryKey) => {
     setExpandedCategories(prev => ({ ...prev, [categoryKey]: !prev[categoryKey] }));
@@ -184,8 +192,36 @@ export function DocumentsTab({ chantierId }) {
 
               {isExpanded && (
                 <CardContent className="pt-4">
+                  {category.key === 'plan' && planTypesPresent.length > 1 && (
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setPlanFilter(null)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition ${
+                          !planFilter ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                        }`}
+                      >
+                        Tous ({categoryDocs.length})
+                      </button>
+                      {planTypesPresent.map(t => (
+                        <button
+                          key={t.value}
+                          type="button"
+                          onClick={() => setPlanFilter(t.value)}
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium transition ${
+                            planFilter === t.value ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                          }`}
+                        >
+                          {t.label} ({t.count})
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="space-y-2">
-                    {categoryDocs.map(doc => {
+                    {(category.key === 'plan' && planFilter
+                      ? categoryDocs.filter(doc => doc.type_plan === planFilter)
+                      : categoryDocs
+                    ).map(doc => {
                       const artisan = doc.artisan_id
                         ? sousTraitants.find(st => st.id === doc.artisan_id)
                         : null;
@@ -208,6 +244,11 @@ export function DocumentsTab({ chantierId }) {
                             <div className="flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className="font-medium text-sm">{doc.nom_fichier}</p>
+                                {doc.type_document === 'plan' && doc.type_plan && (
+                                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+                                    {TYPE_PLAN_LABELS[doc.type_plan] || doc.type_plan}
+                                  </span>
+                                )}
                                 {/* ✅ Badge signé visible côté constructeur */}
                                 {estSigne && (
                                   <span className="flex items-center gap-1 px-2 py-0.5 bg-green-500 text-white rounded text-xs font-medium">

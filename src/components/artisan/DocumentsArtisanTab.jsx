@@ -12,6 +12,7 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { SignatureCanvas } from '@/components/SignatureCanvas';
 import { PDFDocument, rgb } from 'pdf-lib';
+import { TYPE_PLAN_LABELS, TYPES_PLAN } from '@/components/planning/DocumentUploadModal';
 
 // ✅ CONFIGURATION DES TYPES DE DOCUMENTS
 const DOCUMENT_CATEGORIES = [
@@ -82,6 +83,7 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
     permis_construire: true,
     autre: true,
   });
+  const [planFilter, setPlanFilter] = useState(null);
 
   // ✅ Charger les documents
   const loadDocuments = async () => {
@@ -152,9 +154,16 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
     DOCUMENT_CATEGORIES.forEach(cat => {
       grouped[cat.key] = documents.filter(doc => doc.type_document === cat.key);
     });
-    
+
     return grouped;
   }, [documents]);
+
+  const planTypesPresent = useMemo(() => {
+    const plans = documentsByType.plan || [];
+    return TYPES_PLAN
+      .map(t => ({ ...t, count: plans.filter(doc => doc.type_plan === t.value).length }))
+      .filter(t => t.count > 0);
+  }, [documentsByType]);
 
   // ✅ Toggle expansion d'une catégorie
   const toggleCategory = (categoryKey) => {
@@ -547,9 +556,37 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
               {/* Liste des documents (si catégorie dépliée) */}
               {isExpanded && (
                 <CardContent className="pt-4">
+                  {category.key === 'plan' && planTypesPresent.length > 1 && (
+                    <div className="flex flex-wrap gap-1.5 mb-3">
+                      <button
+                        type="button"
+                        onClick={() => setPlanFilter(null)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition ${
+                          !planFilter ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                        }`}
+                      >
+                        Tous ({categoryDocs.length})
+                      </button>
+                      {planTypesPresent.map(t => (
+                        <button
+                          key={t.value}
+                          type="button"
+                          onClick={() => setPlanFilter(t.value)}
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium transition ${
+                            planFilter === t.value ? 'bg-purple-600 text-white' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'
+                          }`}
+                        >
+                          {t.label} ({t.count})
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="space-y-2">
-                    {categoryDocs.map(doc => {
-                      const needsSignature = doc.necessite_signature && 
+                    {(category.key === 'plan' && planFilter
+                      ? categoryDocs.filter(doc => doc.type_plan === planFilter)
+                      : categoryDocs
+                    ).map(doc => {
+                      const needsSignature = doc.necessite_signature &&
                                             doc.artisan_assigne_signature === soustraitantId && 
                                             doc.signature_statut === 'en_attente';
 
@@ -568,7 +605,13 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
                             <div className="flex-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className="font-medium text-sm">{doc.nom_fichier}</p>
-                                
+
+                                {doc.type_document === 'plan' && doc.type_plan && (
+                                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+                                    {TYPE_PLAN_LABELS[doc.type_plan] || doc.type_plan}
+                                  </span>
+                                )}
+
                                 {needsSignature && (
                                   <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded-full flex items-center gap-1">
                                     <FileSignature className="h-3 w-3" />
