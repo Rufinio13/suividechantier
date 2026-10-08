@@ -13,6 +13,7 @@ import { useFournisseur } from "@/context/FournisseurContext";
 import { useChantier } from "@/context/ChantierContext";
 import { useConfirm } from "@/hooks/useConfirm";
 import { AlertTriangle, CheckCircle, Trash2 } from "lucide-react";
+import { TacheModificationInfo, useModificationsTache } from "@/components/planning/TacheModificationInfo";
 
 export function TacheFormModal({
   isOpen, onClose, tache, chantierId, lots: globalLots,
@@ -22,6 +23,7 @@ export function TacheFormModal({
   const { fournisseurs } = useFournisseur();
   const { chantiers, shiftTachesSuivantes } = useChantier();
   const { confirm, ConfirmDialog } = useConfirm();
+  const modificationsInfo = useModificationsTache(tache?.id, isOpen);
 
   const tacheConflictInfo = useMemo(() => {
     if (!tache || !tache.assigneid || tache.assignetype !== 'soustraitant' || !tache.datedebut || !tache.datefin) return null;
@@ -192,6 +194,7 @@ export function TacheFormModal({
       <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{tache ? "Modifier la tâche" : "Ajouter une tâche"}</DialogTitle></DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
+          <TacheModificationInfo {...modificationsInfo} />
           {tacheConflictInfo && (
             <div className="p-3 bg-red-50 border-2 border-red-500 rounded-md flex items-start gap-2">
               <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />

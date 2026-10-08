@@ -15,6 +15,7 @@ import { useSousTraitant } from '@/context/SousTraitantContext';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { calculateDateFinLogic, calculateDureeOuvree } from '@/context/chantierContextLogics/tacheLogics';
+import { TacheModificationInfo, useModificationsTache, PASTILLE_MODIF_CLASS } from '@/components/planning/TacheModificationInfo';
 
 const MIN_DAY_WIDTH = 16;
 const MAX_DAY_WIDTH = 48;
@@ -38,7 +39,7 @@ const isCurrentWeek = (weekStart) => isSameWeek(weekStart, new Date(), { weekSta
 const getClosestWorkday = (date) => { if (isWeekend(date)) return nextMonday(date); return date; };
 
 export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTraitants }) {
-  const { updateTache, chantiers: allChantiers, conflictsByChantier } = useChantier();
+  const { updateTache, chantiers: allChantiers, conflictsByChantier, modifsNonVuesParTache } = useChantier();
   const { sousTraitants: allSousTraitants, isArtisanIndisponible } = useSousTraitant();
 
   const [dayWidth, setDayWidth] = useState(DEFAULT_DAY_WIDTH);
@@ -48,6 +49,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
   const [dayTaskIndex, setDayTaskIndex] = useState(0);
   const [formData, setFormData] = useState({ datedebut: '', duree: '' });
   const [isSaving, setIsSaving] = useState(false);
+  const modificationsInfo = useModificationsTache(selectedTask?.id);
 
   const scrollContainerRef = useRef(null);
   const hasScrolledToToday = useRef(false);
@@ -211,7 +213,9 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
   };
 
   const handleTaskClick = (tasksForDay, chantierName) => {
-    selectTaskAtIndex(tasksForDay, 0, chantierName);
+    // On ouvre en priorité la première tâche dont le planning a été modifié
+    const indexModifiee = tasksForDay.findIndex(t => modifsNonVuesParTache?.[t.id]?.length);
+    selectTaskAtIndex(tasksForDay, indexModifiee === -1 ? 0 : indexModifiee, chantierName);
   };
 
   const handlePrevTask = () => {
@@ -294,6 +298,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         <div className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-500 rounded"></div><span>Validée</span></div>
         <div className="flex items-center gap-1"><div className="w-3 h-3 bg-orange-500 rounded"></div><span>En retard</span></div>
         <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-600 rounded"></div><span>Conflit / Artisan indisponible</span></div>
+        <div className="flex items-center gap-1"><div className={`w-3 h-3 rounded-full ${PASTILLE_MODIF_CLASS}`}></div><span>Planning modifié (à consulter)</span></div>
       </div>
 
       <div className="overflow-x-auto pb-4 bg-slate-50 p-1 rounded-lg shadow-inner relative">
@@ -376,6 +381,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                         const firstTask = tasksForDay[0];
                         const boxColor = getTaskColor(firstTask, hasConflict || hasIndisponible);
                         const extraCount = tasksForDay.length - 1;
+                        const hasModifNonVue = tasksForDay.some(t => modifsNonVuesParTache?.[t.id]?.length);
                         const tooltipTitle = tasksForDay.length > 1
                           ? `${tasksForDay.map(t => `- ${t.nom}`).join('\n')}\nClic pour modifier`
                           : `${firstTask.nom}\nClic pour modifier`;
@@ -387,9 +393,11 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                             transition={{ duration: 0.2, delay: chantierIndex * 0.02 + dayIndex * 0.001 }}
                             onClick={() => handleTaskClick(tasksForDay, chantier.name)}
                             title={tooltipTitle}>
-                            {extraCount > 0 && (
-                              <span className="absolute inset-0 flex items-center justify-center h-3.5 w-3.5 m-auto rounded-full bg-slate-800 text-white text-[8px] font-bold leading-none z-10">
-                                {tasksForDay.length}
+                            {(extraCount > 0 || hasModifNonVue) && (
+                              <span
+                                className={`absolute inset-0 flex items-center justify-center m-auto rounded-full text-white text-[8px] font-bold leading-none z-10 ${hasModifNonVue ? PASTILLE_MODIF_CLASS : 'bg-slate-800'} ${extraCount > 0 ? 'h-3.5 w-3.5' : 'h-2.5 w-2.5'}`}
+                                title={hasModifNonVue ? 'Planning modifié' : undefined}>
+                                {extraCount > 0 ? tasksForDay.length : null}
                               </span>
                             )}
                           </motion.div>
@@ -423,6 +431,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                 </div>
               )}
               <div className="space-y-4 py-4">
+                <TacheModificationInfo {...modificationsInfo} />
                 {selectedTaskAlert && (
                   <div className="p-3 bg-red-50 border-2 border-red-500 rounded-md flex items-start gap-2">
                     <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />

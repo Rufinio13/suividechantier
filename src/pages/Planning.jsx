@@ -26,7 +26,7 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   console.log("🏗️ Planning - isEmbedded:", isEmbedded, "| embeddedChantierId:", embeddedChantierId, "| params.id:", params.id, "| chantierId final:", chantierId);
 
   const { toast } = useToast();
-  const { chantiers, lots: globalLots, taches, addTache, updateTache, deleteTache, loading, conflictsByChantier, sousTraitants } = useChantier();
+  const { chantiers, lots: globalLots, taches, addTache, updateTache, deleteTache, loading, conflictsByChantier, sousTraitants, modifsNonVuesParTache } = useChantier();
   
   // ✅ COMMENTAIRES
   const { 
@@ -551,6 +551,7 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
                   conflictsByChantier={conflictsByChantier}
                   onEditTache={openEditTacheDialog}
                   onAddTache={handleAddTacheFromCalendar}
+                  modifsNonVuesParTache={modifsNonVuesParTache}
                 />
               ) : (
                 renderEmptyState()

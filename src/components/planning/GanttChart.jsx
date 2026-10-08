@@ -7,6 +7,7 @@ import { ZoomIn, ZoomOut } from 'lucide-react';
 import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
 import { useConfirm } from '@/hooks/useConfirm';
+import { PASTILLE_MODIF_CLASS } from '@/components/planning/TacheModificationInfo';
 import { isJourOuvre, countJoursOuvres, diffJoursOuvres } from '@/lib/joursOuvres';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -19,7 +20,7 @@ const isToday = (date) => isSameDay(date, new Date());
 
 export function GanttChart({ taches, chantierId, onEditTache }) {
   const [dayWidth, setDayWidth] = useState(DEFAULT_DAY_WIDTH);
-  const { updateTache, shiftTachesSuivantes, chantiers, conflictsByChantier } = useChantier();
+  const { updateTache, shiftTachesSuivantes, chantiers, conflictsByChantier, modifsNonVuesParTache } = useChantier();
   const { isArtisanIndisponible } = useSousTraitant();
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -207,6 +208,9 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
                       onClick={() => onEditTache && onEditTache(item.rawTache)}
                       title={`${item.name} - Glisser pour déplacer, cliquer pour modifier`}>
                       <div className={`absolute inset-0 ${segment.color} opacity-100`}></div>
+                      {segIndex === 0 && modifsNonVuesParTache?.[item.id]?.length > 0 && (
+                        <span className={`relative z-10 mr-1 h-2 w-2 rounded-full flex-shrink-0 ${PASTILLE_MODIF_CLASS}`} title="Planning modifié"></span>
+                      )}
                       {segIndex === 0 && <span className="relative z-10 truncate font-medium text-[9px]">{item.name}</span>}
                     </motion.div>
                   ))}
@@ -224,6 +228,7 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
         <span className="flex items-center gap-1"><div className="w-4 h-4 rounded bg-blue-500"></div>Validée</span>
         <span className="flex items-center gap-1"><div className="w-4 h-4 rounded bg-orange-500"></div>En retard</span>
         <span className="flex items-center gap-1"><div className="w-4 h-4 rounded bg-red-600"></div>Conflit / Artisan indisponible</span>
+        <span className="flex items-center gap-1"><div className={`w-3 h-3 rounded-full ${PASTILLE_MODIF_CLASS}`}></div>Planning modifié (à consulter)</span>
       </div>
       {ConfirmDialog}
     </div>

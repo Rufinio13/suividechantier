@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Calendar, Edit, Trash2, User, Truck, AlertTriangle, CheckCircle, Camera } from 'lucide-react';
 import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
+import { PASTILLE_MODIF_CLASS } from '@/components/planning/TacheModificationInfo';
 
 export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
-  const { sousTraitants, fournisseurs, updateTache, chantiers } = useChantier();
+  const { sousTraitants, fournisseurs, updateTache, chantiers, modifsNonVuesParTache } = useChantier();
   const { isArtisanIndisponible } = useSousTraitant();
 
   const formatDate = (dateString) => {
@@ -139,7 +140,12 @@ export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
     >
       <div className="flex justify-between items-start mb-2">
         <div>
-          <h3 className={getTitleClasses()}>{tache.nom}</h3>
+          <h3 className={`${getTitleClasses()} flex items-center gap-2`}>
+            {modifsNonVuesParTache?.[tache.id]?.length > 0 && (
+              <span className={`inline-block h-2.5 w-2.5 rounded-full flex-shrink-0 ${PASTILLE_MODIF_CLASS}`} title="Planning modifié"></span>
+            )}
+            {tache.nom}
+          </h3>
           {lot && <p className="text-xs text-muted-foreground">Lot: {lot.lot}</p>}
         </div>
         <div className="flex space-x-2">

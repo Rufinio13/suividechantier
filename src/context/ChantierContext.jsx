@@ -16,8 +16,26 @@ export function ChantierProvider({ children }) {
   const [sav, setSav] = useState([]);
   const [taches, setTaches] = useState([]);
   const [lots, setLots] = useState([]);
+  const [tachesModifications, setTachesModifications] = useState([]);
+  const [tachesVues, setTachesVues] = useState({});
 
   const isLoadingRef = useRef(false);
+
+  // Historique des modifications de planning + dernières consultations de l'utilisateur
+  const loadTachesModifications = async () => {
+    if (!profile?.nomsociete || !profile?.id) return;
+
+    const [modifsResult, vuesResult] = await Promise.all([
+      supabase.from("taches_modifications").select("*").eq("nomsociete", profile.nomsociete).order("created_at", { ascending: false }),
+      supabase.from("taches_modifications_vues").select("tache_id, vu_at").eq("user_id", profile.id)
+    ]);
+
+    if (modifsResult.error) console.error("❌ Erreur loadTachesModifications :", modifsResult.error);
+    else setTachesModifications(modifsResult.data || []);
+
+    if (vuesResult.error) console.error("❌ Erreur loadTachesVues :", vuesResult.error);
+    else setTachesVues(Object.fromEntries((vuesResult.data || []).map(v => [v.tache_id, v.vu_at])));
+  };
 
   // ✅ Fonction loadAll réutilisable
   const loadAll = async () => {
@@ -81,6 +99,8 @@ export function ChantierProvider({ children }) {
         setLots(lotsResult.data || []);
         console.log("✅ loadLots OK -", lotsResult.data?.length);
       }
+
+      await loadTachesModifications();
 
       console.log("✅✅✅ ChantierContext : TOUT EST CHARGÉ !");
     } catch (error) {
@@ -264,6 +284,46 @@ export function ChantierProvider({ children }) {
     return conflicts;
   }, [taches]);
 
+  // Dernière modification de planning par tâche (visible par tous, y compris l'auteur)
+  const derniereModifParTache = useMemo(() => {
+    const map = {};
+    tachesModifications.forEach(m => {
+      if (!map[m.tache_id] || new Date(m.created_at) > new Date(map[m.tache_id].created_at)) {
+        map[m.tache_id] = m;
+      }
+    });
+    return map;
+  }, [tachesModifications]);
+
+  // Modifications faites par d'autres et pas encore consultées par l'utilisateur
+  // (de la plus ancienne à la plus récente)
+  const modifsNonVuesParTache = useMemo(() => {
+    const map = {};
+    tachesModifications.forEach(m => {
+      if (m.modifie_par === profile?.id) return;
+      const vuAt = tachesVues[m.tache_id];
+      if (vuAt && new Date(m.created_at) <= new Date(vuAt)) return;
+      if (!map[m.tache_id]) map[m.tache_id] = [];
+      map[m.tache_id].push(m);
+    });
+    Object.values(map).forEach(list => list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+    return map;
+  }, [tachesModifications, tachesVues, profile?.id]);
+
+  const marquerTacheVue = async (tacheId) => {
+    const nonVues = modifsNonVuesParTache[tacheId];
+    if (!nonVues?.length || !profile?.id) return;
+
+    // On s'aligne sur l'horodatage serveur de la dernière modification connue
+    const vuAt = nonVues[nonVues.length - 1].created_at;
+    setTachesVues(prev => ({ ...prev, [tacheId]: vuAt }));
+
+    const { error } = await supabase
+      .from("taches_modifications_vues")
+      .upsert({ tache_id: tacheId, user_id: profile.id, vu_at: vuAt }, { onConflict: "tache_id,user_id" });
+    if (error) console.error("❌ Erreur marquerTacheVue :", error);
+  };
+
   const addTache = async (tache) => {
     const payload = {
       nom: tache.nom ?? null,
@@ -332,7 +392,39 @@ export function ChantierProvider({ children }) {
       .single();
       
     if (error) throw error;
-    
+
+    // Pastille "planning modifié" pour le reste de l'agence : changement de date ou d'artisan
+    const datesChangees = ancienneTache &&
+      ((ancienneTache.datedebut ?? null) !== (data.datedebut ?? null) ||
+       (ancienneTache.datefin ?? null) !== (data.datefin ?? null));
+    const assigneChange = ancienneTache &&
+      ((ancienneTache.assigneid ?? null) !== (data.assigneid ?? null) ||
+       (ancienneTache.assignetype ?? null) !== (data.assignetype ?? null));
+
+    if ((datesChangees || assigneChange) && profile?.id && profile?.nomsociete) {
+      const { data: modif, error: modifError } = await supabase
+        .from("taches_modifications")
+        .insert({
+          tache_id: id,
+          nomsociete: profile.nomsociete,
+          ancienne_datedebut: ancienneTache.datedebut ?? null,
+          ancienne_datefin: ancienneTache.datefin ?? null,
+          nouvelle_datedebut: data.datedebut ?? null,
+          nouvelle_datefin: data.datefin ?? null,
+          ancien_assigneid: ancienneTache.assigneid ?? null,
+          ancien_assignetype: ancienneTache.assignetype ?? null,
+          nouvel_assigneid: data.assigneid ?? null,
+          nouvel_assignetype: data.assignetype ?? null,
+          modifie_par: profile.id,
+          modifie_par_nom: [profile.prenom, profile.nom].filter(Boolean).join(" ") || user?.email || "Utilisateur",
+        })
+        .select("*")
+        .single();
+
+      if (modifError) console.error("❌ Erreur enregistrement modification planning :", modifError);
+      else setTachesModifications(prev => [modif, ...prev]);
+    }
+
     if (datesModifiees) {
       await supabase
         .from('notifications_taches_artisan')
@@ -554,7 +646,8 @@ export function ChantierProvider({ children }) {
       sav, loadSAV, addSAV, updateSAV, deleteSAV,
       taches, loadTaches, addTache, updateTache, deleteTache, shiftTachesSuivantes,
       lots, loadLots,
-      conflictsByChantier
+      conflictsByChantier,
+      derniereModifParTache, modifsNonVuesParTache, marquerTacheVue
     }}>
       {children}
     </ChantierContext.Provider>

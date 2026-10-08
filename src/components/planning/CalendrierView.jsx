@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSousTraitant } from '@/context/SousTraitantContext';
+import { PASTILLE_MODIF_CLASS } from '@/components/planning/TacheModificationInfo';
 
 const JOURS_FERIES = [
   '2025-01-01', '2025-04-21', '2025-05-01', '2025-05-08', '2025-05-29', '2025-06-09',
@@ -26,7 +27,8 @@ export function CalendrierView({
   notifications = [],
   indisponibiliteDates = null,
   onToggleIndisponibilite = null,
-  canManageIndisponibilites = false
+  canManageIndisponibilites = false,
+  modifsNonVuesParTache = null
 }) {
   const { isArtisanIndisponible } = useSousTraitant();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -291,7 +293,14 @@ export function CalendrierView({
                               title="Nouvelle tâche"
                             ></span>
                           )}
-                          
+
+                          {modifsNonVuesParTache?.[tache.id]?.length > 0 && (
+                            <span
+                              className={cn('inline-block w-2 h-2 rounded-full flex-shrink-0', PASTILLE_MODIF_CLASS)}
+                              title="Planning modifié"
+                            ></span>
+                          )}
+
                           <span className="truncate">{tache.displayName}</span>
                         </div>
                       </div>
@@ -327,6 +336,12 @@ export function CalendrierView({
             <div className="w-4 h-4 rounded bg-red-600"></div>
             Conflit / Artisan indisponible
           </span>
+          {modifsNonVuesParTache && (
+            <span className="flex items-center gap-1">
+              <div className={cn('w-3 h-3 rounded-full', PASTILLE_MODIF_CLASS)}></div>
+              Planning modifié (à consulter)
+            </span>
+          )}
         </div>
       )}
 
