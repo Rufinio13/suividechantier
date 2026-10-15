@@ -310,19 +310,27 @@ export function ChantierProvider({ children }) {
     return map;
   }, [tachesModifications, tachesVues, profile?.id]);
 
-  const marquerTacheVue = async (tacheId) => {
-    const nonVues = modifsNonVuesParTache[tacheId];
-    if (!nonVues?.length || !profile?.id) return;
+  const marquerTachesVues = async (tacheIds) => {
+    if (!profile?.id) return;
 
-    // On s'aligne sur l'horodatage serveur de la dernière modification connue
-    const vuAt = nonVues[nonVues.length - 1].created_at;
-    setTachesVues(prev => ({ ...prev, [tacheId]: vuAt }));
+    // On s'aligne sur l'horodatage serveur de la dernière modification connue de chaque tâche
+    const rows = tacheIds
+      .filter(id => modifsNonVuesParTache[id]?.length)
+      .map(id => {
+        const nonVues = modifsNonVuesParTache[id];
+        return { tache_id: id, user_id: profile.id, vu_at: nonVues[nonVues.length - 1].created_at };
+      });
+    if (!rows.length) return;
+
+    setTachesVues(prev => ({ ...prev, ...Object.fromEntries(rows.map(r => [r.tache_id, r.vu_at])) }));
 
     const { error } = await supabase
       .from("taches_modifications_vues")
-      .upsert({ tache_id: tacheId, user_id: profile.id, vu_at: vuAt }, { onConflict: "tache_id,user_id" });
-    if (error) console.error("❌ Erreur marquerTacheVue :", error);
+      .upsert(rows, { onConflict: "tache_id,user_id" });
+    if (error) console.error("❌ Erreur marquerTachesVues :", error);
   };
+
+  const marquerTacheVue = (tacheId) => marquerTachesVues([tacheId]);
 
   const addTache = async (tache) => {
     const payload = {
@@ -647,7 +655,7 @@ export function ChantierProvider({ children }) {
       taches, loadTaches, addTache, updateTache, deleteTache, shiftTachesSuivantes,
       lots, loadLots,
       conflictsByChantier,
-      derniereModifParTache, modifsNonVuesParTache, marquerTacheVue
+      derniereModifParTache, modifsNonVuesParTache, marquerTacheVue, marquerTachesVues
     }}>
       {children}
     </ChantierContext.Provider>

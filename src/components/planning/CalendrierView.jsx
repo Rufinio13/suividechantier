@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { format, startOfMonth, endOfMonth, eachWeekOfInterval, eachDayOfInterval, isSameMonth, parseISO, addMonths, subMonths, startOfWeek, endOfWeek, isWithinInterval, startOfDay, isWeekend } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -28,10 +28,16 @@ export function CalendrierView({
   indisponibiliteDates = null,
   onToggleIndisponibilite = null,
   canManageIndisponibilites = false,
-  modifsNonVuesParTache = null
+  modifsNonVuesParTache = null,
+  onMarquerTachesVues = null
 }) {
   const { isArtisanIndisponible } = useSousTraitant();
   const [currentDate, setCurrentDate] = useState(new Date());
+  // Tâches marquées vues pendant cette visite : leur pastille reste affichée jusqu'à ce qu'on quitte le calendrier
+  const [pastillesVuesCetteVisite, setPastillesVuesCetteVisite] = useState(() => new Set());
+
+  const hasPastilleModif = (tacheId) =>
+    !!modifsNonVuesParTache?.[tacheId]?.length || pastillesVuesCetteVisite.has(tacheId);
 
   const goToPreviousMonth = () => setCurrentDate(prev => subMonths(prev, 1));
   const goToNextMonth = () => setCurrentDate(prev => addMonths(prev, 1));
@@ -133,6 +139,26 @@ export function CalendrierView({
       };
     });
   }, [currentDate]);
+
+  // Afficher un mois vaut consultation des tâches modifiées qui y apparaissent
+  useEffect(() => {
+    if (!onMarquerTachesVues || !modifsNonVuesParTache || !weeks.length) return;
+    const debut = format(weeks[0].weekStart, 'yyyy-MM-dd');
+    const fin = format(weeks[weeks.length - 1].weekEnd, 'yyyy-MM-dd');
+
+    const ids = taches
+      .filter(t => {
+        if (!t.datedebut || !modifsNonVuesParTache[t.id]?.length) return false;
+        const tDebut = format(parseISO(t.datedebut), 'yyyy-MM-dd');
+        const tFin = t.datefin ? format(parseISO(t.datefin), 'yyyy-MM-dd') : tDebut;
+        return tDebut <= fin && tFin >= debut;
+      })
+      .map(t => t.id);
+    if (!ids.length) return;
+
+    setPastillesVuesCetteVisite(prev => new Set([...prev, ...ids]));
+    onMarquerTachesVues(ids);
+  }, [weeks, taches, modifsNonVuesParTache]);
 
   const tachesAvecLot = useMemo(() => {
     return taches.map(tache => {
@@ -294,7 +320,7 @@ export function CalendrierView({
                             ></span>
                           )}
 
-                          {modifsNonVuesParTache?.[tache.id]?.length > 0 && (
+                          {hasPastilleModif(tache.id) && (
                             <span
                               className={cn('inline-block w-2 h-2 rounded-full flex-shrink-0', PASTILLE_MODIF_CLASS)}
                               title="Planning modifié"
