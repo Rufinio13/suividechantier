@@ -18,7 +18,7 @@ export function SousTraitantsList() {
   const peutSupprimer = isGerant(profile);
 
   const handleDelete = async (st) => {
-    if (!window.confirm(`Supprimer ${st.nomsocieteST || "cet artisan"} ?`)) return;
+    if (!window.confirm(`Supprimer ${st.nomsocieteST || "cet artisan"} ?\n\nSes marchés, documents, notifications et indisponibilités seront définitivement supprimés. Ses tâches et SAV resteront dans le planning, sans artisan assigné.`)) return;
     try {
       await deleteSousTraitant(st.id);
       toast({ title: "Artisan supprimé ✅" });

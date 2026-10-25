@@ -147,7 +147,7 @@ export function SousTraitantDetails() {
 
   const handleDelete = async () => {
     if (!sousTraitant) return;
-    if (!window.confirm(`Supprimer ${sousTraitant.nomsocieteST}?`)) return;
+    if (!window.confirm(`Supprimer ${sousTraitant.nomsocieteST} ?\n\nSes marchés, documents, notifications et indisponibilités seront définitivement supprimés. Ses tâches et SAV resteront dans le planning, sans artisan assigné.`)) return;
     try {
       await deleteSousTraitant(sousTraitant.id);
       toast({ title: "Supprimé ✅" });

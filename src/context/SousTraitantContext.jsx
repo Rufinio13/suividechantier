@@ -233,10 +233,16 @@ export function SousTraitantProvider({ children }) {
   const deleteSousTraitant = async (id) => {
     console.log("📤 Delete ST :", id);
 
-    // ✅ RPC : vérifie en base que l'utilisateur est gérant de la société
-    const { error } = await supabase.rpc("supprimer_soustraitant", { p_id: id });
+    // ✅ RPC : vérifie en base que l'utilisateur est gérant, supprime l'artisan
+    // et toutes ses données, puis renvoie les fichiers storage à effacer
+    const { data: fichiers, error } = await supabase.rpc("supprimer_soustraitant", { p_id: id });
 
     if (error) { console.error("❌ deleteSousTraitant :", error); throw error; }
+
+    if (fichiers?.length) {
+      const { error: storageError } = await supabase.storage.from("documents-chantiers").remove(fichiers);
+      if (storageError) console.error("⚠️ Fichiers de l'artisan non supprimés :", storageError);
+    }
 
     setSousTraitants((prev) => (prev || []).filter((s) => s.id !== id));
     console.log("✅ ST supprimé du state local");
