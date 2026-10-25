@@ -205,7 +205,11 @@ export function LayoutArtisan() {
     };
     loadDocsCount();
     const interval = setInterval(loadDocsCount, 30000);
-    return () => clearInterval(interval);
+    window.addEventListener('notifications-updated', loadDocsCount);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('notifications-updated', loadDocsCount);
+    };
   }, [monSousTraitantId, mesChantierIds]);
 
   useEffect(() => {

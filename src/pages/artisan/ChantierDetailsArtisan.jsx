@@ -145,7 +145,11 @@ export function ChantierDetailsArtisan() {
 
     loadDocsCount();
     const interval = setInterval(loadDocsCount, 10000);
-    return () => clearInterval(interval);
+    window.addEventListener('notifications-updated', loadDocsCount);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('notifications-updated', loadDocsCount);
+    };
   }, [monSousTraitantId, id, activeTab]);
 
   if (loading) {

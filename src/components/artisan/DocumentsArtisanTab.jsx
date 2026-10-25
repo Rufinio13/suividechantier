@@ -8,6 +8,7 @@ import {
 import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { useArtisanPreview } from '@/context/ArtisanPreviewContext';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { SignatureCanvas } from '@/components/SignatureCanvas';
@@ -69,6 +70,7 @@ const DOCUMENT_CATEGORIES = [
 export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignature = false }) {
   const { toast } = useToast();
   const { profile } = useAuth();
+  const preview = useArtisanPreview();
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -119,8 +121,10 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
     loadDocuments();
   }, [chantierId, soustraitantId]);
 
-  // ✅ Marquer les documents comme vus quand on quitte la page (plus au téléchargement)
-  // — sauf un marché de travaux tant qu'il n'est pas signé, qui doit rester signalé.
+  // ✅ Quitter la page Documents vaut consultation de tous les documents affichés,
+  // même non ouverts — sauf ceux qui attendent la signature de l'artisan
+  // (marché de travaux à signer), qui restent signalés jusqu'à signature.
+  // Refs : le nettoyage au démontage doit lire les valeurs à jour, pas celles du 1er rendu.
   const documentsRef = useRef(documents);
   useEffect(() => {
     documentsRef.current = documents;
@@ -131,19 +135,33 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
     soustraitantIdRef.current = soustraitantId;
   }, [soustraitantId]);
 
+  const previewRef = useRef(preview);
+  useEffect(() => {
+    previewRef.current = preview;
+  }, [preview]);
+
   useEffect(() => {
     return () => {
+      // Aperçu agence : ne pas consommer les notifications de l'artisan
+      if (previewRef.current) return;
       const stId = soustraitantIdRef.current;
-      const idsAMarquerVus = documentsRef.current
+      if (!stId) return;
+
+      const ids = documentsRef.current
         .filter(doc => {
-          const isNouveau = !doc.necessite_signature &&
-            (!doc.artisans_vus || !doc.artisans_vus.includes(stId));
-          const marcheNonSigne = doc.type_document === 'marche_travaux' && doc.signature_statut !== 'signe';
-          return isNouveau && !marcheNonSigne;
+          const dejaVu = doc.artisans_vus?.includes(stId);
+          const aSigner = doc.necessite_signature &&
+            doc.artisan_assigne_signature === stId &&
+            doc.signature_statut === 'en_attente';
+          return !dejaVu && !aSigner;
         })
         .map(doc => doc.id);
 
-      idsAMarquerVus.forEach(id => marquerDocumentVu(id));
+      if (!ids.length) return;
+      supabase.rpc('marquer_documents_vus', { p_ids: ids }).then(({ error }) => {
+        if (error) console.error('Erreur marquage documents vus:', error);
+        else window.dispatchEvent(new CustomEvent('notifications-updated'));
+      });
     };
   }, []);
 
@@ -185,39 +203,6 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
       return format(new Date(dateString), 'dd/MM/yyyy HH:mm', { locale: fr });
     } catch {
       return dateString;
-    }
-  };
-
-  const marquerDocumentVu = async (documentId) => {
-    try {
-      console.log('📝 Marquage document comme vu:', documentId);
-      
-      const { data: doc, error: fetchError } = await supabase
-        .from('documents_chantier')
-        .select('artisans_vus')
-        .eq('id', documentId)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      const artisansVus = doc.artisans_vus || [];
-      if (artisansVus.includes(soustraitantId)) {
-        console.log('✓ Document déjà marqué comme vu');
-        return;
-      }
-
-      const nouveauxArtisansVus = [...artisansVus, soustraitantId];
-
-      const { error: updateError } = await supabase
-        .from('documents_chantier')
-        .update({ artisans_vus: nouveauxArtisansVus })
-        .eq('id', documentId);
-
-      if (updateError) throw updateError;
-
-      console.log('✅ Document marqué comme vu');
-    } catch (error) {
-      console.error('Erreur marquage document vu:', error);
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { format, startOfMonth, endOfMonth, eachWeekOfInterval, eachDayOfInterval, isSameMonth, parseISO, addMonths, subMonths, startOfWeek, endOfWeek, isWithinInterval, startOfDay, isWeekend } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -29,7 +29,8 @@ export function CalendrierView({
   onToggleIndisponibilite = null,
   canManageIndisponibilites = false,
   modifsNonVuesParTache = null,
-  onMarquerTachesVues = null
+  onMarquerTachesVues = null,
+  onNotificationsVues = null
 }) {
   const { isArtisanIndisponible } = useSousTraitant();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -159,6 +160,39 @@ export function CalendrierView({
     setPastillesVuesCetteVisite(prev => new Set([...prev, ...ids]));
     onMarquerTachesVues(ids);
   }, [weeks, taches, modifsNonVuesParTache]);
+
+  // Artisan : les notifications (nouvelle tâche / date modifiée) des tâches du mois affiché
+  // sont considérées vues quand on quitte ce mois (changement de mois ou de page).
+  // La pastille reste donc visible tant qu'on regarde le mois.
+  const moisAffiche = format(currentDate, 'yyyy-MM');
+  const notifsVuesDuMoisRef = useRef(new Set());
+  const onNotificationsVuesRef = useRef(onNotificationsVues);
+  onNotificationsVuesRef.current = onNotificationsVues;
+
+  useEffect(() => {
+    if (!onNotificationsVues) return;
+    const debut = format(startOfMonth(currentDate), 'yyyy-MM-dd');
+    const fin = format(endOfMonth(currentDate), 'yyyy-MM-dd');
+    const tachesDuMois = new Set(
+      taches
+        .filter(t => {
+          if (!t.datedebut) return false;
+          const tDebut = format(parseISO(t.datedebut), 'yyyy-MM-dd');
+          const tFin = t.datefin ? format(parseISO(t.datefin), 'yyyy-MM-dd') : tDebut;
+          return tDebut <= fin && tFin >= debut;
+        })
+        .map(t => t.id)
+    );
+    notifications
+      .filter(n => !n.vu && tachesDuMois.has(n.tache_id))
+      .forEach(n => notifsVuesDuMoisRef.current.add(n.id));
+  }, [moisAffiche, taches, notifications]);
+
+  useEffect(() => () => {
+    const ids = [...notifsVuesDuMoisRef.current];
+    notifsVuesDuMoisRef.current = new Set();
+    if (ids.length) onNotificationsVuesRef.current?.(ids);
+  }, [moisAffiche]);
 
   const tachesAvecLot = useMemo(() => {
     return taches.map(tache => {

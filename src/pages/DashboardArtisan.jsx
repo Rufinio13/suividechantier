@@ -106,37 +106,38 @@ export function DashboardArtisan() {
     }
   };
 
-  const handleTacheClick = async (tache) => {
-    const notifsAMarquer = notifications.filter(n => n.tache_id === tache.id && !n.vu);
+  const marquerNotificationsVues = async (ids) => {
+    // Aperçu agence : ne pas consommer les notifications de l'artisan
+    if (preview || !ids.length) return;
 
-    if (notifsAMarquer.length > 0) {
-      const ids = notifsAMarquer.map(n => n.id);
+    // ✅ 1. Marquer localement IMMÉDIATEMENT
+    ids.forEach(id => vuesLocalement.current.add(id));
+    setNotifications(prev =>
+      prev.map(n => ids.includes(n.id) ? { ...n, vu: true } : n)
+    );
 
-      // ✅ 1. Marquer localement IMMÉDIATEMENT
-      ids.forEach(id => vuesLocalement.current.add(id));
+    // ✅ 2. Persister en BDD — ATTENDRE la confirmation
+    const { error } = await supabase
+      .from('notifications_taches_artisan')
+      .update({ vu: true })
+      .in('id', ids);
+
+    if (error) {
+      console.error('Erreur marquage notifications:', error);
+      // Rollback local en cas d'erreur
+      ids.forEach(id => vuesLocalement.current.delete(id));
       setNotifications(prev =>
-        prev.map(n => ids.includes(n.id) ? { ...n, vu: true } : n)
+        prev.map(n => ids.includes(n.id) ? { ...n, vu: false } : n)
       );
-
-      // ✅ 2. Persister en BDD — ATTENDRE la confirmation
-      const { error } = await supabase
-        .from('notifications_taches_artisan')
-        .update({ vu: true })
-        .in('id', ids);
-
-      if (error) {
-        console.error('Erreur marquage notifications:', error);
-        // Rollback local en cas d'erreur
-        ids.forEach(id => vuesLocalement.current.delete(id));
-        setNotifications(prev =>
-          prev.map(n => ids.includes(n.id) ? { ...n, vu: false } : n)
-        );
-      } else {
-        console.log('✅ Notifications marquées comme vues en BDD');
-        // ✅ 3. Déclencher rechargement badge sidebar
-        window.dispatchEvent(new CustomEvent('notifications-updated'));
-      }
+    } else {
+      // ✅ 3. Déclencher rechargement badge sidebar
+      window.dispatchEvent(new CustomEvent('notifications-updated'));
     }
+  };
+
+  const handleTacheClick = async (tache) => {
+    const ids = notifications.filter(n => n.tache_id === tache.id && !n.vu).map(n => n.id);
+    await marquerNotificationsVues(ids);
 
     setSelectedTache(tache);
     setIsModalOpen(true);
@@ -204,6 +205,7 @@ export function DashboardArtisan() {
               readOnly={true}
               isArtisanView={true}
               notifications={notifications}
+              onNotificationsVues={preview ? null : marquerNotificationsVues}
               indisponibiliteDates={mesIndisponibiliteDates}
               onToggleIndisponibilite={handleToggleIndisponibilite}
               canManageIndisponibilites={true}
