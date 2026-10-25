@@ -116,11 +116,13 @@ export function DashboardArtisan() {
       prev.map(n => ids.includes(n.id) ? { ...n, vu: true } : n)
     );
 
-    // ✅ 2. Persister en BDD — ATTENDRE la confirmation
-    const { error } = await supabase
-      .from('notifications_taches_artisan')
-      .update({ vu: true })
-      .in('id', ids);
+    // ✅ 2. Persister en BDD via RPC (un UPDATE direct était filtré en silence par les RLS)
+    const { data: nbMarquees, error } = await supabase
+      .rpc('marquer_notifications_vues', { p_ids: ids.map(String) });
+
+    if (!error && nbMarquees === 0) {
+      console.warn('⚠️ Aucune notification marquée vue en base pour :', ids);
+    }
 
     if (error) {
       console.error('Erreur marquage notifications:', error);
