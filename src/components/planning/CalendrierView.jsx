@@ -161,13 +161,12 @@ export function CalendrierView({
     onMarquerTachesVues(ids);
   }, [weeks, taches, modifsNonVuesParTache]);
 
-  // Artisan : les notifications (nouvelle tâche / date modifiée) des tâches du mois affiché
-  // sont considérées vues quand on quitte ce mois (changement de mois ou de page).
-  // La pastille reste donc visible tant qu'on regarde le mois.
+  // Artisan : afficher un mois vaut consultation des notifications (nouvelle tâche /
+  // date modifiée) de ses tâches → marquées vues tout de suite (la sidebar se met à jour).
+  // Dans le calendrier, la pastille reste visible pendant cette visite.
   const moisAffiche = format(currentDate, 'yyyy-MM');
-  const notifsVuesDuMoisRef = useRef(new Set());
-  const onNotificationsVuesRef = useRef(onNotificationsVues);
-  onNotificationsVuesRef.current = onNotificationsVues;
+  const [notifsVuesCetteVisite, setNotifsVuesCetteVisite] = useState(() => new Set());
+  const notifsEnvoyeesRef = useRef(new Set()); // une seule tentative par notification et par visite
 
   useEffect(() => {
     if (!onNotificationsVues) return;
@@ -183,16 +182,16 @@ export function CalendrierView({
         })
         .map(t => t.id)
     );
-    notifications
-      .filter(n => !n.vu && tachesDuMois.has(n.tache_id))
-      .forEach(n => notifsVuesDuMoisRef.current.add(n.id));
-  }, [moisAffiche, taches, notifications]);
+    const ids = notifications
+      .filter(n => !n.vu && tachesDuMois.has(n.tache_id) && !notifsEnvoyeesRef.current.has(n.id))
+      .map(n => n.id);
+    if (!ids.length) return;
 
-  useEffect(() => () => {
-    const ids = [...notifsVuesDuMoisRef.current];
-    notifsVuesDuMoisRef.current = new Set();
-    if (ids.length) onNotificationsVuesRef.current?.(ids);
-  }, [moisAffiche]);
+    ids.forEach(id => notifsEnvoyeesRef.current.add(id));
+
+    setNotifsVuesCetteVisite(prev => new Set([...prev, ...ids]));
+    onNotificationsVues(ids);
+  }, [moisAffiche, taches, notifications]);
 
   const tachesAvecLot = useMemo(() => {
     return taches.map(tache => {
@@ -210,7 +209,7 @@ export function CalendrierView({
                          !tache.constructeur_valide;
       
       const isNouvelleTache = isArtisanView && notifications.some(
-        n => n.tache_id === tache.id && n.type === 'nouvelle_tache' && !n.vu
+        n => n.tache_id === tache.id && n.type === 'nouvelle_tache' && (!n.vu || notifsVuesCetteVisite.has(n.id))
       );
       
       return {
@@ -221,7 +220,7 @@ export function CalendrierView({
         isNouvelleTache,
       };
     });
-  }, [taches, lots, conflictsByChantier, chantierColors, chantierNoms, isArtisanView, notifications]);
+  }, [taches, lots, conflictsByChantier, chantierColors, chantierNoms, isArtisanView, notifications, notifsVuesCetteVisite]);
 
   const getTachesForDay = (day) => {
     if (isWeekend(day)) return [];

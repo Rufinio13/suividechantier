@@ -43,25 +43,37 @@ export function LayoutArtisan() {
     )];
   }, [monSousTraitantId, taches]);
 
-  // ✅ CORRIGÉ : console.log DANS le try, data bien dans scope
+  // Tâches réellement assignées à l'artisan (et datées, donc visibles au calendrier)
+  const mesTacheIdsKey = useMemo(() => {
+    if (!monSousTraitantId || !taches) return '';
+    return taches
+      .filter(t => t.assignetype === 'soustraitant' && t.assigneid === monSousTraitantId && t.datedebut)
+      .map(t => t.id)
+      .sort()
+      .join(',');
+  }, [monSousTraitantId, taches]);
+
   const loadNotificationsCount = useCallback(async () => {
     if (!monSousTraitantId) return;
     try {
       const { data, error } = await supabase
         .from('notifications_taches_artisan')
-        .select('type, vu')
+        .select('type, vu, tache_id')
         .eq('soustraitant_id', monSousTraitantId)
         .eq('vu', false);
       if (error) throw error;
 
-      console.log('📊 Notifications non vues:', data?.length, data);
+      // ✅ Ignorer les notifications de tâches supprimées / réassignées / sans dates :
+      // elles ne sont jamais visibles au calendrier et ne pourraient jamais s'effacer
+      const mesTacheIds = new Set(mesTacheIdsKey.split(',').filter(Boolean));
+      const visibles = data.filter(n => mesTacheIds.has(n.tache_id));
 
-      setNouvellesTachesCount(data.filter(n => n.type === 'nouvelle_tache').length);
-      setTachesModifieesCount(data.filter(n => n.type === 'date_modifiee').length);
+      setNouvellesTachesCount(visibles.filter(n => n.type === 'nouvelle_tache').length);
+      setTachesModifieesCount(visibles.filter(n => n.type === 'date_modifiee').length);
     } catch (error) {
       console.error('Erreur comptage notifications:', error);
     }
-  }, [monSousTraitantId]);
+  }, [monSousTraitantId, mesTacheIdsKey]);
 
   useEffect(() => {
     const loadTachesEnRetard = () => {
