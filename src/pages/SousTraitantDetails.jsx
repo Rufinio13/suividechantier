@@ -15,6 +15,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { CreateArtisanAccountModal } from '@/components/artisan/CreateArtisanAccountModal';
+import { useAuth } from '@/hooks/useAuth.jsx';
+import { isGerant } from '@/lib/postes';
 
 export function SousTraitantDetails() {
   const { id } = useParams();
@@ -22,6 +24,8 @@ export function SousTraitantDetails() {
   const { toast } = useToast();
 
   const { sousTraitants = [], loading, updateSousTraitant, deleteSousTraitant } = useSousTraitant();
+  const { profile } = useAuth();
+  const peutSupprimer = isGerant(profile);
   const { lots: globalLots = [] } = useLots();
 
   const sousTraitant = useMemo(
@@ -149,7 +153,7 @@ export function SousTraitantDetails() {
       toast({ title: "Supprimé ✅" });
       navigate("/sous-traitants");
     } catch (error) {
-      toast({ title: "Erreur", description: "Impossible de supprimer", variant: "destructive" });
+      toast({ title: "Suppression impossible", description: error.message, variant: "destructive" });
     }
   };
 
@@ -177,7 +181,9 @@ export function SousTraitantDetails() {
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setIsEditInfoOpen(true)} variant="outline"><Edit className="mr-2 h-4 w-4"/>Infos</Button>
-          <Button onClick={handleDelete} variant="destructive"><Trash2 className="mr-2 h-4 w-4"/>Del</Button>
+          {peutSupprimer && (
+            <Button onClick={handleDelete} variant="destructive"><Trash2 className="mr-2 h-4 w-4"/>Supprimer</Button>
+          )}
         </div>
       </div>
 

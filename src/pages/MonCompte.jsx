@@ -6,11 +6,13 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
-import { User, Mail, Phone, MapPin, Lock, Save, Loader2 } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Lock, Save, Loader2, Briefcase } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { POSTES } from '@/lib/postes';
 
 export function MonCompte() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -26,6 +28,7 @@ export function MonCompte() {
     adresse: '',
     ville: '',
     code_postal: '',
+    poste: '',
   });
 
   const [passwords, setPasswords] = useState({
@@ -41,7 +44,7 @@ export function MonCompte() {
         setLoading(true);
         const { data, error } = await supabase
           .from('profiles')
-          .select('nom, prenom, mail, tel, nomsociete, adresse, ville, code_postal, user_type')
+          .select('nom, prenom, mail, tel, nomsociete, adresse, ville, code_postal, user_type, poste')
           .eq('id', user.id)
           .single();
 
@@ -57,6 +60,7 @@ export function MonCompte() {
             adresse: data.adresse || '',
             ville: data.ville || '',
             code_postal: data.code_postal || '',
+            poste: data.poste || '',
           });
         }
       } catch (error) {
@@ -97,6 +101,7 @@ export function MonCompte() {
             adresse: profile.adresse,
             ville: profile.ville,
             code_postal: profile.code_postal,
+            poste: profile.poste || null, // ✅ contrôlé en base (un seul gérant auto-déclaré)
           };
 
       const { error } = await supabase
@@ -106,10 +111,15 @@ export function MonCompte() {
 
       if (error) throw error;
 
+      refreshProfile?.();
       toast({ title: 'Profil mis à jour ✅', description: 'Vos informations ont été sauvegardées' });
     } catch (error) {
       console.error('Erreur sauvegarde profil:', error);
-      toast({ title: 'Erreur', description: 'Impossible de sauvegarder le profil', variant: 'destructive' });
+      toast({
+        title: 'Erreur',
+        description: error.code === '42501' ? error.message : 'Impossible de sauvegarder le profil',
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }
@@ -217,6 +227,27 @@ export function MonCompte() {
                 </p>
               )}
             </div>
+
+            {userType === 'constructeur' && (
+              <div className="space-y-2">
+                <Label htmlFor="poste" className="flex items-center gap-1">
+                  <Briefcase className="h-3 w-3" /> Poste
+                </Label>
+                <Select value={profile.poste} onValueChange={(v) => setProfile(p => ({ ...p, poste: v }))}>
+                  <SelectTrigger id="poste">
+                    <SelectValue placeholder="Sélectionnez votre poste" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {POSTES.map(p => (
+                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Seul le gérant peut supprimer un artisan.
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="mail" className="flex items-center gap-1">

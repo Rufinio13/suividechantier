@@ -7,9 +7,25 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { useSousTraitant } from "@/context/SousTraitantContext.jsx";
 import { SousTraitantForm } from "@/components/SoustraitantForm.jsx";
 import { CreateArtisanAccountDialog } from "@/components/CreateArtisanAccountDialog.jsx"; // ✅ AJOUTÉ
+import { useAuth } from "@/hooks/useAuth.jsx";
+import { useToast } from "@/components/ui/use-toast";
+import { isGerant } from "@/lib/postes";
 
 export function SousTraitantsList() {
   const { sousTraitants = [], loading, deleteSousTraitant } = useSousTraitant();
+  const { profile } = useAuth();
+  const { toast } = useToast();
+  const peutSupprimer = isGerant(profile);
+
+  const handleDelete = async (st) => {
+    if (!window.confirm(`Supprimer ${st.nomsocieteST || "cet artisan"} ?`)) return;
+    try {
+      await deleteSousTraitant(st.id);
+      toast({ title: "Artisan supprimé ✅" });
+    } catch (error) {
+      toast({ title: "Suppression impossible", description: error.message, variant: "destructive" });
+    }
+  };
   const [search, setSearch] = useState("");
   const [editingST, setEditingST] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -109,9 +125,11 @@ export function SousTraitantsList() {
                     <Button size="icon" variant="ghost" onClick={() => openModal(st)}>
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button size="icon" variant="ghost" onClick={() => deleteSousTraitant(st.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    {peutSupprimer && (
+                      <Button size="icon" variant="ghost" title="Supprimer (gérant)" onClick={() => handleDelete(st)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
                   </div>
                 </CardHeader>
 

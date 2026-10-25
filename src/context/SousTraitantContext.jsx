@@ -233,11 +233,8 @@ export function SousTraitantProvider({ children }) {
   const deleteSousTraitant = async (id) => {
     console.log("📤 Delete ST :", id);
 
-    const { error } = await supabase
-      .from("soustraitants")
-      .delete()
-      .eq("id", id)
-      .eq("nomsociete", profile?.nomsociete);
+    // ✅ RPC : vérifie en base que l'utilisateur est gérant de la société
+    const { error } = await supabase.rpc("supprimer_soustraitant", { p_id: id });
 
     if (error) { console.error("❌ deleteSousTraitant :", error); throw error; }
 

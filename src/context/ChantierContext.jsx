@@ -559,11 +559,8 @@ export function ChantierProvider({ children }) {
   };
 
   const deleteSousTraitant = async (id) => {
-    const { error } = await supabase
-      .from("soustraitants")
-      .delete()
-      .eq("id", id);
-    
+    const { error } = await supabase.rpc("supprimer_soustraitant", { p_id: id });
+
     if (error) throw error;
     
     setSousTraitants(prev => prev.filter(s => s.id !== id));
