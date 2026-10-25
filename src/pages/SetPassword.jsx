@@ -21,22 +21,6 @@ export function SetPassword() {
   const [isReady, setIsReady] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // ✅ Forcer uniquement user_type=artisan — NE PAS toucher nomsociete
-  // nomsociete est déjà correctement renseigné par la Edge Function invite-artisan
-  const forceArtisanUserType = async (userId) => {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ user_type: 'artisan' })
-      .eq('id', userId)
-      .neq('user_type', 'artisan'); // ✅ seulement si pas déjà artisan
-
-    if (error) {
-      console.error('⚠️ Erreur update user_type:', error);
-    } else {
-      console.log('✅ user_type=artisan confirmé pour:', userId);
-    }
-  };
-
   useEffect(() => {
     const init = async () => {
       const hash = window.location.hash;
@@ -56,11 +40,7 @@ export function SetPassword() {
           console.error('❌ setSession échoué:', sessionError?.message);
           setError('Lien invalide ou expiré. Veuillez contacter votre conducteur de travaux.');
         } else {
-          const userId = data.session.user.id;
           console.log('✅ Session établie pour:', data.session.user.email);
-
-          // ✅ Forcer uniquement user_type — pas nomsociete
-          await forceArtisanUserType(userId);
 
           setIsReady(true);
           window.history.replaceState(null, '', window.location.pathname);
@@ -73,11 +53,7 @@ export function SetPassword() {
       await new Promise(resolve => setTimeout(resolve, 800));
       const { data: sessionData } = await supabase.auth.getSession();
       if (sessionData?.session) {
-        const userId = sessionData.session.user.id;
         console.log('✅ Session active pour:', sessionData.session.user.email);
-
-        // ✅ Forcer uniquement user_type — pas nomsociete
-        await forceArtisanUserType(userId);
 
         setIsReady(true);
       } else {

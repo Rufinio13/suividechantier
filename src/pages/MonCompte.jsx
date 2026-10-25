@@ -79,8 +79,8 @@ export function MonCompte() {
     e.preventDefault();
     setSaving(true);
     try {
-      // ✅ Pour un artisan : NE PAS mettre à jour nomsociete
-      // nomsociete = société du constructeur qui l'a créé → ne doit jamais être modifié
+      // ✅ nomsociete et user_type ne sont jamais envoyés : verrouillés en base
+      // (la société sert au cloisonnement des données entre sociétés)
       const updatePayload = userType === 'artisan'
         ? {
             nom: profile.nom,
@@ -97,7 +97,6 @@ export function MonCompte() {
             prenom: profile.prenom,
             mail: profile.mail,
             tel: profile.tel,
-            nomsociete: profile.nomsociete, // ✅ constructeur peut modifier sa société
             adresse: profile.adresse,
             ville: profile.ville,
             code_postal: profile.code_postal,
@@ -205,27 +204,20 @@ export function MonCompte() {
               </div>
             </div>
 
-            {/* ✅ Champ société : modifiable pour constructeur, lecture seule pour artisan */}
+            {/* ✅ Société en lecture seule pour tous (verrouillée en base) */}
             <div className="space-y-2">
               <Label htmlFor="nomsociete">Société</Label>
-              {userType === 'artisan' ? (
-                <Input
-                  id="nomsociete"
-                  value={profile.nomsociete}
-                  disabled
-                  className="bg-slate-50 text-slate-500 cursor-not-allowed"
-                  title="Ce champ est géré par votre constructeur"
-                />
-              ) : (
-                <Input id="nomsociete" value={profile.nomsociete}
-                  onChange={(e) => setProfile(p => ({ ...p, nomsociete: e.target.value }))}
-                  placeholder="Nom de votre société" />
-              )}
-              {userType === 'artisan' && (
-                <p className="text-xs text-muted-foreground">
-                  La société est gérée par votre constructeur.
-                </p>
-              )}
+              <Input
+                id="nomsociete"
+                value={profile.nomsociete}
+                disabled
+                className="bg-slate-50 text-slate-500 cursor-not-allowed"
+              />
+              <p className="text-xs text-muted-foreground">
+                {userType === 'artisan'
+                  ? 'La société est gérée par votre constructeur.'
+                  : 'Pour renommer la société, contactez l\'administrateur de l\'application.'}
+              </p>
             </div>
 
             {userType === 'constructeur' && (

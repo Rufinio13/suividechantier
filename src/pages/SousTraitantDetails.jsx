@@ -67,17 +67,13 @@ export function SousTraitantDetails() {
       return;
     }
     try {
+      // ✅ La fonction vérifie l'appelant et répare elle-même le lien manquant
       const { data, error } = await supabase.functions.invoke('check-artisan-account', {
-        body: { email: sousTraitant.email },
+        body: { soustraitantId: sousTraitant.id },
       });
       if (error) throw error;
 
       setHasAccount(!!data?.hasAccount);
-
-      // Auto-réparation du lien manquant
-      if (data?.hasAccount && data.userId && data.userId !== sousTraitant.user_id) {
-        await supabase.from('soustraitants').update({ user_id: data.userId }).eq('id', sousTraitant.id);
-      }
     } catch (err) {
       console.error('❌ Erreur vérification compte:', err);
       setHasAccount(!!sousTraitant.user_id);
