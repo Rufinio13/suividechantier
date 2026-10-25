@@ -9,6 +9,8 @@ import { Calendar, Edit, Trash2, User, Truck, AlertTriangle, CheckCircle, Camera
 import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
 import { PASTILLE_MODIF_CLASS } from '@/components/planning/TacheModificationInfo';
+import { StorageImage } from '@/components/StorageImage.jsx';
+import { openStorageFile } from '@/lib/storage';
 
 export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
   const { sousTraitants, fournisseurs, updateTache, chantiers, modifsNonVuesParTache } = useChantier();
@@ -184,12 +186,12 @@ export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
           </div>
           <div className="grid grid-cols-4 gap-1">
             {tache.artisan_photos.slice(0, 4).map((photo, idx) => (
-              <img 
+              <StorageImage 
                 key={idx}
                 src={photo.url} 
                 alt={photo.name || `Photo ${idx + 1}`}
                 className="w-full h-16 object-cover rounded border cursor-pointer hover:opacity-80"
-                onClick={() => window.open(photo.url, '_blank')}
+                onClick={() => openStorageFile(photo.url)}
               />
             ))}
           </div>

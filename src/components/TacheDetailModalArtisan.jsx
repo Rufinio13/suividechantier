@@ -10,6 +10,7 @@ import { fr } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { useArtisanPreview } from '@/context/ArtisanPreviewContext';
+import { StorageImage } from '@/components/StorageImage.jsx';
 
 export function TacheDetailModalArtisan({
   isOpen,
@@ -220,7 +221,7 @@ export function TacheDetailModalArtisan({
               <div className="grid grid-cols-3 gap-2 mt-2">
                 {photos.map((photo, index) => (
                   <div key={index} className="relative group">
-                    <img 
+                    <StorageImage 
                       src={photo.url} 
                       alt={photo.name || `Photo ${index + 1}`}
                       className="w-full h-24 object-cover rounded border"

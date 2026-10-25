@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useChantier } from '@/context/ChantierContext';
 import { sendNotificationEmail, getArtisanEmailInfo } from '@/lib/sendNotificationEmail';
+import { getSignedUrl, EMAIL_EXPIRES_IN } from '@/lib/storage';
 
 const TYPES_DOCUMENTS = [
   { value: 'bon_commande', label: 'Bon de commande' },
@@ -157,7 +158,8 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
             nomFichier: file.name, chantierNom,
             typeDocument: TYPE_LABELS.marche_travaux,
             necessite_signature: true,
-            urlFichier, expediteur,
+            urlFichier: await getSignedUrl(filePath, { bucket: 'documents-chantiers', expiresIn: EMAIL_EXPIRES_IN }).catch(() => null),
+            expediteur,
             artisanPrenom: destinataire.prenom,
             aCompte: destinataire.aCompte,
           });

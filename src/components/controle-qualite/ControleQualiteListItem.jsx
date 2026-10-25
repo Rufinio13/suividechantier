@@ -14,6 +14,8 @@ import { supabase } from '@/lib/supabaseClient';
 import { sendNotificationEmail, getArtisanEmailInfo } from '@/lib/sendNotificationEmail';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { StorageImage } from '@/components/StorageImage.jsx';
+import { openStorageFile, signFilesForEmail } from '@/lib/storage';
 
 export function PointControleResultatItem({
   point, resultatData, chantierId, modeleId, domaineId, sousCategorieId,
@@ -79,7 +81,7 @@ export function PointControleResultatItem({
             artisanPrenom: destinataire.prenom, aCompte: destinataire.aCompte,
             pointControle: point.libelle, chantierNom,
             description: currentData.explicationNC || null,
-            photos: currentData.photos || [], plans: currentData.plans || [],
+            photos: await signFilesForEmail(currentData.photos), plans: await signFilesForEmail(currentData.plans),
             dateReprise: currentData.dateReprisePrevisionnelle
               ? format(parseISO(currentData.dateReprisePrevisionnelle), 'dd/MM/yyyy', { locale: fr }) : null,
             expediteur,
@@ -135,7 +137,7 @@ export function PointControleResultatItem({
                 {currentData.artisan_repris_commentaire && <div><p className="text-xs font-medium text-slate-700">Commentaire :</p><p className="text-sm text-slate-800">{currentData.artisan_repris_commentaire}</p></div>}
                 {currentData.artisan_repris_photos?.length > 0 && (
                   <div><p className="text-xs font-medium text-slate-700 mb-1">Photos de reprise :</p>
-                    <div className="flex gap-2 flex-wrap">{currentData.artisan_repris_photos.map((photo, i) => <img key={i} src={photo.url || photo} alt={`Reprise ${i + 1}`} className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80" onClick={() => window.open(photo.url || photo, '_blank')} />)}</div>
+                    <div className="flex gap-2 flex-wrap">{currentData.artisan_repris_photos.map((photo, i) => <StorageImage key={i} src={photo.url || photo} alt={`Reprise ${i + 1}`} className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80" onClick={() => openStorageFile(photo.url || photo)} />)}</div>
                   </div>
                 )}
               </div>

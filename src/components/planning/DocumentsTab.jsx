@@ -11,6 +11,7 @@ import { useChantier } from '@/context/ChantierContext';
 import { DocumentUploadModal, TYPE_PLAN_LABELS, TYPES_PLAN } from './DocumentUploadModal';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { openStorageFile } from '@/lib/storage';
 
 const DOCUMENT_CATEGORIES = [
   { key: 'bon_commande', label: 'Bons de commande', icon: Package, color: 'text-blue-600', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' },
@@ -131,7 +132,7 @@ export function DocumentsTab({ chantierId }) {
         URL.revokeObjectURL(url);
       } else if (doc.url_fichier) {
         // Fallback sur url_fichier
-        window.open(doc.url_fichier, '_blank');
+        openStorageFile(doc.url_fichier);
       }
     } catch (error) {
       console.error('Erreur téléchargement:', error);

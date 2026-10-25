@@ -348,7 +348,8 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
       const pdfFile = new Blob([pdfBytes], { type: 'application/pdf' });
 
       const timestamp = Date.now();
-      const signedFileName = `signed_${timestamp}_${selectedDoc.nom_fichier}`;
+      // ✅ chantier_id dans le chemin : la policy storage en déduit la société
+      const signedFileName = `${selectedDoc.chantier_id}_signed_${timestamp}_${selectedDoc.nom_fichier}`;
       const signedPath = `signed/${signedFileName}`;
 
       console.log('📤 Upload PDF signé vers:', signedPath);

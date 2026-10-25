@@ -16,6 +16,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Plus, Edit, Trash2, Wrench, Search, Filter, CheckCircle, Calendar, X } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
+import { StorageImage } from '@/components/StorageImage.jsx';
+import { openStorageFile } from '@/lib/storage';
 
 function SAVFormModal({ isOpen, onClose, savItem, onSubmit }) {
   const { sousTraitants } = useChantier();
@@ -255,7 +257,7 @@ export function SAVList() {
                   {sav.artisan_photos?.length > 0 && (
                     <div>
                       <p className="text-xs font-medium mb-1">📸 Photos intervention :</p>
-                      <div className="flex gap-2 flex-wrap">{sav.artisan_photos.map((photo, i) => <img key={i} src={photo.url} alt={`SAV ${i + 1}`} className="h-16 w-16 object-cover rounded border cursor-pointer hover:opacity-80" onClick={() => window.open(photo.url, '_blank')} />)}</div>
+                      <div className="flex gap-2 flex-wrap">{sav.artisan_photos.map((photo, i) => <StorageImage key={i} src={photo.url} alt={`SAV ${i + 1}`} className="h-16 w-16 object-cover rounded border cursor-pointer hover:opacity-80" onClick={() => openStorageFile(photo.url)} />)}</div>
                     </div>
                   )}
                   <div className="flex items-center space-x-2 pt-2 border-t">

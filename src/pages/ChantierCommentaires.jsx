@@ -13,6 +13,8 @@ import { fr } from 'date-fns/locale';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { StorageImage } from '@/components/StorageImage.jsx';
+import { openStorageFile } from '@/lib/storage';
 
 export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = null }) {
   const params = useParams();
@@ -427,12 +429,12 @@ export function ChantierCommentaires({ isEmbedded = false, embeddedChantierId = 
                       <p className="text-xs font-medium text-green-700 mb-1">📸 Photos de reprise (artisan) :</p>
                       <div className="flex gap-2 flex-wrap">
                         {pnc.artisan_repris_photos.map((photo, i) => (
-                          <img 
+                          <StorageImage 
                             key={i} 
                             src={photo.url || photo} 
                             alt={`Reprise ${i+1}`}
                             className="h-16 w-16 object-cover rounded border cursor-pointer hover:opacity-80"
-                            onClick={() => window.open(photo.url || photo, '_blank')}
+                            onClick={() => openStorageFile(photo.url || photo)}
                           />
                         ))}
                       </div>

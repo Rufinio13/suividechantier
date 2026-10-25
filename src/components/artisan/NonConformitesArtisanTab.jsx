@@ -11,6 +11,8 @@ import { fr } from 'date-fns/locale';
 import { supabase} from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { v4 as uuidv4 } from 'uuid';
+import { StorageImage } from '@/components/StorageImage.jsx';
+import { openStorageFile } from '@/lib/storage';
 
 export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
   const { modelesCQ, controles, saveControleFromModele } = useReferentielCQ();
@@ -134,15 +136,9 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
     });
   }, [controles, modelesCQ, chantierId, soustraitantId]);
 
-  const handleDownloadImage = (imageUrl, fileName = 'photo.jpg') => {
-    const a = document.createElement('a');
-    a.href = imageUrl;
-    a.download = fileName;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  // Bucket privé : ouverture via URL signée (l'attribut download est ignoré en cross-origin)
+  const handleDownloadImage = (imageUrl) => {
+    openStorageFile(imageUrl);
   };
 
   const formatDateOnly = (dateString) => {
@@ -407,7 +403,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                         {pnc.photos.map((photo, i) => {
                           const photoUrl = typeof photo === 'string' ? photo : photo?.url || photo;
                           return (
-                            <img 
+                            <StorageImage 
                               key={i} 
                               src={photoUrl} 
                               alt={`Photo NC ${i+1}`}
@@ -428,7 +424,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                         {pnc.plans.map((plan, i) => {
                           const planUrl = typeof plan === 'string' ? plan : plan?.url || plan;
                           return (
-                            <img 
+                            <StorageImage 
                               key={i} 
                               src={planUrl} 
                               alt={`Plan ${i+1}`}
@@ -505,7 +501,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                         <p className="text-xs font-medium text-slate-700 mb-2">📸 Photos de reprise :</p>
                         <div className="grid grid-cols-4 gap-2">
                           {pnc.artisan_repris_photos.map((photo, i) => (
-                            <img 
+                            <StorageImage 
                               key={i} 
                               src={photo.url || photo} 
                               alt={`Reprise ${i+1}`}
@@ -562,7 +558,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
                         {photosReprise[ncKey] && photosReprise[ncKey].length > 0 && (
                           <div className="mt-3 grid grid-cols-4 gap-2">
                             {photosReprise[ncKey].map((photo, i) => (
-                              <img 
+                              <StorageImage 
                                 key={i} 
                                 src={photo.url} 
                                 alt={`Upload ${i+1}`}

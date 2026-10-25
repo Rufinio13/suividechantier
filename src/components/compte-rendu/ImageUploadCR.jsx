@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Camera, X, Eye, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { StorageImage } from '@/components/StorageImage.jsx';
 
 export function ImageUploadCR({ 
   chantierId, 
@@ -161,7 +162,7 @@ export function ImageUploadCR({
                 className="aspect-square rounded-md overflow-hidden border bg-slate-100 cursor-pointer"
                 onClick={() => setViewingImage(photo.url)}
               >
-                <img 
+                <StorageImage 
                   src={photo.url} 
                   alt={photo.description || `Photo ${index + 1}`}
                   className="w-full h-full object-cover hover:scale-105 transition-transform"
@@ -221,7 +222,7 @@ export function ImageUploadCR({
           >
             <X className="h-6 w-6" />
           </Button>
-          <img 
+          <StorageImage 
             src={viewingImage} 
             alt="Aperçu" 
             className="max-w-full max-h-full object-contain"

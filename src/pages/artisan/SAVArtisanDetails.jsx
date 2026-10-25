@@ -16,6 +16,7 @@ import { fr } from 'date-fns/locale';
 import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { v4 as uuidv4 } from 'uuid';
+import { StorageImage } from '@/components/StorageImage.jsx';
 
 export function SAVArtisanDetails() {
   const { id } = useParams();
@@ -368,7 +369,7 @@ export function SAVArtisanDetails() {
               {photos.length > 0 && (
                 <div className="mt-3 grid grid-cols-4 gap-2">
                   {photos.map((photo, i) => (
-                    <img 
+                    <StorageImage 
                       key={i} 
                       src={photo.url} 
                       alt={`Photo ${i+1}`}

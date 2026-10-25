@@ -13,6 +13,8 @@ import { Wrench, Calendar, CheckCircle, Edit } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
+import { StorageImage } from '@/components/StorageImage.jsx';
+import { openStorageFile } from '@/lib/storage';
 
 export function SAVArtisanList() {
   const preview = useArtisanPreview();
@@ -286,12 +288,12 @@ export function SAVArtisanList() {
                         <p className="text-xs font-medium mb-1">📸 Photos intervention :</p>
                         <div className="flex gap-2 flex-wrap">
                           {sav.artisan_photos.map((photo, i) => (
-                            <img 
+                            <StorageImage 
                               key={i} 
                               src={photo.url} 
                               alt={`SAV ${i+1}`}
                               className="h-16 w-16 object-cover rounded border cursor-pointer hover:opacity-80"
-                              onClick={() => window.open(photo.url, '_blank')}
+                              onClick={() => openStorageFile(photo.url)}
                             />
                           ))}
                         </div>

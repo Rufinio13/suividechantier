@@ -6,6 +6,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Upload, X, Image as ImageIcon, FileText, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
+import { StorageImage } from '@/components/StorageImage.jsx';
 
 export function ImageUploadCQ({ 
   type = 'photo',
@@ -188,7 +189,7 @@ export function ImageUploadCQ({
               className="relative group overflow-hidden cursor-pointer"
               onClick={() => setSelectedImage(image)}
             >
-              <img
+              <StorageImage
                 src={image.url}
                 alt={image.nom}
                 className="w-full h-32 object-cover"
@@ -236,7 +237,7 @@ export function ImageUploadCQ({
             </Button>
 
             {selectedImage && (
-              <img
+              <StorageImage
                 src={selectedImage.url}
                 alt={selectedImage.nom}
                 className="w-full h-auto max-h-[90vh] object-contain"

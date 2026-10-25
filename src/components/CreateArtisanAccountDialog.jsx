@@ -4,11 +4,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Mail, UserPlus, CheckCircle, Copy, Check } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/lib/supabaseClient";
-import { useAuth } from "@/hooks/useAuth.jsx";
 
 export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess }) {
   const { toast } = useToast();
-  const { profile } = useAuth();
   const [isSending, setIsSending] = useState(false);
   const [invitationSent, setInvitationSent] = useState(false);
   const [wasExisting, setWasExisting] = useState(false);
@@ -25,38 +23,24 @@ export function CreateArtisanAccountDialog({ artisan, isOpen, onClose, onSuccess
 
     setIsSending(true);
     try {
+      // ✅ La Edge Function vérifie l'appelant, lit l'artisan en base,
+      // met à jour le profil et lie soustraitants.user_id
       const { data, error } = await supabase.functions.invoke('invite-artisan', {
         body: {
-          email: artisan.email,
-          artisanNom: artisan.nomsocieteST || `${artisan.PrenomST || ''} ${artisan.nomST || ''}`.trim(),
+          soustraitantId: artisan.id,
           siteUrl: window.location.origin,
-          nomsociete: profile?.nomsociete || '', // ✅ nom du constructeur connecté
-          // ✅ Passer les données artisan pour que la Edge Function mette à jour le profil
-          artisanData: {
-            nomST: artisan.nomST || '',
-            PrenomST: artisan.PrenomST || '',
-            telephone: artisan.telephone || '',
-          }
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        const body = await error.context?.json?.().catch(() => null);
+        throw new Error(body?.error || error.message);
+      }
       if (data?.error) throw new Error(data.error);
 
-      const newUserId = data.userId;
       const existing = data.existing;
       setWasExisting(existing);
       setInviteLink(data.loginUrl || null);
-
-      // ✅ Lier user_id dans soustraitants (RLS autorisé car c'est le constructeur connecté)
-      if (newUserId) {
-        await supabase.from('soustraitants')
-          .update({ user_id: newUserId })
-          .eq('id', artisan.id);
-        console.log('✅ soustraitants.user_id mis à jour:', newUserId);
-      }
-
-      // ✅ Le profil est mis à jour par la Edge Function avec le client admin
 
       setInvitationSent(true);
       toast({

@@ -14,6 +14,8 @@ import { useChantier } from "@/context/ChantierContext";
 import { useConfirm } from "@/hooks/useConfirm";
 import { AlertTriangle, CheckCircle, Trash2 } from "lucide-react";
 import { TacheModificationInfo, useModificationsTache } from "@/components/planning/TacheModificationInfo";
+import { StorageImage } from '@/components/StorageImage.jsx';
+import { openStorageFile } from '@/lib/storage';
 
 export function TacheFormModal({
   isOpen, onClose, tache, chantierId, lots: globalLots,
@@ -271,9 +273,9 @@ export function TacheFormModal({
                       <p className="text-xs font-semibold mb-2 text-gray-700">📸 {tache.artisan_photos.length} photo(s)</p>
                       <div className="grid grid-cols-4 gap-2">
                         {tache.artisan_photos.map((photo, idx) => (
-                          <img key={idx} src={photo.url} alt={photo.name || `Photo ${idx + 1}`}
+                          <StorageImage key={idx} src={photo.url} alt={photo.name || `Photo ${idx + 1}`}
                             className="w-full h-20 object-cover rounded border cursor-pointer hover:opacity-80"
-                            onClick={() => window.open(photo.url, '_blank')} title="Cliquer pour agrandir" />
+                            onClick={() => openStorageFile(photo.url)} title="Cliquer pour agrandir" />
                         ))}
                       </div>
                     </div>

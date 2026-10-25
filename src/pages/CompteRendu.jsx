@@ -13,6 +13,8 @@ import { ArrowLeft, Plus, Calendar, Edit, Trash2, Search, Camera, FileText, Down
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import jsPDF from 'jspdf';
+import { StorageImage } from '@/components/StorageImage.jsx';
+import { openStorageFile } from '@/lib/storage';
 
 export function CompteRendu({ isEmbedded = false, embeddedChantierId = null }) {
   const params = useParams();
@@ -528,11 +530,11 @@ export function CompteRendu({ isEmbedded = false, embeddedChantierId = null }) {
                   <div className="grid grid-cols-2 gap-2">
                     {viewingCompteRendu.photos.map((photo, index) => (
                       <div key={index} className="space-y-1">
-                        <img 
+                        <StorageImage 
                           src={photo.url} 
                           alt={photo.description || `Photo ${index + 1}`}
                           className="w-full aspect-square object-cover rounded-md border cursor-pointer hover:opacity-90 transition"
-                          onClick={() => window.open(photo.url, '_blank')}
+                          onClick={() => openStorageFile(photo.url)}
                         />
                         {photo.description && (
                           <p className="text-xs text-slate-600">{photo.description}</p>

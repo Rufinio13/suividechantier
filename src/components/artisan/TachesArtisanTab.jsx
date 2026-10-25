@@ -9,6 +9,8 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
+import { StorageImage } from '@/components/StorageImage.jsx';
+import { openStorageFile } from '@/lib/storage';
 
 export function TachesArtisanTab({ chantierId, soustraitantId }) {
   const { taches, lots, loadTaches } = useChantier();
@@ -287,12 +289,12 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
                       <p className="text-xs font-medium text-slate-700 mb-2">📸 Photos :</p>
                       <div className="grid grid-cols-4 gap-2">
                         {photos[tacheId].map((photo, i) => (
-                          <img 
+                          <StorageImage 
                             key={i} 
                             src={photo.url} 
                             alt={`Photo ${i+1}`}
                             className="h-20 w-20 object-cover rounded border cursor-pointer hover:opacity-80"
-                            onClick={() => window.open(photo.url, '_blank')}
+                            onClick={() => openStorageFile(photo.url)}
                           />
                         ))}
                       </div>
@@ -311,7 +313,7 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
                       <div className="grid grid-cols-4 gap-2 mt-2">
                         {photos[tacheId].map((photo, index) => (
                           <div key={index} className="relative group">
-                            <img 
+                            <StorageImage 
                               src={photo.url} 
                               alt={`Photo ${index + 1}`}
                               className="h-20 w-20 object-cover rounded border"
