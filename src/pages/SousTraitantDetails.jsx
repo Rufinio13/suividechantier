@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
-import { CreateArtisanAccountModal } from '@/components/artisan/CreateArtisanAccountModal';
+import { CreateArtisanAccountDialog } from '@/components/CreateArtisanAccountDialog.jsx';
 import { useAuth } from '@/hooks/useAuth.jsx';
 import { isGerant } from '@/lib/postes';
 
@@ -225,7 +225,7 @@ export function SousTraitantDetails() {
                 <p className="text-sm text-muted-foreground">Cet artisan n'a pas encore de compte.</p>
               </div>
               <Button onClick={() => setIsCreateAccountOpen(true)} variant="outline" className="w-full">
-                <UserPlus className="mr-2 h-4 w-4" />Créer un compte artisan
+                <UserPlus className="mr-2 h-4 w-4" />Générer un lien d'accès
               </Button>
             </div>
           )}
@@ -299,13 +299,13 @@ export function SousTraitantDetails() {
         </DialogContent>
       </Dialog>
 
-      <CreateArtisanAccountModal
+      <CreateArtisanAccountDialog
+        artisan={sousTraitant}
         isOpen={isCreateAccountOpen}
         onClose={() => setIsCreateAccountOpen(false)}
-        sousTraitant={sousTraitant}
-        onSuccess={() => {
-          if (sousTraitant?.user_id) checkIfHasAccount(sousTraitant.user_id);
-          toast({ title: "Compte créé ✅", description: "L'artisan peut maintenant se connecter" });
+        onSuccess={(res) => {
+          // Compte déjà existant : rattaché immédiatement par la fonction
+          if (res?.existing) setHasAccount(true);
         }}
       />
     </div>

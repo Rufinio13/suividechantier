@@ -27,6 +27,7 @@ import { ApercuArtisan } from '@/pages/ApercuArtisan.jsx';
 import { Login } from '@/pages/Login.jsx';
 import { ResetPassword } from '@/pages/ResetPassword.jsx';
 import { SetPassword } from '@/pages/SetPassword.jsx';
+import { ActiverCompte } from '@/pages/ActiverCompte.jsx';
 import { useAuth } from '@/hooks/useAuth.jsx';
 import { MonCompte } from '@/pages/MonCompte.jsx';
 
@@ -77,6 +78,7 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/set-password" element={<SetPassword />} />
+          <Route path="/activer-compte" element={<ActiverCompte />} />
 
           <Route
             path="/"
