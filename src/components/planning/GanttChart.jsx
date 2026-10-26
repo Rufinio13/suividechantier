@@ -20,7 +20,7 @@ const isToday = (date) => isSameDay(date, new Date());
 
 export function GanttChart({ taches, chantierId, onEditTache }) {
   const [dayWidth, setDayWidth] = useState(DEFAULT_DAY_WIDTH);
-  const { updateTache, shiftTachesSuivantes, chantiers, conflictsByChantier, modifsNonVuesParTache } = useChantier();
+  const { updateTache, shiftTachesSuivantes, envoyerMailsDecalage, chantiers, conflictsByChantier, modifsNonVuesParTache } = useChantier();
   const { isArtisanIndisponible } = useSousTraitant();
   const { confirm, ConfirmDialog } = useConfirm();
 
@@ -56,7 +56,7 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
   const overallEndDate = useMemo(() => ganttItems.length ? endOfDay(ganttItems.reduce((max, item) => (item.end > max ? item.end : max), ganttItems[0].end)) : endOfDay(addDays(new Date(), 30)), [ganttItems]);
   const totalDays = useMemo(() => differenceInDays(overallEndDate, overallStartDate) + 1, [overallEndDate, overallStartDate]);
 
-  // ✅ Drag sans email — juste updateTache
+  // Mails artisans regroupés : tâche déplacée + tâches suivantes décalées
   const handleDragEnd = useCallback(async (event, info, item) => {
     const daysDragged = Math.round(info.offset.x / dayWidth);
     if (daysDragged === 0) return;
@@ -76,19 +76,23 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
       datedebut: format(newStartDate, 'yyyy-MM-dd'),
       datefin: format(newEndDate, 'yyyy-MM-dd'),
       duree: joursOuvres.toString()
-    });
+    }, { differerMail: true });
 
-    if (shiftTachesSuivantes) {
-      const diffOuvres = diffJoursOuvres(item.start, newStartDate);
-      if (diffOuvres !== 0) {
-        const sens = diffOuvres > 0 ? "plus tard" : "plus tôt";
-        const confirmShift = await confirm(
-          `Cette tâche a été décalée de ${Math.abs(diffOuvres)} jour(s) ouvré(s) ${sens}.\n\nDécaler également toutes les interventions suivantes de ce chantier du même nombre de jours ouvrés ?`
-        );
-        if (confirmShift) await shiftTachesSuivantes(chantierId, ancienneDateDebut, item.id, diffOuvres);
+    try {
+      if (shiftTachesSuivantes) {
+        const diffOuvres = diffJoursOuvres(item.start, newStartDate);
+        if (diffOuvres !== 0) {
+          const sens = diffOuvres > 0 ? "plus tard" : "plus tôt";
+          const confirmShift = await confirm(
+            `Cette tâche a été décalée de ${Math.abs(diffOuvres)} jour(s) ouvré(s) ${sens}.\n\nDécaler également toutes les interventions suivantes de ce chantier du même nombre de jours ouvrés ?`
+          );
+          if (confirmShift) await shiftTachesSuivantes(chantierId, ancienneDateDebut, item.id, diffOuvres);
+        }
       }
+    } finally {
+      envoyerMailsDecalage();
     }
-  }, [dayWidth, updateTache, shiftTachesSuivantes, chantierId, confirm]);
+  }, [dayWidth, updateTache, shiftTachesSuivantes, envoyerMailsDecalage, chantierId, confirm]);
 
   const handleDownloadPDF = async () => {
     const ganttElement = document.getElementById('gantt-container');

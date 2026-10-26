@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
 import { parseISO, format, eachDayOfInterval, startOfDay } from "date-fns";
 import { addJoursOuvres } from "@/lib/joursOuvres";
+import { sendNotificationEmail, getArtisanEmailInfo } from "@/lib/sendNotificationEmail";
 
 export const ChantierContext = createContext();
 
@@ -20,6 +21,8 @@ export function ChantierProvider({ children }) {
   const [tachesVues, setTachesVues] = useState({});
 
   const isLoadingRef = useRef(false);
+  // Changements de dates en attente d'envoi par mail aux artisans (clé : id de tâche)
+  const mailsDecalageRef = useRef(new Map());
 
   // Historique des modifications de planning + dernières consultations de l'utilisateur
   const loadTachesModifications = async () => {
@@ -368,16 +371,51 @@ export function ChantierProvider({ children }) {
     return data;
   };
 
-  const updateTache = async (id, updates) => {
+  // Envoie les changements de dates en attente : un seul mail récapitulatif par artisan
+  const envoyerMailsDecalage = async () => {
+    const changements = [...mailsDecalageRef.current.values()];
+    mailsDecalageRef.current.clear();
+    if (!changements.length) return;
+
+    const formatJour = (value) => {
+      if (!value) return '—';
+      try { return format(parseISO(value), 'dd/MM/yyyy'); } catch { return value; }
+    };
+
+    const parArtisan = {};
+    changements.forEach(c => { (parArtisan[c.artisanId] ||= []).push(c); });
+
+    for (const [artisanId, liste] of Object.entries(parArtisan)) {
+      const destinataire = await getArtisanEmailInfo(sousTraitants.find(s => s.id === artisanId), supabase);
+      if (!destinataire?.email) continue;
+
+      const tachesMail = liste
+        .sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''))
+        .map(c => ({
+          tacheNom: c.tacheNom,
+          chantierNom: chantiers.find(ch => ch.id === c.chantierId)?.nomchantier || '',
+          ancienDebut: formatJour(c.ancienDebut),
+          ancienneFin: formatJour(c.ancienneFin),
+          dateDebut: formatJour(c.dateDebut),
+          dateFin: formatJour(c.dateFin),
+        }));
+
+      await sendNotificationEmail('modification_tache', destinataire.email, {
+        artisanPrenom: destinataire.prenom,
+        aCompte: destinataire.aCompte,
+        ...(tachesMail.length === 1 ? tachesMail[0] : {}),
+        taches: tachesMail,
+      });
+    }
+  };
+
+  // differerMail : le mail à l'artisan est mis en attente (envoyé par envoyerMailsDecalage),
+  // pour regrouper une tâche et ses tâches suivantes décalées dans un seul mail.
+  const updateTache = async (id, updates, { differerMail = false } = {}) => {
     const { artisan_termine, artisan_termine_date, artisan_photos, artisan_commentaire, ...safeUpdates } = updates;
-    
+
     const ancienneTache = taches.find(t => t.id === id);
-    const dateDebutChangee = ancienneTache && ancienneTache.datedebut !== safeUpdates.datedebut;
-    const dateFinChangee = ancienneTache && ancienneTache.datefin !== safeUpdates.datefin;
-    const datesModifiees = (dateDebutChangee || dateFinChangee) && 
-                           ancienneTache.assigneid && 
-                           ancienneTache.assignetype === 'soustraitant';
-    
+
     const { data, error } = await supabase
       .from("taches")
       .update({
@@ -409,6 +447,8 @@ export function ChantierProvider({ children }) {
       ((ancienneTache.assigneid ?? null) !== (data.assigneid ?? null) ||
        (ancienneTache.assignetype ?? null) !== (data.assignetype ?? null));
 
+    const modifieParNom = [profile?.prenom, profile?.nom].filter(Boolean).join(" ") || user?.email || "Utilisateur";
+
     if ((datesChangees || assigneChange) && profile?.id && profile?.nomsociete) {
       const { data: modif, error: modifError } = await supabase
         .from("taches_modifications")
@@ -424,7 +464,7 @@ export function ChantierProvider({ children }) {
           nouvel_assigneid: data.assigneid ?? null,
           nouvel_assignetype: data.assignetype ?? null,
           modifie_par: profile.id,
-          modifie_par_nom: [profile.prenom, profile.nom].filter(Boolean).join(" ") || user?.email || "Utilisateur",
+          modifie_par_nom: modifieParNom,
         })
         .select("*")
         .single();
@@ -433,23 +473,59 @@ export function ChantierProvider({ children }) {
       else setTachesModifications(prev => [modif, ...prev]);
     }
 
-    if (datesModifiees) {
+    // Côté artisan (même artisan avant et après) : pastille + détail de la modification + mail
+    const datesModifieesArtisan = datesChangees && !assigneChange &&
+      data.assigneid && data.assignetype === 'soustraitant';
+
+    if (datesModifieesArtisan) {
+      // Notification précédente pas encore vue : on conserve les dates d'origine
+      const { data: precedentes } = await supabase
+        .from('notifications_taches_artisan')
+        .select('vu, ancienne_datedebut, ancienne_datefin')
+        .eq('tache_id', id)
+        .eq('type', 'date_modifiee')
+        .eq('vu', false)
+        .limit(1);
+      const precedente = precedentes?.[0];
+      const origine = precedente?.ancienne_datedebut || precedente?.ancienne_datefin
+        ? { datedebut: precedente.ancienne_datedebut, datefin: precedente.ancienne_datefin }
+        : ancienneTache;
+
       await supabase
         .from('notifications_taches_artisan')
         .delete()
         .eq('tache_id', id)
         .eq('type', 'date_modifiee');
-      
-      await supabase
+
+      const { error: notifError } = await supabase
         .from('notifications_taches_artisan')
         .insert({
           tache_id: id,
-          soustraitant_id: ancienneTache.assigneid,
+          soustraitant_id: data.assigneid,
           type: 'date_modifiee',
-          vu: false
+          vu: false,
+          ancienne_datedebut: origine.datedebut ?? null,
+          ancienne_datefin: origine.datefin ?? null,
+          nouvelle_datedebut: data.datedebut ?? null,
+          nouvelle_datefin: data.datefin ?? null,
+          modifie_par_nom: modifieParNom,
         });
+      if (notifError) console.error("❌ Erreur notification date modifiée :", notifError);
+
+      // Mail : si la tâche est déjà en attente, on garde ses dates d'origine
+      const enAttente = mailsDecalageRef.current.get(id);
+      mailsDecalageRef.current.set(id, {
+        artisanId: data.assigneid,
+        tacheNom: data.nom,
+        chantierId: data.chantierid,
+        ancienDebut: enAttente ? enAttente.ancienDebut : ancienneTache.datedebut,
+        ancienneFin: enAttente ? enAttente.ancienneFin : ancienneTache.datefin,
+        dateDebut: data.datedebut,
+        dateFin: data.datefin,
+      });
+      if (!differerMail) envoyerMailsDecalage();
     }
-    
+
     setTaches(prev => prev.map(t => t.id === id ? data : t));
     return data;
   };
@@ -457,6 +533,7 @@ export function ChantierProvider({ children }) {
   // Décale de `diffJoursOuvres` jours OUVRÉS (week-ends et fériés ignorés) toutes les tâches
   // d'un chantier dont la date de début est postérieure à `fromDate` (utilisé après un
   // changement de date sur une tâche donnée).
+  // Les mails aux artisans restent en attente : l'appelant les envoie via envoyerMailsDecalage.
   const shiftTachesSuivantes = async (chantierId, fromDate, excludeId, diffJoursOuvres) => {
     if (!diffJoursOuvres || !chantierId || !fromDate) return [];
 
@@ -468,7 +545,7 @@ export function ChantierProvider({ children }) {
     for (const t of suivantes) {
       const newDatedebut = format(addJoursOuvres(parseISO(t.datedebut), diffJoursOuvres), 'yyyy-MM-dd');
       const newDatefin = t.datefin ? format(addJoursOuvres(parseISO(t.datefin), diffJoursOuvres), 'yyyy-MM-dd') : t.datefin;
-      updated.push(await updateTache(t.id, { ...t, datedebut: newDatedebut, datefin: newDatefin }));
+      updated.push(await updateTache(t.id, { ...t, datedebut: newDatedebut, datefin: newDatefin }, { differerMail: true }));
     }
     return updated;
   };
@@ -650,7 +727,7 @@ export function ChantierProvider({ children }) {
       sousTraitants, loadSousTraitants, addSousTraitant, updateSousTraitant, deleteSousTraitant,
       fournisseurs, loadFournisseurs, addFournisseur, updateFournisseur, deleteFournisseur,
       sav, loadSAV, addSAV, updateSAV, deleteSAV,
-      taches, loadTaches, addTache, updateTache, deleteTache, shiftTachesSuivantes,
+      taches, loadTaches, addTache, updateTache, deleteTache, shiftTachesSuivantes, envoyerMailsDecalage,
       lots, loadLots,
       conflictsByChantier,
       derniereModifParTache, modifsNonVuesParTache, marquerTacheVue, marquerTachesVues

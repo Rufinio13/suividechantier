@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { useArtisanPreview } from '@/context/ArtisanPreviewContext';
 import { StorageImage } from '@/components/StorageImage.jsx';
+import { TacheModificationInfo } from '@/components/planning/TacheModificationInfo';
 
 export function TacheDetailModalArtisan({
   isOpen,
@@ -18,6 +19,8 @@ export function TacheDetailModalArtisan({
   tache,
   lot,
   chantier,
+  modificationDate = null,
+  modificationNonVue = false,
   onSuccess
 }) {
   const { toast } = useToast();
@@ -186,6 +189,11 @@ export function TacheDetailModalArtisan({
               <p className="font-medium">{formatDate(tache.datefin)}</p>
             </div>
           </div>
+
+          {/* Dernier changement de dates : qui, anciennes → nouvelles dates */}
+          {modificationDate && (
+            <TacheModificationInfo modifications={[modificationDate]} nonVues={modificationNonVue} />
+          )}
 
           {/* Description */}
           {tache.description && (

@@ -5,7 +5,8 @@ import { supabase } from '@/lib/supabaseClient';
  *
  * Types disponibles :
  * - 'nouvelle_tache'     → data: { artisanPrenom, aCompte, tacheNom, chantierNom, dateDebut?, dateFin?, description? }
- * - 'modification_tache' → data: { artisanPrenom, aCompte, tacheNom, chantierNom, ancienDebut, ancienneFin, dateDebut, dateFin }
+ * - 'modification_tache' → data: { artisanPrenom, aCompte, taches: [{ tacheNom, chantierNom, ancienDebut, ancienneFin, dateDebut, dateFin }] }
+ *                          (récapitulatif ; les champs d'une seule tâche à la racine restent acceptés)
  * - 'nouveau_document'   → data: { artisanPrenom, aCompte, nomFichier, chantierNom, typeDocument?, necessite_signature?, urlFichier? }
  * - 'non_conformite'     → data: { artisanPrenom, aCompte, pointControle, chantierNom, description?, photos?, plans?, dateReprise? }
  * - 'sav'                → data: { artisanPrenom, aCompte, titreSAV, chantierNom, description?, datePrevisionnelle? }

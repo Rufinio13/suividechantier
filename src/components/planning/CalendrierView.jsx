@@ -163,12 +163,17 @@ export function CalendrierView({
 
   // Artisan : afficher un mois vaut consultation des notifications (nouvelle tâche /
   // date modifiée) de ses tâches → marquées vues tout de suite (la sidebar se met à jour).
-  // Dans le calendrier, la pastille reste visible pendant cette visite.
+  // Dans le calendrier, la pastille reste visible tant qu'on reste sur ce mois.
   const moisAffiche = format(currentDate, 'yyyy-MM');
   const [notifsVuesCetteVisite, setNotifsVuesCetteVisite] = useState(() => new Set());
   const notifsEnvoyeesRef = useRef(new Set()); // une seule tentative par notification et par visite
+  const moisPrecedentRef = useRef(moisAffiche);
 
   useEffect(() => {
+    if (moisPrecedentRef.current !== moisAffiche) {
+      moisPrecedentRef.current = moisAffiche;
+      setNotifsVuesCetteVisite(new Set());
+    }
     if (!onNotificationsVues) return;
     const debut = format(startOfMonth(currentDate), 'yyyy-MM-dd');
     const fin = format(endOfMonth(currentDate), 'yyyy-MM-dd');
@@ -208,16 +213,19 @@ export function CalendrierView({
                          !tache.artisan_termine &&
                          !tache.constructeur_valide;
       
-      const isNouvelleTache = isArtisanView && notifications.some(
-        n => n.tache_id === tache.id && n.type === 'nouvelle_tache' && (!n.vu || notifsVuesCetteVisite.has(n.id))
+      const notifAffichee = (type) => isArtisanView && notifications.some(
+        n => n.tache_id === tache.id && n.type === type && (!n.vu || notifsVuesCetteVisite.has(n.id))
       );
-      
+      const isNouvelleTache = notifAffichee('nouvelle_tache');
+      const isDateModifiee = notifAffichee('date_modifiee');
+
       return {
         ...tache,
         lotNom,
         displayName,
         isEnRetard,
         isNouvelleTache,
+        isDateModifiee,
       };
     });
   }, [taches, lots, conflictsByChantier, chantierColors, chantierNoms, isArtisanView, notifications, notifsVuesCetteVisite]);
@@ -353,7 +361,7 @@ export function CalendrierView({
                             ></span>
                           )}
 
-                          {hasPastilleModif(tache.id) && (
+                          {(hasPastilleModif(tache.id) || tache.isDateModifiee) && (
                             <span
                               className={cn('inline-block w-2 h-2 rounded-full flex-shrink-0', PASTILLE_MODIF_CLASS)}
                               title="Planning modifié"
@@ -406,6 +414,18 @@ export function CalendrierView({
 
       {canManageIndisponibilites && (
         <div className="flex flex-wrap gap-3 text-xs items-center">
+          {isArtisanView && (
+            <>
+              <span className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-full bg-blue-600"></div>
+                Nouvelle tâche
+              </span>
+              <span className="flex items-center gap-1">
+                <div className={cn('w-3 h-3 rounded-full', PASTILLE_MODIF_CLASS)}></div>
+                Date modifiée
+              </span>
+            </>
+          )}
           <span className="flex items-center gap-1">
             <div className="w-4 h-4 rounded bg-gray-300"></div>
             Indisponible — cliquez sur un jour pour basculer votre disponibilité

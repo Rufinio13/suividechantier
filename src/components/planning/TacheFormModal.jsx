@@ -23,7 +23,7 @@ export function TacheFormModal({
 }) {
   const { sousTraitants, isArtisanIndisponible } = useSousTraitant();
   const { fournisseurs } = useFournisseur();
-  const { chantiers, shiftTachesSuivantes } = useChantier();
+  const { chantiers, shiftTachesSuivantes, envoyerMailsDecalage } = useChantier();
   const { confirm, ConfirmDialog } = useConfirm();
   const modificationsInfo = useModificationsTache(tache?.id, isOpen);
 
@@ -160,17 +160,22 @@ export function TacheFormModal({
     try {
       if (tache) {
         const ancienneDateDebut = tache.datedebut;
-        await updateTache(tache.id, payload);
+        // Mails artisans regroupés : tâche modifiée + tâches suivantes décalées
+        await updateTache(tache.id, payload, { differerMail: true });
 
-        if (ancienneDateDebut && payload.datedebut !== ancienneDateDebut && shiftTachesSuivantes) {
-          const diffOuvres = diffJoursOuvres(parseISO(ancienneDateDebut), parseISO(payload.datedebut));
-          if (diffOuvres !== 0) {
-            const sens = diffOuvres > 0 ? "plus tard" : "plus tôt";
-            const confirmShift = await confirm(
-              `La date de cette tâche a été décalée de ${Math.abs(diffOuvres)} jour(s) ouvré(s) ${sens}.\n\nDécaler également toutes les interventions suivantes de ce chantier du même nombre de jours ouvrés ?`
-            );
-            if (confirmShift) await shiftTachesSuivantes(chantierId, ancienneDateDebut, tache.id, diffOuvres);
+        try {
+          if (ancienneDateDebut && payload.datedebut !== ancienneDateDebut && shiftTachesSuivantes) {
+            const diffOuvres = diffJoursOuvres(parseISO(ancienneDateDebut), parseISO(payload.datedebut));
+            if (diffOuvres !== 0) {
+              const sens = diffOuvres > 0 ? "plus tard" : "plus tôt";
+              const confirmShift = await confirm(
+                `La date de cette tâche a été décalée de ${Math.abs(diffOuvres)} jour(s) ouvré(s) ${sens}.\n\nDécaler également toutes les interventions suivantes de ce chantier du même nombre de jours ouvrés ?`
+              );
+              if (confirmShift) await shiftTachesSuivantes(chantierId, ancienneDateDebut, tache.id, diffOuvres);
+            }
           }
+        } finally {
+          envoyerMailsDecalage();
         }
       } else {
         await addTache(payload);

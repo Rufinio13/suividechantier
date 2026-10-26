@@ -228,6 +228,10 @@ export function DashboardArtisan() {
           tache={selectedTache}
           lot={lots.find(l => l.id === selectedTache.lotid)}
           chantier={chantiers.find(c => c.id === selectedTache.chantierid)}
+          modificationDate={notifications.find(n =>
+            n.tache_id === selectedTache.id && n.type === 'date_modifiee' && (n.ancienne_datedebut || n.nouvelle_datedebut)
+          )}
+          modificationNonVue={!!selectedTache.isDateModifiee}
           onSuccess={handleModalSuccess}
         />
       )}

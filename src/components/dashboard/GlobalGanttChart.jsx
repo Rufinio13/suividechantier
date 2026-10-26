@@ -226,7 +226,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
     if (dayTaskIndex < dayTasksList.length - 1) selectTaskAtIndex(dayTasksList, dayTaskIndex + 1, selectedTask.chantierName);
   };
 
-  // ✅ Save sans email — juste updateTache
+  // Le mail à l'artisan (si dates changées) est envoyé par updateTache
   const handleSave = async () => {
     if (!selectedTask) return;
     if (!formData.datedebut || !formData.duree) { alert('La date de début et la durée sont obligatoires'); return; }
