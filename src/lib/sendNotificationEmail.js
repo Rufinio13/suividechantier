@@ -44,24 +44,24 @@ export async function sendNotificationEmail(type, to, data) {
 export async function getArtisanEmailInfo(artisan, supabaseClient) {
   if (!artisan) return null;
   try {
-    // ✅ A un compte → email depuis profiles
+    // ✅ A un compte → email depuis profiles (profil parfois non lisible par l'agence : RLS)
     if (artisan.user_id) {
       const { data: profile } = await supabaseClient
         .from('profiles')
         .select('mail, prenom')
         .eq('id', artisan.user_id)
-        .single();
+        .maybeSingle();
       if (profile?.mail) return {
         email: profile.mail,
         prenom: profile.prenom || artisan.PrenomST || artisan.nomsocieteST || 'Artisan',
         aCompte: true,
       };
     }
-    // ✅ Pas de compte mais email renseigné dans soustraitants
+    // ✅ Email renseigné dans soustraitants (le bouton reste affiché si l'artisan a un compte)
     if (artisan.email) return {
       email: artisan.email,
       prenom: artisan.PrenomST || artisan.nomsocieteST || 'Artisan',
-      aCompte: false,
+      aCompte: !!artisan.user_id,
     };
     return null;
   } catch {

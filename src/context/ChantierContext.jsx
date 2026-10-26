@@ -480,12 +480,6 @@ export function ChantierProvider({ children }) {
     // Côté artisan (même artisan avant et après) : pastille + détail de la modification + mail
     const datesModifieesArtisan = datesChangees && !assigneChange &&
       data.assigneid && data.assignetype === 'soustraitant';
-    console.log("📅 updateTache", id, {
-      tacheConnue: !!ancienneTache,
-      datesChangees: !!datesChangees, assigneChange: !!assigneChange,
-      assigne: `${ancienneTache?.assignetype}:${ancienneTache?.assigneid} → ${data.assignetype}:${data.assigneid}`,
-      notifArtisan: !!datesModifieesArtisan,
-    });
 
     if (datesModifieesArtisan) {
       // Notification précédente pas encore vue : on conserve les dates d'origine
