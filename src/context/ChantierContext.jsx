@@ -386,8 +386,12 @@ export function ChantierProvider({ children }) {
     changements.forEach(c => { (parArtisan[c.artisanId] ||= []).push(c); });
 
     for (const [artisanId, liste] of Object.entries(parArtisan)) {
-      const destinataire = await getArtisanEmailInfo(sousTraitants.find(s => s.id === artisanId), supabase);
-      if (!destinataire?.email) continue;
+      const artisan = sousTraitants.find(s => s.id === artisanId);
+      const destinataire = await getArtisanEmailInfo(artisan, supabase);
+      if (!destinataire?.email) {
+        console.warn("⚠️ Mail décalage non envoyé : aucun email pour l'artisan", artisanId, artisan ? "(fiche trouvée)" : "(fiche introuvable)");
+        continue;
+      }
 
       const tachesMail = liste
         .sort((a, b) => (a.dateDebut || '').localeCompare(b.dateDebut || ''))
@@ -476,6 +480,12 @@ export function ChantierProvider({ children }) {
     // Côté artisan (même artisan avant et après) : pastille + détail de la modification + mail
     const datesModifieesArtisan = datesChangees && !assigneChange &&
       data.assigneid && data.assignetype === 'soustraitant';
+    console.log("📅 updateTache", id, {
+      tacheConnue: !!ancienneTache,
+      datesChangees: !!datesChangees, assigneChange: !!assigneChange,
+      assigne: `${ancienneTache?.assignetype}:${ancienneTache?.assigneid} → ${data.assignetype}:${data.assigneid}`,
+      notifArtisan: !!datesModifieesArtisan,
+    });
 
     if (datesModifieesArtisan) {
       // Notification précédente pas encore vue : on conserve les dates d'origine
