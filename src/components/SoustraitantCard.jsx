@@ -21,7 +21,7 @@ export function SousTraitantCard({ sousTraitant }) {
 
   return (
     <motion.div
-      onClick={() => navigate(`/sous-traitant-details/${sousTraitant.id}`)}
+      onClick={() => navigate(`/sous-traitants/${sousTraitant.id}`)}
       whileHover={{ scale: 1.01 }}
       className="cursor-pointer"
     >

@@ -86,6 +86,12 @@ if (typeof window !== 'undefined') {
     }
   });
   
+  // ✅ La fenêtre perd le focus (autre application, sélecteur de fichier…) :
+  // l'absence se mesure à partir d'ici, pas depuis la dernière page cachée
+  window.addEventListener('blur', () => {
+    lastVisibleTime = Date.now();
+  });
+
   // ✅ Listener focus (backup si visibilitychange ne se déclenche pas)
   window.addEventListener('focus', async () => {
     const timeAway = Date.now() - lastVisibleTime;

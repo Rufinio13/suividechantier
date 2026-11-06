@@ -1,6 +1,9 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
+import { getConformiteArtisan } from "@/lib/attestations";
+
+const BUCKET_ATTESTATIONS = "documents-chantiers";
 
 export const SousTraitantContext = createContext();
 
@@ -10,6 +13,28 @@ export function SousTraitantProvider({ children }) {
   const [sousTraitants, setSousTraitants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [indisponibilites, setIndisponibilites] = useState([]);
+  const [attestations, setAttestations] = useState([]);
+
+  // Décennales + URSSAF de tous les artisans chargés (pastilles de conformité)
+  const loadAttestations = async (soustraitantIds) => {
+    const ids = (soustraitantIds || []).filter(Boolean);
+    if (ids.length === 0) {
+      setAttestations([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("artisan_attestations")
+      .select("*")
+      .in("soustraitant_id", ids);
+
+    if (error) {
+      console.error("❌ loadAttestations :", error);
+      setAttestations([]);
+    } else {
+      setAttestations(data || []);
+    }
+  };
 
   const loadIndisponibilites = async (soustraitantIds) => {
     const ids = (soustraitantIds || []).filter(Boolean);
@@ -66,7 +91,8 @@ export function SousTraitantProvider({ children }) {
         setSousTraitants(data || []);
       }
 
-      await loadIndisponibilites((data || []).map(s => s.id));
+      const ids = (data || []).map(s => s.id);
+    await Promise.all([loadIndisponibilites(ids), loadAttestations(ids)]);
       setLoading(false);
       return;
     }
@@ -96,7 +122,8 @@ export function SousTraitantProvider({ children }) {
       setSousTraitants(data || []);
     }
 
-    await loadIndisponibilites((data || []).map(s => s.id));
+    const ids = (data || []).map(s => s.id);
+    await Promise.all([loadIndisponibilites(ids), loadAttestations(ids)]);
     setLoading(false);
   };
 
@@ -126,6 +153,11 @@ export function SousTraitantProvider({ children }) {
       email: st.email || null,
       telephone: st.telephone || null,
       adresseST: st.adresseST || null,
+      code_postal: st.code_postal || null,
+      ville: st.ville || null,
+      siret: (st.siret || "").replace(/\D/g, "") || null,
+      decennale_non_requise: !!st.decennale_non_requise,
+      urssaf_non_requise: !!st.urssaf_non_requise,
       assigned_lots: st.assigned_lots || [],
       nomsociete: profile.nomsociete,
       nomsocieteST: st.nomsocieteST,
@@ -233,11 +265,22 @@ export function SousTraitantProvider({ children }) {
   const deleteSousTraitant = async (id) => {
     console.log("📤 Delete ST :", id);
 
+    // Fichiers des attestations (lignes supprimées en cascade par la RPC)
+    const { data: attestations } = await supabase
+      .from("artisan_attestations")
+      .select("storage_path")
+      .eq("soustraitant_id", id);
+
     // ✅ RPC : vérifie en base que l'utilisateur est gérant, supprime l'artisan
     // et toutes ses données, puis renvoie les fichiers storage à effacer
-    const { data: fichiers, error } = await supabase.rpc("supprimer_soustraitant", { p_id: id });
+    const { data: fichiersRpc, error } = await supabase.rpc("supprimer_soustraitant", { p_id: id });
 
     if (error) { console.error("❌ deleteSousTraitant :", error); throw error; }
+
+    const fichiers = [
+      ...(fichiersRpc || []),
+      ...(attestations || []).map((a) => a.storage_path).filter(Boolean),
+    ];
 
     if (fichiers?.length) {
       const { error: storageError } = await supabase.storage.from("documents-chantiers").remove(fichiers);
@@ -245,9 +288,71 @@ export function SousTraitantProvider({ children }) {
     }
 
     setSousTraitants((prev) => (prev || []).filter((s) => s.id !== id));
+    setAttestations((prev) => prev.filter((a) => a.soustraitant_id !== id));
     console.log("✅ ST supprimé du state local");
     return true;
   };
+
+  // ✅ Ajout d'une décennale / URSSAF (fichier dans artisans/<soustraitant_id>/…)
+  const addAttestation = async (ligne, file) => {
+    let storagePath = null;
+    try {
+      if (file) {
+        const ext = file.name.split(".").pop();
+        storagePath = `artisans/${ligne.soustraitant_id}/${ligne.type}_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+        const { error: uploadError } = await supabase.storage.from(BUCKET_ATTESTATIONS).upload(storagePath, file);
+        if (uploadError) throw uploadError;
+      }
+
+      const { data, error } = await supabase
+        .from("artisan_attestations")
+        .insert({ ...ligne, nom_fichier: file?.name || null, storage_path: storagePath })
+        .select()
+        .single();
+      if (error) throw error;
+
+      setAttestations((prev) => [...prev, data]);
+      return data;
+    } catch (err) {
+      console.error("❌ addAttestation :", err);
+      if (storagePath) await supabase.storage.from(BUCKET_ATTESTATIONS).remove([storagePath]);
+      throw err;
+    }
+  };
+
+  const deleteAttestation = async (attestation) => {
+    const { error } = await supabase.from("artisan_attestations").delete().eq("id", attestation.id);
+    if (error) { console.error("❌ deleteAttestation :", error); throw error; }
+
+    if (attestation.storage_path) {
+      const { error: storageError } = await supabase.storage.from(BUCKET_ATTESTATIONS).remove([attestation.storage_path]);
+      if (storageError) console.error("⚠️ Fichier de l'attestation non supprimé :", storageError);
+    }
+    setAttestations((prev) => prev.filter((a) => a.id !== attestation.id));
+  };
+
+  // ✅ Conformité (décennale valide + URSSAF < 6 mois) par artisan
+  const conformites = useMemo(() => {
+    const parArtisan = {};
+    for (const a of attestations) (parArtisan[a.soustraitant_id] = parArtisan[a.soustraitant_id] || []).push(a);
+    return Object.fromEntries(
+      (sousTraitants || []).map((st) => [
+        st.id,
+        getConformiteArtisan(parArtisan[st.id] || [], new Date(), {
+          decennaleRequise: !st.decennale_non_requise,
+          urssafRequise: !st.urssaf_non_requise,
+        }),
+      ])
+    );
+  }, [sousTraitants, attestations]);
+
+  const getConformite = (soustraitantId) =>
+    conformites[soustraitantId] || getConformiteArtisan([]);
+
+  const nbArtisansNonConformes = useMemo(
+    () => Object.values(conformites).filter((c) => !c.ok).length,
+    [conformites]
+  );
 
   return (
     <SousTraitantContext.Provider
@@ -262,6 +367,11 @@ export function SousTraitantProvider({ children }) {
         isArtisanIndisponible,
         addIndisponibilite,
         removeIndisponibilite,
+        attestations,
+        addAttestation,
+        deleteAttestation,
+        getConformite,
+        nbArtisansNonConformes,
       }}
     >
       {children}

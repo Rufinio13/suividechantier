@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import logoEvabois from '@/assets/logo-evabois.png';
 import { MonCompte } from '@/pages/MonCompte.jsx';
+import { useSousTraitant } from '@/context/SousTraitantContext.jsx';
 
 
 export function Layout() {
@@ -15,11 +16,12 @@ export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut } = useAuth();
+  const { nbArtisansNonConformes = 0 } = useSousTraitant();
 
   const navItems = [
     { name: 'Tableau de bord', href: '/', icon: LayoutDashboard },
     { name: 'Chantiers', href: '/chantiers', icon: HardHat },
-    { name: 'Artisans', href: '/sous-traitants', icon: Users },
+    { name: 'Artisans', href: '/sous-traitants', icon: Users, alerte: nbArtisansNonConformes, alerteTitre: 'artisan(s) non à jour (décennale / URSSAF)' },
     { name: 'Fournisseurs', href: '/fournisseurs', icon: Truck },
     { name: 'Référentiel CQ', href: '/referentiel-cq', icon: ShieldCheck },
     { name: 'Référentiel Commande', href: '/referentiel-commande', icon: Package },
@@ -100,6 +102,14 @@ export function Layout() {
                 >
                   <Icon className={cn("mr-3 h-5 w-5", isActive ? "text-[#9FC760]" : "text-[#A3806D]")} />
                   {item.name}
+                  {item.alerte > 0 && (
+                    <span
+                      title={`${item.alerte} ${item.alerteTitre}`}
+                      className="ml-auto min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-xs font-semibold flex items-center justify-center"
+                    >
+                      {item.alerte}
+                    </span>
+                  )}
                 </Link>
               );
             })}

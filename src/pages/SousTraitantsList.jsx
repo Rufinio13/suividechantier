@@ -1,20 +1,22 @@
 import React, { useState, useMemo } from "react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { Plus, Search, Edit, Trash2, Building2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { useSousTraitant } from "@/context/SousTraitantContext.jsx";
 import { SousTraitantForm } from "@/components/SoustraitantForm.jsx";
-import { CreateArtisanAccountDialog } from "@/components/CreateArtisanAccountDialog.jsx"; // ✅ AJOUTÉ
 import { useAuth } from "@/hooks/useAuth.jsx";
 import { useToast } from "@/components/ui/use-toast";
 import { isGerant } from "@/lib/postes";
+import { PastilleConformite } from "@/components/attestations/PastilleConformite.jsx";
 
 export function SousTraitantsList() {
-  const { sousTraitants = [], loading, deleteSousTraitant } = useSousTraitant();
+  const { sousTraitants = [], loading, deleteSousTraitant, getConformite } = useSousTraitant();
   const { profile } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const peutSupprimer = isGerant(profile);
 
   const handleDelete = async (st) => {
@@ -27,23 +29,13 @@ export function SousTraitantsList() {
     }
   };
   const [search, setSearch] = useState("");
-  const [editingST, setEditingST] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
-  // ✅ NOUVEAU : État pour le dialogue de création de compte
-  const [showAccountDialog, setShowAccountDialog] = useState(false);
-  const [newlyCreatedArtisan, setNewlyCreatedArtisan] = useState(null);
 
-  const openModal = (st = null) => {
-    setEditingST(st);
-    setIsModalOpen(true);
-  };
+  const ouvrirFiche = (st) => navigate(`/sous-traitants/${st.id}`);
 
-  // ✅ NOUVEAU : Callback après création d'un artisan
+  // Après création : ouvrir la fiche et proposer la création du compte
   const handleArtisanCreated = (artisan) => {
-    console.log('🎉 Artisan créé, proposition de compte:', artisan);
-    setNewlyCreatedArtisan(artisan);
-    setShowAccountDialog(true);
+    navigate(`/sous-traitants/${artisan.id}`, { state: { proposerCompte: true } });
   };
 
   // ✅ Filtre + tri alphabétique
@@ -75,7 +67,7 @@ export function SousTraitantsList() {
           <p className="text-muted-foreground">Gérez les sous-traitants de votre société</p>
         </div>
 
-        <Button onClick={() => openModal()}>
+        <Button onClick={() => setIsModalOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Nouveau sous-traitant
         </Button>
@@ -108,12 +100,13 @@ export function SousTraitantsList() {
           {filtered.map(st => {
             const nomComplet = `${st.PrenomST || ""} ${st.nomST || ""}`.trim();
             return (
-              <Card key={st.id} className="h-full w-full flex flex-col cursor-pointer hover:shadow-md transition border rounded-2xl overflow-hidden">
+              <Card key={st.id} onClick={() => ouvrirFiche(st)} className="h-full w-full flex flex-col cursor-pointer hover:shadow-md transition border rounded-2xl overflow-hidden">
                 <CardHeader className="pb-3 flex justify-between items-start gap-2">
-                  <CardTitle className="text-lg font-bold truncate min-w-0" title={st.nomsocieteST}>
-                    {st.nomsocieteST}
+                  <CardTitle className="text-lg font-bold min-w-0 flex items-center gap-2">
+                    <span className="truncate" title={st.nomsocieteST}>{st.nomsocieteST}</span>
+                    <PastilleConformite conformite={getConformite(st.id)} />
                   </CardTitle>
-                  <div className="flex gap-1 flex-shrink-0">
+                  <div className="flex gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                     <Button
                       size="icon"
                       variant="ghost"
@@ -122,7 +115,7 @@ export function SousTraitantsList() {
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button size="icon" variant="ghost" onClick={() => openModal(st)}>
+                    <Button size="icon" variant="ghost" title="Modifier" onClick={() => ouvrirFiche(st)}>
                       <Edit className="h-4 w-4" />
                     </Button>
                     {peutSupprimer && (
@@ -139,10 +132,13 @@ export function SousTraitantsList() {
                   )}
                   {st.email && <p className="truncate" title={st.email}>Email : {st.email}</p>}
                   {st.telephone && <p className="truncate" title={st.telephone}>Tél : {st.telephone}</p>}
-                  {st.adresseST && <p className="truncate" title={st.adresseST}>Adresse : {st.adresseST}</p>}
+                  {(st.adresseST || st.ville) && (() => {
+                    const adresse = [st.adresseST, `${st.code_postal || ""} ${st.ville || ""}`.trim()].filter(Boolean).join(", ");
+                    return <p className="truncate" title={adresse}>Adresse : {adresse}</p>;
+                  })()}
                   {st.assigned_lots?.length > 0 && (
                     <p className="break-words">
-                      <strong>Lots assignés :</strong> {st.assigned_lots.join(", ")}
+                      <strong>Lots :</strong> {st.assigned_lots.join(", ")}
                     </p>
                   )}
                 </CardContent>
@@ -152,28 +148,11 @@ export function SousTraitantsList() {
         </motion.div>
       )}
 
-      {/* MODAL FORMULAIRE */}
+      {/* MODAL CRÉATION */}
       {isModalOpen && (
         <SousTraitantForm
-          initialData={editingST}
           onClose={() => setIsModalOpen(false)}
-          onSuccess={() => setIsModalOpen(false)}
-          onArtisanCreated={handleArtisanCreated} // ✅ NOUVEAU : Callback
-        />
-      )}
-
-      {/* ✅ NOUVEAU : DIALOGUE CRÉATION COMPTE */}
-      {showAccountDialog && newlyCreatedArtisan && (
-        <CreateArtisanAccountDialog
-          artisan={newlyCreatedArtisan}
-          isOpen={showAccountDialog}
-          onClose={() => {
-            setShowAccountDialog(false);
-            setNewlyCreatedArtisan(null);
-          }}
-          onSuccess={() => {
-            console.log('✅ Compte créé avec succès');
-          }}
+          onCreated={handleArtisanCreated}
         />
       )}
     </div>

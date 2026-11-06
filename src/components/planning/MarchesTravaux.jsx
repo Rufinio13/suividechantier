@@ -1,18 +1,83 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Briefcase, CheckCircle, Clock, FileText } from 'lucide-react';
+import { Briefcase, CheckCircle, Clock, FileText, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useChantier } from '@/context/ChantierContext';
+import { useSousTraitant } from '@/context/SousTraitantContext';
+import { getDecennaleValide } from '@/lib/attestations';
+import { genererListeEntreprisesPdf } from '@/lib/listeEntreprisesPdf';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 export function MarchesTravaux({ chantierId }) {
   const { toast } = useToast();
-  const { lots = [], sousTraitants = [] } = useChantier();
+  const { lots = [], sousTraitants = [], chantiers = [] } = useChantier();
+  const { sousTraitants: artisans = [], attestations = [] } = useSousTraitant();
   const [marches, setMarches] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [generationPdf, setGenerationPdf] = useState(false);
+
+  // ✅ PDF « Liste des entreprises » (réception) : uniquement les lots avec un marché envoyé
+  const exporterListeEntreprises = async () => {
+    // Dernier marché par lot + artisan
+    const derniers = new Map();
+    for (const m of marches) {
+      const cle = `${m.lot_id}|${m.soustraitant_id}`;
+      const actuel = derniers.get(cle);
+      if (!actuel || (m.date_envoi || '') > (actuel.date_envoi || '')) derniers.set(cle, m);
+    }
+
+    const ordreLot = (id) => {
+      const i = lots.findIndex(l => l.id === id);
+      return i === -1 ? Infinity : i;
+    };
+
+    const lignes = [...derniers.values()]
+      .sort((a, b) => ordreLot(a.lot_id) - ordreLot(b.lot_id))
+      .map((m) => {
+        const lot = lots.find(l => l.id === m.lot_id);
+        const st = artisans.find(s => s.id === m.soustraitant_id) || {};
+        // Décennale valide à la date d'envoi du marché
+        const decennale = st.decennale_non_requise
+          ? null
+          : getDecennaleValide(
+              attestations.filter(a => a.soustraitant_id === m.soustraitant_id),
+              m.date_envoi ? new Date(m.date_envoi) : new Date()
+            );
+        return {
+          corpsEtat: lot?.nom || lot?.lot || '',
+          intervenant: st.nomsocieteST || `${st.PrenomST || ''} ${st.nomST || ''}`.trim(),
+          codePostal: st.code_postal || '',
+          ville: st.ville || '',
+          telephone: st.telephone || '',
+          mail: st.email || '',
+          assureur: st.decennale_non_requise ? 'Non requise' : (decennale?.assureur || ''),
+          police: decennale?.numero_police || '',
+        };
+      });
+
+    if (lignes.length === 0) {
+      toast({ title: 'Aucun marché envoyé', description: 'La liste ne reprend que les lots avec un marché envoyé.' });
+      return;
+    }
+
+    const chantier = chantiers.find(c => c.id === chantierId);
+    setGenerationPdf(true);
+    try {
+      await genererListeEntreprisesPdf({
+        lignes,
+        nomFichier: `liste-entreprises-${(chantier?.nomchantier || 'chantier').replace(/[^a-z0-9]/gi, '-')}.pdf`,
+      });
+    } catch (error) {
+      console.error('❌ PDF liste des entreprises :', error);
+      toast({ title: 'Erreur', description: 'Impossible de générer le PDF', variant: 'destructive' });
+    } finally {
+      setGenerationPdf(false);
+    }
+  };
 
   // ✅ Charger les marchés de travaux avec les documents
   const fetchMarches = async () => {
@@ -112,10 +177,18 @@ export function MarchesTravaux({ chantierId }) {
     <div className="space-y-6">
       {/* En-tête avec statistiques */}
       <div>
-        <h2 className="text-2xl font-bold mb-2">Marchés de Travaux</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Suivi des marchés de travaux par lot
-        </p>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-4">
+          <div>
+            <h2 className="text-2xl font-bold mb-2">Marchés de Travaux</h2>
+            <p className="text-sm text-muted-foreground">
+              Suivi des marchés de travaux par lot
+            </p>
+          </div>
+          <Button variant="outline" onClick={exporterListeEntreprises} disabled={generationPdf || stats.envoyes === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            {generationPdf ? 'Génération...' : 'Liste des entreprises (PDF)'}
+          </Button>
+        </div>
 
         {/* Statistiques sous forme de cartes */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

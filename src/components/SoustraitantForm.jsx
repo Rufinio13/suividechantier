@@ -1,79 +1,42 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, UserPlus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { useSousTraitant } from "@/context/SousTraitantContext";
 import { useLots } from "@/context/LotsContext";
 import { Checkbox } from "@/components/ui/checkbox";
-import { supabase } from "@/lib/supabaseClient";
 
-export function SousTraitantForm({ initialData = null, onClose, onSuccess, onArtisanCreated }) {
+// Création d'un artisan (la modification se fait sur sa page de détail)
+export function SousTraitantForm({ onClose, onCreated }) {
   const { toast } = useToast();
-  const { addSousTraitant, updateSousTraitant } = useSousTraitant();
+  const { addSousTraitant } = useSousTraitant();
   const { lots: globalLots = [] } = useLots();
 
   const isSavingRef = useRef(false);
 
   const sortedLots = useMemo(() => {
-    return [...globalLots].sort((a, b) => 
+    return [...globalLots].sort((a, b) =>
       (a.lot || "").localeCompare(b.lot || "")
     );
   }, [globalLots]);
 
   const [formData, setFormData] = useState({
     nomsocieteST: "",
+    siret: "",
     nomST: "",
     PrenomST: "",
     email: "",
     telephone: "",
     adresseST: "",
+    code_postal: "",
+    ville: "",
+    decennale_non_requise: false,
+    urssaf_non_requise: false,
     assigned_lots: [],
   });
-
-  const [hasAuthAccount, setHasAuthAccount] = useState(false);
-
-  useEffect(() => {
-    if (initialData) {
-      setFormData({
-        nomsocieteST: initialData.nomsocieteST || "",
-        nomST: initialData.nomST || "",
-        PrenomST: initialData.PrenomST || "",
-        email: initialData.email || "",
-        telephone: initialData.telephone || "",
-        adresseST: initialData.adresseST || "",
-        assigned_lots: initialData.assigned_lots || [],
-      });
-      
-      // ✅ Vérifier si cet artisan a un compte
-      checkIfHasAuthAccount(initialData);
-    }
-  }, [initialData]);
-
-  // ✅ Vérification via la Edge Function (clé service role) : la lecture directe de
-  // profiles pour un autre utilisateur est bloquée par les RLS côté client, ce qui
-  // faisait échouer silencieusement la détection.
-  const checkIfHasAuthAccount = async (artisan) => {
-    if (!artisan.email) {
-      setHasAuthAccount(!!artisan.user_id);
-      return;
-    }
-    try {
-      // ✅ La fonction vérifie l'appelant et répare elle-même le lien manquant
-      const { data, error } = await supabase.functions.invoke('check-artisan-account', {
-        body: { soustraitantId: artisan.id },
-      });
-      if (error) throw error;
-
-      setHasAuthAccount(!!data?.hasAccount);
-    } catch (err) {
-      console.error('❌ Erreur vérification compte:', err);
-      setHasAuthAccount(!!artisan.user_id);
-    }
-  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -91,61 +54,22 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess, onArt
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (isSavingRef.current) return;
 
     isSavingRef.current = true;
 
     try {
-      let result;
-
-      if (initialData?.id) {
-        // MODE ÉDITION
-        console.log('📝 Mode édition');
-        const updates = {
-          nomsocieteST: formData.nomsocieteST,
-          nomST: formData.nomST,
-          PrenomST: formData.PrenomST,
-          email: formData.email,
-          telephone: formData.telephone,
-          adresseST: formData.adresseST,
-          assigned_lots: formData.assigned_lots,
-        };
-        
-        result = await updateSousTraitant(initialData.id, updates);
-        toast({ title: "Sous-traitant mis à jour ✅" });
-        
-      } else {
-        // MODE CRÉATION
-        console.log('➕ Mode création');
-        result = await addSousTraitant(formData);
-        toast({ title: "Sous-traitant créé ✅", description: result.nomsocieteST });
-        
-        // ✅ Callback pour proposer création de compte
-        if (onArtisanCreated && result) {
-          onArtisanCreated(result);
-        }
-      }
-      
-      onSuccess?.();
+      const result = await addSousTraitant(formData);
+      toast({ title: "Artisan créé ✅", description: result.nomsocieteST });
       onClose?.();
-      
-      setFormData({
-        nomsocieteST: "",
-        nomST: "",
-        PrenomST: "",
-        email: "",
-        telephone: "",
-        adresseST: "",
-        assigned_lots: [],
-      });
-      
+      onCreated?.(result);
     } catch (err) {
       console.error('❌ Erreur:', err);
-      toast({ 
-        title: "Erreur ❌", 
-        description: err.message || "Impossible de sauvegarder", 
-        variant: "destructive" 
+      toast({
+        title: "Erreur ❌",
+        description: err.message || "Impossible de sauvegarder",
+        variant: "destructive"
       });
     } finally {
       setTimeout(() => {
@@ -158,13 +82,18 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess, onArt
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{initialData ? "Modifier Sous-Traitant" : "Nouveau Sous-Traitant"}</DialogTitle>
+          <DialogTitle>Nouvel artisan</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-2">
             <Label htmlFor="nomsocieteST">Nom de la société <span className="text-red-500">*</span></Label>
             <Input id="nomsocieteST" name="nomsocieteST" value={formData.nomsocieteST} onChange={handleChange} required />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="siret">SIRET</Label>
+            <Input id="siret" name="siret" value={formData.siret} onChange={handleChange} placeholder="14 chiffres" />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -191,11 +120,41 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess, onArt
 
           <div className="space-y-2">
             <Label htmlFor="adresseST">Adresse</Label>
-            <Textarea id="adresseST" name="adresseST" value={formData.adresseST} onChange={handleChange} rows={2} />
+            <Input id="adresseST" name="adresseST" value={formData.adresseST} onChange={handleChange} />
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="code_postal">Code postal</Label>
+              <Input id="code_postal" name="code_postal" value={formData.code_postal} onChange={handleChange} />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="ville">Ville</Label>
+              <Input id="ville" name="ville" value={formData.ville} onChange={handleChange} />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="decennale_non_requise"
+                checked={formData.decennale_non_requise}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, decennale_non_requise: !!checked }))}
+              />
+              <Label htmlFor="decennale_non_requise" className="cursor-pointer">Pas de décennale requise</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="urssaf_non_requise"
+                checked={formData.urssaf_non_requise}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, urssaf_non_requise: !!checked }))}
+              />
+              <Label htmlFor="urssaf_non_requise" className="cursor-pointer">Pas d'URSSAF requise</Label>
+            </div>
           </div>
 
           <div className="space-y-2">
-            <Label>Lots / Compétences</Label>
+            <Label>Lots</Label>
             <div className="max-h-40 overflow-auto border rounded-md p-2 space-y-1">
               {sortedLots.map(lot => (
                 <div key={lot.id} className="flex items-center gap-2">
@@ -210,46 +169,11 @@ export function SousTraitantForm({ initialData = null, onClose, onSuccess, onArt
             </div>
           </div>
 
-          {/* ✅ NOUVEAU : Section compte artisan */}
-          {initialData && (
-            <div className="pt-2 border-t">
-              <Label className="text-sm font-medium mb-2 block">Compte Artisan</Label>
-              
-              {hasAuthAccount ? (
-                <div className="bg-green-50 border border-green-200 rounded-md p-3">
-                  <p className="text-sm text-green-800 font-medium">
-                    ✅ Cet artisan possède déjà un compte
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-slate-50 border rounded-md p-3 space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    Cet artisan n'a pas encore de compte.
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      if (onArtisanCreated) {
-                        onArtisanCreated(initialData);
-                      }
-                      onClose();
-                    }}
-                  >
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Créer un compte
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Annuler</Button>
             <Button type="submit" disabled={isSavingRef.current}>
               <Plus className="mr-2 h-4 w-4" />
-              {isSavingRef.current ? 'Enregistrement...' : (initialData ? "Modifier" : "Créer")}
+              {isSavingRef.current ? 'Enregistrement...' : "Créer"}
             </Button>
           </DialogFooter>
         </form>

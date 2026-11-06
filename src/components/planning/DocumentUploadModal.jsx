@@ -3,11 +3,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Upload, X, FileSignature } from 'lucide-react';
+import { Upload, X, FileSignature, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useChantier } from '@/context/ChantierContext';
+import { useSousTraitant } from '@/context/SousTraitantContext';
 import { sendNotificationEmail, getArtisanEmailInfo } from '@/lib/sendNotificationEmail';
 import { getSignedUrl, EMAIL_EXPIRES_IN } from '@/lib/storage';
 
@@ -51,6 +52,7 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
   const { toast } = useToast();
   const { user } = useAuth();
   const { taches = [], sousTraitants = [], lots = [], chantiers = [] } = useChantier();
+  const { getConformite } = useSousTraitant();
 
   const [file, setFile] = useState(null);
   const [typeDocument, setTypeDocument] = useState('autre');
@@ -80,9 +82,16 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
     if (!lotObj) return [];
     const lotName = lotObj.lot;
     return sousTraitants.filter(st => Array.isArray(st.assigned_lots) && st.assigned_lots.includes(lotName))
-      .map(st => ({ id: st.id, nom: st.nomsocieteST || `${st.PrenomST || ''} ${st.nomST || ''}`.trim() || 'Artisan' }))
+      .map(st => ({
+        id: st.id,
+        nom: st.nomsocieteST || `${st.PrenomST || ''} ${st.nomST || ''}`.trim() || 'Artisan',
+        aJour: getConformite(st.id).ok,
+      }))
       .sort((a, b) => (a.nom || '').localeCompare(b.nom || ''));
-  }, [lotId, sousTraitants, sortedLots]);
+  }, [lotId, sousTraitants, sortedLots, getConformite]);
+
+  // Décennale / URSSAF de l'artisan destinataire du marché
+  const conformiteMarche = typeDocument === 'marche_travaux' && artisanId ? getConformite(artisanId) : null;
 
   const handleFileChange = (e) => { const f = e.target.files?.[0]; if (f) setFile(f); };
 
@@ -112,6 +121,14 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
       if (necessiteSignature && (partageType !== 'specifique' || !artisanId)) {
         toast({ title: 'Erreur', description: 'Pour demander une signature, sélectionnez un artisan spécifique', variant: 'destructive' }); return;
       }
+    }
+
+    if (conformiteMarche && !conformiteMarche.ok) {
+      const nom = artisansParLot.find(st => st.id === artisanId)?.nom || 'Cet artisan';
+      const ok = window.confirm(
+        `⚠️ ${nom} n'est pas à jour :\n\n• ${conformiteMarche.motifs.join('\n• ')}\n\nEnvoyer le marché quand même ?`
+      );
+      if (!ok) return;
     }
 
     setUploading(true);
@@ -236,8 +253,19 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess }) 
                   <select id="artisan-marche" value={artisanId} onChange={(e) => setArtisanId(e.target.value)} required disabled={artisansParLot.length === 0}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 mt-2">
                     <option value="">{artisansParLot.length === 0 ? 'Aucun artisan disponible' : 'Sélectionner un artisan...'}</option>
-                    {artisansParLot.map(st => <option key={st.id} value={st.id}>{st.nom}</option>)}
+                    {artisansParLot.map(st => <option key={st.id} value={st.id}>{st.nom}{st.aJour ? '' : ' ⚠️ non à jour'}</option>)}
                   </select>
+                </div>
+              )}
+              {conformiteMarche && !conformiteMarche.ok && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-md text-sm flex gap-2">
+                  <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-red-800">
+                    <p className="font-medium">Cet artisan n'est pas à jour :</p>
+                    <ul className="list-disc pl-5">
+                      {conformiteMarche.motifs.map(m => <li key={m}>{m}</li>)}
+                    </ul>
+                  </div>
                 </div>
               )}
             </>
