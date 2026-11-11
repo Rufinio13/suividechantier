@@ -6,7 +6,31 @@ import { Plus, Edit2, Trash2, MessageSquare, Ruler } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
-// Thèmes de couleur par catégorie de commentaire
+// Couleurs communes : bleu clair en cours, vert clair quand tout est coché
+const COULEURS = {
+  enCours: {
+    carte: 'bg-gradient-to-r from-blue-50 to-blue-100 border-blue-300',
+    titre: 'text-blue-900',
+    texte: 'text-blue-800',
+    meta: 'text-slate-600',
+    compteur: 'text-slate-600 bg-white/50',
+    checkbox: '',
+    actions: 'text-slate-600 hover:text-slate-800 hover:bg-white/50',
+    supprimer: 'text-red-600 hover:text-red-700 hover:bg-red-100',
+  },
+  termine: {
+    carte: 'bg-gradient-to-r from-green-50 to-green-100 border-green-300',
+    titre: 'text-green-900',
+    texte: 'text-green-800',
+    meta: 'text-slate-600',
+    compteur: 'text-slate-600 bg-white/50',
+    checkbox: '',
+    actions: 'text-slate-600 hover:text-slate-800 hover:bg-white/50',
+    supprimer: 'text-red-600 hover:text-red-700 hover:bg-red-100',
+  },
+};
+
+// Libellés par catégorie de commentaire
 export const CATEGORIES_COMMENTAIRE = {
   journal: {
     titre: 'Journal des Commentaires',
@@ -14,27 +38,7 @@ export const CATEGORIES_COMMENTAIRE = {
     bouton: 'Ajouter un commentaire',
     vide: 'Aucun commentaire pour ce chantier pour le moment.',
     icon: MessageSquare,
-    iconClass: 'text-primary',
-    enCours: {
-      carte: 'bg-gradient-to-r from-blue-50 to-blue-100 border-blue-300',
-      titre: 'text-blue-900',
-      texte: 'text-blue-800',
-      meta: 'text-slate-600',
-      compteur: 'text-slate-600 bg-white/50',
-      checkbox: '',
-      actions: 'text-slate-600 hover:text-slate-800 hover:bg-white/50',
-      supprimer: 'text-red-600 hover:text-red-700 hover:bg-red-100',
-    },
-    termine: {
-      carte: 'bg-gradient-to-r from-green-50 to-green-100 border-green-300',
-      titre: 'text-green-900',
-      texte: 'text-green-800',
-      meta: 'text-slate-600',
-      compteur: 'text-slate-600 bg-white/50',
-      checkbox: '',
-      actions: 'text-slate-600 hover:text-slate-800 hover:bg-white/50',
-      supprimer: 'text-red-600 hover:text-red-700 hover:bg-red-100',
-    },
+    ...COULEURS,
   },
   bureau_etudes: {
     titre: "Bureau d'Études",
@@ -42,27 +46,7 @@ export const CATEGORIES_COMMENTAIRE = {
     bouton: 'Ajouter une note BE',
     vide: "Aucune note du bureau d'études pour ce chantier pour le moment.",
     icon: Ruler,
-    iconClass: 'text-blue-800',
-    enCours: {
-      carte: 'bg-gradient-to-r from-blue-800 to-blue-900 border-blue-950',
-      titre: 'text-white',
-      texte: 'text-blue-50',
-      meta: 'text-blue-200',
-      compteur: 'text-blue-50 bg-white/15',
-      checkbox: 'border-white data-[state=checked]:bg-white data-[state=checked]:text-blue-900',
-      actions: 'text-blue-100 hover:text-white hover:bg-white/15',
-      supprimer: 'text-red-300 hover:text-red-100 hover:bg-red-500/30',
-    },
-    termine: {
-      carte: 'bg-gradient-to-r from-emerald-700 to-emerald-800 border-emerald-900',
-      titre: 'text-white',
-      texte: 'text-emerald-50',
-      meta: 'text-emerald-200',
-      compteur: 'text-emerald-50 bg-white/15',
-      checkbox: 'border-white data-[state=checked]:bg-white data-[state=checked]:text-emerald-800',
-      actions: 'text-emerald-100 hover:text-white hover:bg-white/15',
-      supprimer: 'text-red-300 hover:text-red-100 hover:bg-red-500/30',
-    },
+    ...COULEURS,
   },
 };
 
@@ -95,15 +79,12 @@ export function CommentairesBloc({ categorie, commentaires, onAdd, onEdit, onDel
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
           <div>
             <CardTitle className="text-xl flex items-center">
-              <Icon className={`mr-2 h-5 w-5 ${theme.iconClass}`} />
+              <Icon className="mr-2 h-5 w-5 text-primary" />
               {theme.titre}
             </CardTitle>
             <CardDescription>{theme.description}</CardDescription>
           </div>
-          <Button
-            onClick={onAdd}
-            className={categorie === 'bureau_etudes' ? 'bg-blue-800 hover:bg-blue-900' : ''}
-          >
+          <Button onClick={onAdd}>
             <Plus className="mr-2 h-4 w-4" /> {theme.bouton}
           </Button>
         </div>
