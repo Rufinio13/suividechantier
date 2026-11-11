@@ -12,6 +12,7 @@ import { useArtisanPreview } from '@/context/ArtisanPreviewContext';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { SignatureCanvas } from '@/components/SignatureCanvas';
+import { PdfViewer } from '@/components/PdfViewer';
 import { PDFDocument, rgb } from 'pdf-lib';
 import { TYPE_PLAN_LABELS, TYPES_PLAN } from '@/components/planning/DocumentUploadModal';
 
@@ -77,6 +78,21 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
   const [signatureData, setSignatureData] = useState(null);
   const [signing, setSigning] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
+  const [pdfBlob, setPdfBlob] = useState(null);
+
+  // Libérer l'URL locale du PDF quand on la remplace ou qu'on quitte la page
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    };
+  }, [pdfUrl]);
+
+  const closeSignatureView = () => {
+    setSelectedDoc(null);
+    setPdfUrl(null);
+    setPdfBlob(null);
+    setSignatureData(null);
+  };
   const [expandedCategories, setExpandedCategories] = useState({
     bon_commande: true,
     plan: true,
@@ -220,8 +236,10 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
 
         if (error) throw error;
 
-        const url = URL.createObjectURL(data);
-        setPdfUrl(url);
+        // Forcer le type PDF : certains navigateurs mobiles n'ouvrent pas un blob sans type
+        const pdfData = data.type === 'application/pdf' ? data : new Blob([data], { type: 'application/pdf' });
+        setPdfBlob(pdfData);
+        setPdfUrl(URL.createObjectURL(pdfData));
 
       } catch (error) {
         console.error('Erreur chargement PDF:', error);
@@ -393,10 +411,8 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
         description: 'Votre signature a été enregistrée avec succès',
       });
 
-      setSelectedDoc(null);
-      setPdfUrl(null);
-      setSignatureData(null);
-      
+      closeSignatureView();
+
       setTimeout(async () => {
         await loadDocuments();
       }, 1000);
@@ -430,16 +446,14 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
             <FileSignature className="h-5 w-5 text-orange-600" />
             Signature électronique
           </CardTitle>
-          <p className="text-sm text-muted-foreground">{selectedDoc.nom_fichier}</p>
+          <p className="text-sm text-muted-foreground break-all">{selectedDoc.nom_fichier}</p>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {pdfUrl && (
-            <div className="border rounded-lg overflow-hidden">
-              <iframe
-                src={pdfUrl}
-                className="w-full h-[500px]"
-                title="Aperçu document"
-              />
+        <CardContent className="space-y-6 px-3 sm:px-6">
+          {pdfBlob ? (
+            <PdfViewer blob={pdfBlob} url={pdfUrl} />
+          ) : (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
             </div>
           )}
 
@@ -465,14 +479,10 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
             </div>
           )}
 
-          <div className="flex gap-2">
+          <div className="flex flex-col-reverse sm:flex-row gap-2">
             <Button
               variant="outline"
-              onClick={() => {
-                setSelectedDoc(null);
-                setPdfUrl(null);
-                setSignatureData(null);
-              }}
+              onClick={closeSignatureView}
               className="flex-1"
             >
               {disableSignature ? 'Fermer' : 'Annuler'}
@@ -582,15 +592,15 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
                       return (
                         <div
                           key={doc.id}
-                          className={`flex items-center justify-between p-3 rounded-lg border transition ${
+                          className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 rounded-lg border transition ${
                             needsSignature ? 'bg-orange-50 border-orange-300' : 'bg-white hover:bg-gray-50'
                           }`}
                         >
-                          <div className="flex items-center gap-3 flex-1">
-                            <Folder className="h-5 w-5 text-gray-400" />
-                            <div className="flex-1">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <Folder className="h-5 w-5 text-gray-400 shrink-0" />
+                            <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <p className="font-medium text-sm">{doc.nom_fichier}</p>
+                                <p className="font-medium text-sm break-all">{doc.nom_fichier}</p>
 
                                 {doc.type_document === 'plan' && doc.type_plan && (
                                   <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium">
@@ -637,11 +647,11 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
                           </div>
 
                           {/* Actions */}
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center justify-end gap-2 shrink-0">
                             {needsSignature ? (
                               <Button
                                 onClick={() => handleViewDocument(doc)}
-                                className="bg-orange-600 hover:bg-orange-700"
+                                className="bg-orange-600 hover:bg-orange-700 w-full sm:w-auto"
                                 size="sm"
                               >
                                 <FileSignature className="mr-2 h-4 w-4" />

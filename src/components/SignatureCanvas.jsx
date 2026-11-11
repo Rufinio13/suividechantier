@@ -1,85 +1,109 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { X, Pen } from 'lucide-react';
 
+// Zone de signature compatible doigt, souris et stylet (événements "pointer").
+// Les traits sont mémorisés en coordonnées relatives (0 à 1) : si la zone change
+// de taille (rotation du téléphone, chargement du PDF au-dessus, zoom), la
+// signature est redessinée au bon endroit au lieu d'être décalée ou effacée.
 export function SignatureCanvas({ onSignatureCapture, onClear }) {
   const canvasRef = useRef(null);
-  const [isDrawing, setIsDrawing] = useState(false);
+  const strokesRef = useRef([]);       // [[{x, y}, ...], ...]
+  const currentStrokeRef = useRef(null);
   const [isEmpty, setIsEmpty] = useState(true);
+
+  const redraw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    for (const stroke of strokesRef.current) {
+      if (!stroke.length) continue;
+      ctx.beginPath();
+      ctx.moveTo(stroke[0].x * w, stroke[0].y * h);
+      if (stroke.length === 1) {
+        // Simple appui : dessiner un point
+        ctx.lineTo(stroke[0].x * w + 0.1, stroke[0].y * h);
+      }
+      for (let i = 1; i < stroke.length; i++) {
+        ctx.lineTo(stroke[i].x * w, stroke[i].y * h);
+      }
+      ctx.stroke();
+    }
+  }, []);
+
+  // Adapter la résolution du canvas à sa taille affichée et à la densité de l'écran
+  const resize = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (!w || !h) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+    redraw();
+  }, [redraw]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+    return () => ro.disconnect();
+  }, [resize]);
 
-    const ctx = canvas.getContext('2d');
-    
-    // Configurer le canvas
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-    
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-  }, []);
+  const getPoint = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
+    };
+  };
 
-  const startDrawing = (e) => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-    
-    ctx.beginPath();
-    
-    if (e.type === 'mousedown') {
-      ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-    } else if (e.type === 'touchstart') {
-      e.preventDefault();
-      const touch = e.touches[0];
-      ctx.moveTo(touch.clientX - rect.left, touch.clientY - rect.top);
-    }
-    
-    setIsDrawing(true);
+  const handlePointerDown = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    // Continuer à recevoir le tracé même si le doigt sort de la zone
+    canvasRef.current.setPointerCapture?.(e.pointerId);
+    const stroke = [getPoint(e)];
+    currentStrokeRef.current = stroke;
+    strokesRef.current.push(stroke);
+    redraw();
+  };
+
+  const handlePointerMove = (e) => {
+    if (!currentStrokeRef.current) return;
+    e.preventDefault();
+    // Points intermédiaires pour un trait fluide sur mobile
+    const events = e.nativeEvent.getCoalescedEvents?.() || [e];
+    for (const ev of events) currentStrokeRef.current.push(getPoint(ev));
+    redraw();
+  };
+
+  const handlePointerUp = (e) => {
+    if (!currentStrokeRef.current) return;
+    currentStrokeRef.current = null;
+    canvasRef.current.releasePointerCapture?.(e.pointerId);
     setIsEmpty(false);
-  };
-
-  const draw = (e) => {
-    if (!isDrawing) return;
-    
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-    
-    if (e.type === 'mousemove') {
-      ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-      ctx.stroke();
-    } else if (e.type === 'touchmove') {
-      e.preventDefault();
-      const touch = e.touches[0];
-      ctx.lineTo(touch.clientX - rect.left, touch.clientY - rect.top);
-      ctx.stroke();
-    }
-  };
-
-  const stopDrawing = () => {
-    if (isDrawing) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      ctx.closePath();
-      setIsDrawing(false);
-      
-      // Capturer la signature
-      if (!isEmpty) {
-        const imageData = canvas.toDataURL('image/png');
-        onSignatureCapture?.(imageData);
-      }
-    }
+    onSignatureCapture?.(canvasRef.current.toDataURL('image/png'));
   };
 
   const clearSignature = () => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    strokesRef.current = [];
+    currentStrokeRef.current = null;
+    redraw();
     setIsEmpty(true);
     onClear?.();
   };
@@ -102,18 +126,15 @@ export function SignatureCanvas({ onSignatureCapture, onClear }) {
           Effacer
         </Button>
       </div>
-      
+
       <div className="border-2 border-dashed rounded-lg bg-white relative">
         <canvas
           ref={canvasRef}
-          className="w-full h-40 cursor-crosshair touch-none"
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={stopDrawing}
+          className="block w-full h-40 cursor-crosshair touch-none select-none"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
         />
         {isEmpty && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
