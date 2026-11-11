@@ -54,7 +54,7 @@ export function CommentairesProvider({ children }) {
   }, [commentaires]);
 
   // ✅ AJOUTER UN COMMENTAIRE (AVEC wrapper)
-  const addCommentaire = async (chantierId, titre, texte) => {
+  const addCommentaire = async (chantierId, titre, texte, categorie = 'journal') => {
     
       // Récupérer le nomsociete du chantier
       const { data: chantier, error: chantierError } = await supabase
@@ -81,7 +81,9 @@ export function CommentairesProvider({ children }) {
           texte,
           auteur,
           pris_en_compte: false,
-          date: new Date().toISOString()
+          date: new Date().toISOString(),
+          // Colonne envoyée seulement hors journal : le journal marche même avant la migration SQL
+          ...(categorie && categorie !== 'journal' ? { categorie } : {}),
         }])
         .select()
         .single();

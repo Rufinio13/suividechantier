@@ -20,6 +20,7 @@ import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { StorageImage } from '@/components/StorageImage.jsx';
 import { openStorageFile } from '@/lib/storage';
+import { CommentairesBloc, parseLignes } from '@/components/planning/CommentairesBloc.jsx';
 
 export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   const params = useParams();
@@ -51,6 +52,7 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   // ✅ ÉTAT COMMENTAIRES
   const [isCommentaireModalOpen, setIsCommentaireModalOpen] = useState(false);
   const [editingCommentaire, setEditingCommentaire] = useState(null);
+  const [filtreCommentaires, setFiltreCommentaires] = useState('tout'); // tout | journal | bureau_etudes
 
   const chantier = useMemo(() => chantiers.find(c => c.id === chantierId), [chantiers, chantierId]);
 
@@ -76,6 +78,22 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
       return dateA - dateB;
     });
   }, [chantierId, getCommentairesByChantier]);
+
+  // Sans catégorie (anciens commentaires) = journal
+  const commentairesJournal = useMemo(
+    () => commentaires.filter(c => (c.categorie || 'journal') === 'journal'),
+    [commentaires]
+  );
+  const commentairesBE = useMemo(
+    () => commentaires.filter(c => c.categorie === 'bureau_etudes'),
+    [commentaires]
+  );
+
+  const FILTRES_COMMENTAIRES = [
+    { value: 'tout', label: 'Tout', count: commentairesJournal.length + commentairesBE.length },
+    { value: 'journal', label: 'Journal', count: commentairesJournal.length },
+    { value: 'bureau_etudes', label: "Bureau d'Études", count: commentairesBE.length },
+  ];
 
   // =========================================
   // ✅ RÉCUPÉRER LES POINTS NC NON VALIDÉS
@@ -230,27 +248,20 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   // =========================================
   // ✅ GESTION DES COMMENTAIRES MULTI-LIGNES
   // =========================================
-  const handleOpenCommentaireModal = (commentaire = null) => {
+  const handleOpenCommentaireModal = (commentaire = null, categorie = 'journal') => {
     if (commentaire) {
-      let lignes = [];
-      try {
-        lignes = typeof commentaire.texte === 'string' 
-          ? JSON.parse(commentaire.texte) 
-          : commentaire.texte;
-      } catch {
-        lignes = [{ texte: commentaire.texte, checked: false }];
-      }
-
       setEditingCommentaire({
         id: commentaire.id,
         titre: commentaire.titre,
-        lignes: lignes
+        lignes: parseLignes(commentaire),
+        categorie: commentaire.categorie || 'journal',
       });
     } else {
       setEditingCommentaire({
         id: null,
         titre: '',
-        lignes: [{ texte: '', checked: false }]
+        lignes: [{ texte: '', checked: false }],
+        categorie,
       });
     }
     setIsCommentaireModalOpen(true);
@@ -308,9 +319,10 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
         });
       } else {
         await addCommentaire(
-          chantierId, 
-          editingCommentaire.titre.trim(), 
-          texteJSON
+          chantierId,
+          editingCommentaire.titre.trim(),
+          texteJSON,
+          editingCommentaire.categorie
         );
       }
       handleCloseCommentaireModal();
@@ -331,23 +343,12 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
     }
   };
 
-  const handleToggleLigne = async (commentaireId, ligneIndex) => {
+  const handleToggleLigne = async (commentaire, ligneIndex) => {
     try {
-      const commentaire = commentaires.find(c => c.id === commentaireId);
-      if (!commentaire) return;
-
-      let lignes = [];
-      try {
-        lignes = typeof commentaire.texte === 'string' 
-          ? JSON.parse(commentaire.texte) 
-          : commentaire.texte;
-      } catch {
-        lignes = [{ texte: commentaire.texte, checked: false }];
-      }
-
+      const lignes = parseLignes(commentaire);
       lignes[ligneIndex].checked = !lignes[ligneIndex].checked;
 
-      await updateCommentaire(commentaireId, {
+      await updateCommentaire(commentaire.id, {
         texte: JSON.stringify(lignes)
       });
     } catch (error) {
@@ -710,119 +711,48 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
         </CardContent>
       </Card>
 
-      {/* ✅ SECTION COMMENTAIRES */}
-      <Card className={isEmbedded ? 'shadow-none border-0 mt-4' : 'mt-4'}>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle className="text-xl flex items-center">
-                <MessageSquare className="mr-2 h-5 w-5 text-primary" /> 
-                Journal des Commentaires
-              </CardTitle>
-              <CardDescription>
-                Suivez les discussions et notes importantes relatives à ce chantier.
-              </CardDescription>
-            </div>
-            <Button onClick={() => handleOpenCommentaireModal()}>
-              <Plus className="mr-2 h-4 w-4" /> Ajouter un commentaire
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {commentaires.length > 0 ? (
-            <ul className="space-y-3">
-              {commentaires.map(commentaire => {
-                let lignes = [];
-                try {
-                  lignes = typeof commentaire.texte === 'string' 
-                    ? JSON.parse(commentaire.texte) 
-                    : commentaire.texte;
-                } catch {
-                  lignes = [{ texte: commentaire.texte, checked: false }];
-                }
+      {/* ✅ SECTION COMMENTAIRES : filtre + Journal + Bureau d'Études */}
+      <div className="flex flex-wrap items-center gap-2 mt-4">
+        <span className="text-sm text-muted-foreground mr-1">Afficher :</span>
+        {FILTRES_COMMENTAIRES.map(f => (
+          <button
+            key={f.value}
+            type="button"
+            onClick={() => setFiltreCommentaires(f.value)}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium border transition ${
+              filtreCommentaires === f.value
+                ? 'bg-slate-800 text-white border-slate-800'
+                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+            }`}
+          >
+            {f.label} ({f.count})
+          </button>
+        ))}
+      </div>
 
-                const nbCoches = lignes.filter(l => l.checked).length;
-                const nbTotal = lignes.length;
-                const toutCoche = nbCoches === nbTotal;
+      {filtreCommentaires !== 'bureau_etudes' && (
+        <CommentairesBloc
+          categorie="journal"
+          commentaires={commentairesJournal}
+          onAdd={() => handleOpenCommentaireModal(null, 'journal')}
+          onEdit={(c) => handleOpenCommentaireModal(c)}
+          onDelete={handleDeleteCommentaire}
+          onToggleLigne={handleToggleLigne}
+          className={isEmbedded ? 'shadow-none border-0 mt-4' : 'mt-4'}
+        />
+      )}
 
-                return (
-                  <li 
-                    key={commentaire.id} 
-                    className={`p-4 border-2 rounded-lg shadow-sm ${
-                      toutCoche
-                        ? 'bg-gradient-to-r from-green-50 to-green-100 border-green-300' 
-                        : 'bg-gradient-to-r from-blue-50 to-blue-100 border-blue-300'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className={`font-semibold text-base ${
-                            toutCoche ? 'text-green-900' : 'text-blue-900'
-                          }`}>
-                            {commentaire.titre}
-                          </h4>
-                          <span className="text-xs text-slate-600 bg-white/50 px-2 py-1 rounded">
-                            {nbCoches}/{nbTotal} cochés
-                          </span>
-                        </div>
-
-                        <ul className="space-y-2">
-                          {lignes.map((ligne, index) => (
-                            <li key={index} className="flex items-start gap-2">
-                              <Checkbox
-                                id={`ligne-${commentaire.id}-${index}`}
-                                checked={ligne.checked}
-                                onCheckedChange={() => handleToggleLigne(commentaire.id, index)}
-                                className="mt-0.5"
-                              />
-                              <label
-                                htmlFor={`ligne-${commentaire.id}-${index}`}
-                                className={`flex-1 text-sm cursor-pointer ${
-                                  toutCoche ? 'text-green-800' : 'text-blue-800'
-                                }`}
-                              >
-                                {ligne.texte}
-                              </label>
-                            </li>
-                          ))}
-                        </ul>
-
-                        <p className="text-xs text-slate-600 mt-3 italic">
-                          Par {commentaire.auteur} - {formatDate(commentaire.date)}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-col space-y-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleOpenCommentaireModal(commentaire)} 
-                          className="h-8 w-8 text-slate-600 hover:text-slate-800 hover:bg-white/50"
-                        >
-                          <Edit2 size={16} />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleDeleteCommentaire(commentaire.id)} 
-                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-100"
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="text-muted-foreground text-center py-4">
-              Aucun commentaire pour ce chantier pour le moment.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {filtreCommentaires !== 'journal' && (
+        <CommentairesBloc
+          categorie="bureau_etudes"
+          commentaires={commentairesBE}
+          onAdd={() => handleOpenCommentaireModal(null, 'bureau_etudes')}
+          onEdit={(c) => handleOpenCommentaireModal(c)}
+          onDelete={handleDeleteCommentaire}
+          onToggleLigne={handleToggleLigne}
+          className={isEmbedded ? 'shadow-none border-0 mt-4' : 'mt-4'}
+        />
+      )}
 
       {/* MODALES */}
       {(isAddTacheDialogOpen || isEditTacheDialogOpen) && globalLots.length > 0 && (
@@ -855,7 +785,9 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
           <Card className="w-full max-w-2xl z-50 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <CardHeader>
               <CardTitle>
-                {editingCommentaire.id ? 'Modifier le commentaire' : 'Nouveau commentaire'}
+                {editingCommentaire.categorie === 'bureau_etudes'
+                  ? (editingCommentaire.id ? 'Modifier la note BE' : "Nouvelle note Bureau d'Études")
+                  : (editingCommentaire.id ? 'Modifier le commentaire' : 'Nouveau commentaire')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
