@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useChantier } from '@/context/ChantierContext';
 import { useReferentielCQ } from '@/context/ReferentielCQContext';
@@ -22,7 +22,12 @@ export function ChantierDetailsArtisan() {
   const { chantiers, taches, loading } = useChantier();
   const { controles, modelesCQ } = useReferentielCQ();
 
-  const [activeTab, setActiveTab] = useState('documents');
+  // Onglet demandé depuis l'accueil (?onglet=documents|nc|taches)
+  const [searchParams] = useSearchParams();
+  const ongletDemande = searchParams.get('onglet');
+  const [activeTab, setActiveTab] = useState(
+    ['documents', 'nc', 'taches'].includes(ongletDemande) ? ongletDemande : 'documents'
+  );
   const [docsASignerCount, setDocsASignerCount] = useState(0);
   const [nouveauxDocsCount, setNouveauxDocsCount] = useState(0);
 

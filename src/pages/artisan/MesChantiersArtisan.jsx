@@ -1,186 +1,59 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useMemo } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useChantier } from '@/context/ChantierContext';
-import { useReferentielCQ } from '@/context/ReferentielCQContext';
 import { useArtisanPreview } from '@/context/ArtisanPreviewContext';
-import { useMonSousTraitantId } from '@/hooks/useMonSousTraitantId';
+import { useIndicateursArtisan } from '@/hooks/useIndicateursArtisan';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Building2, MapPin, AlertTriangle, FileSignature, FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Building2, MapPin, X, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/lib/supabaseClient';
+
+// Filtres accessibles depuis les tuiles de l'accueil (?filtre=...)
+const FILTRES = {
+  taches: {
+    label: 'Chantiers avec des tâches à faire',
+    garder: (i) => i.tachesAFaireCount > 0,
+    onglet: 'taches',
+  },
+  retard: {
+    label: 'Chantiers avec des tâches en retard',
+    garder: (i) => i.tachesEnRetardCount > 0,
+    onglet: 'taches',
+  },
+  documents: {
+    label: 'Chantiers avec des documents non vus',
+    garder: (i) => i.nouveauxCount > 0,
+    onglet: 'documents',
+  },
+  marches: {
+    label: 'Chantiers avec un marché de travaux à signer',
+    garder: (i) => i.marchesASignerCount > 0,
+    onglet: 'documents',
+  },
+  nc: {
+    label: 'Chantiers avec des non-conformités',
+    garder: (i) => i.ncCount > 0,
+    onglet: 'nc',
+  },
+};
+
+const INDICATEURS_VIDES = {
+  nouveauxCount: 0, marchesASignerCount: 0, autresASignerCount: 0, ncCount: 0,
+  tachesCount: 0, tachesAFaireCount: 0, tachesEnRetardCount: 0,
+};
 
 export function MesChantiersArtisan() {
   const preview = useArtisanPreview();
   const basePath = preview?.basePath || '/artisan';
-  const { chantiers, taches, loading } = useChantier();
-  const { modelesCQ, controles } = useReferentielCQ();
-  const [documentsData, setDocumentsData] = useState({});
+  const { monSousTraitantId, mesChantiers, parChantier, loading } = useIndicateursArtisan();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const monSousTraitantId = useMonSousTraitantId();
+  const filtre = FILTRES[searchParams.get('filtre')] || null;
 
-  // Mes chantiers
-  const mesChantiers = useMemo(() => {
-    if (!monSousTraitantId) return [];
-    
-    const tachesArtisan = taches.filter(t => 
-      t.assignetype === 'soustraitant' && 
-      t.assigneid === monSousTraitantId
-    );
-    
-    const chantierIds = [...new Set(tachesArtisan.map(t => t.chantierid))];
-    return chantiers.filter(c => chantierIds.includes(c.id));
-  }, [taches, chantiers, monSousTraitantId]);
-
-  // Charger les documents pour tous les chantiers
-  useEffect(() => {
-    const loadDocuments = async () => {
-      if (!monSousTraitantId || mesChantiers.length === 0) return;
-
-      try {
-        const chantierIds = mesChantiers.map(c => c.id);
-        
-        const { data, error } = await supabase
-  .from('documents_chantier')
-  .select('chantier_id, necessite_signature, signature_statut, artisan_assigne_signature, artisans_vus, partage_type, artisan_id')
-  .in('chantier_id', chantierIds)
-  .or(`partage_type.eq.tous,artisan_id.eq.${monSousTraitantId}`);
-
-        if (error) throw error;
-
-        // Grouper par chantier
-        const grouped = {};
-        data.forEach(doc => {
-          if (!grouped[doc.chantier_id]) {
-            grouped[doc.chantier_id] = { aSignerCount: 0, nouveauxCount: 0 };
-          }
-
-          // À signer
-          if (
-            doc.necessite_signature &&
-            doc.artisan_assigne_signature === monSousTraitantId &&
-            doc.signature_statut === 'en_attente'
-          ) {
-            grouped[doc.chantier_id].aSignerCount++;
-          }
-          // Nouveaux (pas à signer et pas vus)
-          else if (
-            !doc.necessite_signature &&
-            (!doc.artisans_vus || !doc.artisans_vus.includes(monSousTraitantId))
-          ) {
-            grouped[doc.chantier_id].nouveauxCount++;
-          }
-        });
-
-        setDocumentsData(grouped);
-      } catch (error) {
-        console.error('Erreur chargement documents:', error);
-      }
-    };
-
-    loadDocuments();
-  }, [monSousTraitantId, mesChantiers]);
-
-  // Compter les tâches par chantier
-  const countTaches = (chantierId) => {
-    return taches.filter(t => 
-      t.chantierid === chantierId && 
-      t.assignetype === 'soustraitant' && 
-      t.assigneid === monSousTraitantId
-    ).length;
-  };
-
-  // ✅ CORRIGÉ : Compter les NC par chantier avec vérification des suppressions
-  const countNC = (chantierId) => {
-    if (!monSousTraitantId) return 0;
-    
-    let count = 0;
-    const controlesChantier = controles.filter(c => c.chantier_id === chantierId);
-
-    controlesChantier.forEach(ctrl => {
-      const modele = modelesCQ.find(m => m.id === ctrl.modele_cq_id);
-      if (!modele) return;
-
-      // ✅ 1️⃣ NC DU MODÈLE DE BASE (ctrl.resultats)
-      if (ctrl.resultats) {
-        Object.entries(ctrl.resultats).forEach(([categorieId, resultatsCategorie]) => {
-          const categorie = modele.categories?.find(c => c.id === categorieId);
-          if (!categorie) return;
-
-          // ✅ Vérifier si la catégorie n'est pas supprimée
-          const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
-          if (categoriesSupprimees.includes(categorieId)) return;
-
-          Object.entries(resultatsCategorie).forEach(([sousCategorieId, resultatsSousCategorie]) => {
-            const sousCategorie = categorie.sousCategories?.find(sc => sc.id === sousCategorieId);
-            if (!sousCategorie) return;
-
-            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
-            const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
-            if (sousCategoriesSupprimees.includes(sousCategorieId)) return;
-
-            Object.entries(resultatsSousCategorie).forEach(([pointControleId, resultatPoint]) => {
-              // ✅ Vérifier si le point n'est pas supprimé
-              const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieId] || [];
-              if (pointsSupprimes.includes(pointControleId)) return;
-
-              if (
-                resultatPoint.resultat === 'NC' && 
-                resultatPoint.soustraitant_id === monSousTraitantId &&
-                !resultatPoint.repriseValidee
-              ) {
-                const pointControle = sousCategorie.pointsControle?.find(pc => pc.id === pointControleId);
-                if (pointControle) {
-                  count++;
-                }
-              }
-            });
-          });
-        });
-      }
-
-      // ✅ 2️⃣ NC DES POINTS SPÉCIFIQUES (ctrl.points_specifiques)
-      if (ctrl.points_specifiques) {
-        Object.entries(ctrl.points_specifiques).forEach(([categorieId, categoriePoints]) => {
-          const categorie = modele.categories?.find(c => c.id === categorieId);
-          
-          // ✅ Vérifier si la catégorie n'est pas supprimée
-          const categoriesSupprimees = ctrl.controles_supprimes?.categories || [];
-          if (categoriesSupprimees.includes(categorieId)) return;
-          
-          Object.entries(categoriePoints).forEach(([sousCategorieKey, pointsMap]) => {
-            const sousCategorie = sousCategorieKey === '_global' 
-              ? { id: '_global', nom: 'Points spécifiques' }
-              : categorie?.sousCategories?.find(sc => sc.id === sousCategorieKey);
-            
-            if (!sousCategorie) return;
-
-            // ✅ Vérifier si la sous-catégorie n'est pas supprimée
-            const sousCategoriesSupprimees = ctrl.controles_supprimes?.sous_categories?.[categorieId] || [];
-            if (sousCategoriesSupprimees.includes(sousCategorieKey)) return;
-
-            Object.entries(pointsMap).forEach(([pointControleId, pointData]) => {
-              // ✅ Vérifier si le point n'est pas supprimé
-              const pointsSupprimes = ctrl.controles_supprimes?.points?.[categorieId]?.[sousCategorieKey] || [];
-              if (pointsSupprimes.includes(pointControleId)) return;
-
-              const resultatPoint = ctrl.resultats?.[categorieId]?.[sousCategorieKey]?.[pointControleId];
-              
-              if (
-                resultatPoint?.resultat === 'NC' && 
-                resultatPoint.soustraitant_id === monSousTraitantId &&
-                !resultatPoint.repriseValidee
-              ) {
-                count++;
-              }
-            });
-          });
-        });
-      }
-    });
-
-    return count;
-  };
+  const chantiersAffiches = useMemo(() => {
+    if (!filtre) return mesChantiers;
+    return mesChantiers.filter(c => filtre.garder(parChantier[c.id] || INDICATEURS_VIDES));
+  }, [mesChantiers, parChantier, filtre]);
 
   if (loading) {
     return (
@@ -206,27 +79,48 @@ export function MesChantiersArtisan() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Mes Chantiers</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Mes Chantiers</h1>
         <p className="text-muted-foreground mt-2">
           Liste des chantiers où vous avez des tâches assignées
         </p>
       </div>
 
+      {/* Bandeau du filtre actif */}
+      {filtre && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
+          <p className="text-sm font-medium text-orange-900">
+            {filtre.label} ({chantiersAffiches.length})
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 bg-white"
+            onClick={() => setSearchParams({})}
+          >
+            <X className="mr-1 h-4 w-4" />
+            Tout voir
+          </Button>
+        </div>
+      )}
+
       {/* Liste des chantiers */}
-      {mesChantiers.length === 0 ? (
+      {chantiersAffiches.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <Building2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">Aucun chantier assigné pour le moment</p>
+            <p className="text-muted-foreground">
+              {filtre ? 'Aucun chantier concerné : tout est à jour 👍' : 'Aucun chantier assigné pour le moment'}
+            </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mesChantiers.map((chantier, index) => {
-            const nbNC = countNC(chantier.id);
-            const docsData = documentsData[chantier.id] || { aSignerCount: 0, nouveauxCount: 0 };
-            const hasAlerts = nbNC > 0 || docsData.aSignerCount > 0 || docsData.nouveauxCount > 0;
-            
+          {chantiersAffiches.map((chantier, index) => {
+            const ind = parChantier[chantier.id] || INDICATEURS_VIDES;
+            const aSignerCount = ind.marchesASignerCount + ind.autresASignerCount;
+            const hasAlerts = ind.ncCount > 0 || aSignerCount > 0 || ind.nouveauxCount > 0;
+            const lien = `${basePath}/chantiers/${chantier.id}${filtre ? `?onglet=${filtre.onglet}` : ''}`;
+
             return (
               <motion.div
                 key={chantier.id}
@@ -234,9 +128,9 @@ export function MesChantiersArtisan() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05 }}
               >
-                <Link to={`${basePath}/chantiers/${chantier.id}`}>
+                <Link to={lien}>
                   <Card className={`h-full hover:shadow-lg transition-shadow cursor-pointer border-l-4 ${
-                    nbNC > 0 ? 'border-l-red-500' : 'border-l-orange-500'
+                    ind.ncCount > 0 || ind.tachesEnRetardCount > 0 ? 'border-l-red-500' : 'border-l-orange-500'
                   }`}>
                     <CardHeader>
                       <CardTitle className="flex items-start justify-between">
@@ -254,7 +148,6 @@ export function MesChantiersArtisan() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
-                        {/* Infos générales */}
                         <div className="space-y-2 text-sm">
                           <div className="flex items-center justify-between">
                             <span className="text-muted-foreground">Client</span>
@@ -262,50 +155,55 @@ export function MesChantiersArtisan() {
                               {chantier.client_prenom} {chantier.client_nom}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-2">
                             <span className="text-muted-foreground">Mes tâches</span>
-                            <span className="font-semibold text-orange-600">
-                              {countTaches(chantier.id)}
+                            <span className="flex items-center gap-2">
+                              <span className="font-semibold text-orange-600">{ind.tachesCount}</span>
+                              {ind.tachesEnRetardCount > 0 && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
+                                  <Clock className="h-3 w-3" />
+                                  {ind.tachesEnRetardCount} en retard
+                                </span>
+                              )}
                             </span>
                           </div>
                         </div>
 
-                        {/* ✅ Badges d'alertes */}
                         {hasAlerts && (
                           <div className="pt-3 border-t space-y-2">
-                            {/* NC */}
-                            {nbNC > 0 && (
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="destructive" className="h-6 w-6 rounded-full p-0 flex items-center justify-center">
-                                    {nbNC}
-                                  </Badge>
-                                  <span className="text-xs font-medium text-red-700">Non-conformités</span>
-                                </div>
+                            {ind.ncCount > 0 && (
+                              <div className="flex items-center gap-2">
+                                <Badge variant="destructive" className="h-6 min-w-6 rounded-full px-1.5 flex items-center justify-center">
+                                  {ind.ncCount}
+                                </Badge>
+                                <span className="text-xs font-medium text-red-700">Non-conformités</span>
                               </div>
                             )}
 
-                            {/* Documents à signer */}
-                            {docsData.aSignerCount > 0 && (
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <Badge className="h-6 w-6 rounded-full p-0 flex items-center justify-center bg-orange-500 hover:bg-orange-600">
-                                    {docsData.aSignerCount}
-                                  </Badge>
-                                  <span className="text-xs font-medium text-orange-700">Documents à signer</span>
-                                </div>
+                            {ind.marchesASignerCount > 0 && (
+                              <div className="flex items-center gap-2">
+                                <Badge className="h-6 min-w-6 rounded-full px-1.5 flex items-center justify-center bg-orange-500 hover:bg-orange-600">
+                                  {ind.marchesASignerCount}
+                                </Badge>
+                                <span className="text-xs font-medium text-orange-700">Marché de travaux à signer</span>
                               </div>
                             )}
 
-                            {/* Nouveaux documents */}
-                            {docsData.nouveauxCount > 0 && (
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <Badge className="h-6 w-6 rounded-full p-0 flex items-center justify-center bg-blue-500 hover:bg-blue-600">
-                                    {docsData.nouveauxCount}
-                                  </Badge>
-                                  <span className="text-xs font-medium text-blue-700">Nouveaux documents</span>
-                                </div>
+                            {ind.autresASignerCount > 0 && (
+                              <div className="flex items-center gap-2">
+                                <Badge className="h-6 min-w-6 rounded-full px-1.5 flex items-center justify-center bg-orange-500 hover:bg-orange-600">
+                                  {ind.autresASignerCount}
+                                </Badge>
+                                <span className="text-xs font-medium text-orange-700">Documents à signer</span>
+                              </div>
+                            )}
+
+                            {ind.nouveauxCount > 0 && (
+                              <div className="flex items-center gap-2">
+                                <Badge className="h-6 min-w-6 rounded-full px-1.5 flex items-center justify-center bg-blue-500 hover:bg-blue-600">
+                                  {ind.nouveauxCount}
+                                </Badge>
+                                <span className="text-xs font-medium text-blue-700">Nouveaux documents</span>
                               </div>
                             )}
                           </div>

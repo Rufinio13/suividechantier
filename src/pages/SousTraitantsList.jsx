@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { Plus, Search, Edit, Trash2, Building2, Eye } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Building2, Eye, Mail } from "lucide-react";
+import { EmailsArtisansModal } from "@/components/artisan/EmailsArtisansModal.jsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -30,6 +31,7 @@ export function SousTraitantsList() {
   };
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEmailsOpen, setIsEmailsOpen] = useState(false);
 
   const ouvrirFiche = (st) => navigate(`/sous-traitants/${st.id}`);
 
@@ -67,10 +69,16 @@ export function SousTraitantsList() {
           <p className="text-muted-foreground">Gérez les sous-traitants de votre société</p>
         </div>
 
-        <Button onClick={() => setIsModalOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nouveau sous-traitant
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button variant="outline" onClick={() => setIsEmailsOpen(true)}>
+            <Mail className="mr-2 h-4 w-4" />
+            Emails des artisans
+          </Button>
+          <Button onClick={() => setIsModalOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nouveau sous-traitant
+          </Button>
+        </div>
       </div>
 
       {/* RECHERCHE */}
@@ -147,6 +155,12 @@ export function SousTraitantsList() {
           })}
         </motion.div>
       )}
+
+      <EmailsArtisansModal
+        open={isEmailsOpen}
+        onClose={() => setIsEmailsOpen(false)}
+        sousTraitants={sousTraitants}
+      />
 
       {/* MODAL CRÉATION */}
       {isModalOpen && (

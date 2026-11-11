@@ -10,6 +10,8 @@ import { TacheDetailModalArtisan } from '@/components/TacheDetailModalArtisan';
 import { Calendar, HardHat } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabaseClient';
+import { useIndicateursArtisan } from '@/hooks/useIndicateursArtisan';
+import { IndicateursArtisan } from '@/components/artisan/IndicateursArtisan';
 
 export function DashboardArtisan() {
   const { profile } = useAuth();
@@ -25,6 +27,8 @@ export function DashboardArtisan() {
   const vuesLocalement = useRef(new Set());
 
   const monSousTraitantId = useMonSousTraitantId();
+  const { totaux } = useIndicateursArtisan();
+  const basePath = preview?.basePath || '/artisan';
 
   useEffect(() => {
     const loadNotifications = async () => {
@@ -181,18 +185,22 @@ export function DashboardArtisan() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Mon planning</h1>
-        <p className="text-muted-foreground">
-          {preview ? `Planning de ${preview.artisanNom || "l'artisan"}` : `Bienvenue, ${profile?.prenom} ${profile?.nom}`}
-        </p>
+        <h1 className="text-2xl sm:text-3xl font-bold">
+          {preview ? `Espace de ${preview.artisanNom || "l'artisan"}` : `Bonjour ${profile?.prenom || ''}`}
+        </h1>
+        <p className="text-muted-foreground">Voici ce qui vous attend</p>
       </div>
+
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <IndicateursArtisan totaux={totaux} basePath={basePath} />
+      </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
         <Card>
           <CardHeader>
             <CardTitle className="text-2xl flex items-center">
               <Calendar className="mr-3 h-6 w-6 text-orange-500" />
-              Mon calendrier
+              Mon planning
             </CardTitle>
           </CardHeader>
           <CardContent>
