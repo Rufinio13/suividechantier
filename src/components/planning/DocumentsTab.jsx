@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  Plus, FileText, Download, Trash2, ChevronDown, ChevronRight,
+import {
+  Plus, Upload, FileText, Download, Trash2, ChevronDown, ChevronRight,
   File, Folder, Package, Briefcase, Building, FileCheck, CheckCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
@@ -28,6 +28,38 @@ export function DocumentsTab({ chantierId }) {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [fichiersDeposes, setFichiersDeposes] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCompteur = useRef(0); // dragenter/dragleave se déclenchent aussi sur les éléments enfants
+
+  // Glisser des fichiers sur l'onglet : ouvre la fenêtre d'ajout avec ces fichiers
+  const contientFichiers = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+  const handleDragEnter = (e) => {
+    if (!contientFichiers(e) || isUploadModalOpen) return;
+    e.preventDefault();
+    dragCompteur.current += 1;
+    setIsDragging(true);
+  };
+  const handleDragOver = (e) => {
+    if (!contientFichiers(e) || isUploadModalOpen) return;
+    e.preventDefault();
+  };
+  const handleDragLeave = (e) => {
+    if (!contientFichiers(e) || isUploadModalOpen) return;
+    dragCompteur.current = Math.max(0, dragCompteur.current - 1);
+    if (dragCompteur.current === 0) setIsDragging(false);
+  };
+  const handleDrop = (e) => {
+    if (!contientFichiers(e) || isUploadModalOpen) return;
+    e.preventDefault();
+    dragCompteur.current = 0;
+    setIsDragging(false);
+    const liste = Array.from(e.dataTransfer.files || []);
+    if (liste.length) {
+      setFichiersDeposes(liste);
+      setIsUploadModalOpen(true);
+    }
+  };
   const [expandedCategories, setExpandedCategories] = useState({
     bon_commande: true, plan: true, marche_travaux: true,
     etudes: true, permis_construire: true, autre: true,
@@ -149,17 +181,32 @@ export function DocumentsTab({ chantierId }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
+    <div
+      className="relative space-y-4 min-h-[300px]"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDragging && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-xl border-4 border-dashed border-orange-400 bg-orange-50/90">
+          <div className="text-center">
+            <Upload className="mx-auto mb-2 h-10 w-10 text-orange-500" />
+            <p className="text-lg font-semibold text-orange-800">Déposez vos fichiers pour les ajouter au chantier</p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <div>
           <h2 className="text-2xl font-bold">Documents du chantier</h2>
           <p className="text-sm text-muted-foreground">
-            {documents.length} document{documents.length > 1 ? 's' : ''} au total
+            {documents.length} document{documents.length > 1 ? 's' : ''} au total · glissez vos fichiers ici pour les ajouter
           </p>
         </div>
         <Button onClick={() => setIsUploadModalOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          Ajouter un document
+          Ajouter des documents
         </Button>
       </div>
 
@@ -316,10 +363,10 @@ export function DocumentsTab({ chantierId }) {
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <Folder className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-medium">Aucun document</h3>
-            <p className="text-muted-foreground mt-1 mb-4">Commencez par ajouter des documents à ce chantier</p>
+            <p className="text-muted-foreground mt-1 mb-4">Glissez vos fichiers ici, ou cliquez sur le bouton</p>
             <Button onClick={() => setIsUploadModalOpen(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Ajouter un document
+              Ajouter des documents
             </Button>
           </CardContent>
         </Card>
@@ -327,9 +374,10 @@ export function DocumentsTab({ chantierId }) {
 
       <DocumentUploadModal
         isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
+        onClose={() => { setIsUploadModalOpen(false); setFichiersDeposes(null); }}
         chantierId={chantierId}
         onSuccess={fetchDocuments}
+        initialFiles={fichiersDeposes}
       />
     </div>
   );
