@@ -3,7 +3,7 @@ import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import {
   Plus, ShieldCheck, FileCheck, Eye, Trash2, X, ExternalLink, Copy, Loader2, AlertTriangle,
-  ChevronDown, ChevronRight, FolderOpen,
+  ChevronDown, ChevronRight, FolderOpen, Pencil,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -64,8 +64,9 @@ export function AttestationsTab({
   const urssafNonRequise = urssafNonRequiseFiche || inactif;
   const dateRefDecennale = inactif && dateDernierChantier ? parseISO(dateDernierChantier) : new Date();
   const { toast } = useToast();
-  const { attestations: toutes = [], addAttestation, deleteAttestation } = useSousTraitant();
-  const [ajout, setAjout] = useState(null); // 'decennale' | 'urssaf' | null
+  const { attestations: toutes = [], addAttestation, updateAttestation, deleteAttestation } = useSousTraitant();
+  const [ajout, setAjout] = useState(null); // 'decennale' | 'urssaf' | null (type du formulaire ouvert)
+  const [enEdition, setEnEdition] = useState(null); // attestation en cours de correction, sinon ajout
   const [form, setForm] = useState(FORM_VIDE);
   const [saving, setSaving] = useState(false);
   const [lecture, setLecture] = useState(false); // lecture du PDF en cours
@@ -91,7 +92,29 @@ export function AttestationsTab({
 
   const ouvrirAjout = (type) => {
     setForm(FORM_VIDE);
+    setEnEdition(null);
     setAjout(type);
+  };
+
+  // Correction d'une attestation déjà enregistrée : formulaire pré-rempli à la place de la ligne
+  const ouvrirEdition = (a) => {
+    setForm({
+      ...FORM_VIDE,
+      assureur: a.assureur || '',
+      numero_police: a.numero_police || '',
+      date_debut: a.date_debut || '',
+      date_fin: a.date_fin || '',
+      date_attestation: a.date_attestation || '',
+      code_securite: a.code_securite || '',
+      siret: a.siret || '',
+    });
+    setEnEdition(a);
+    setAjout(a.type);
+  };
+
+  const fermerFormulaire = () => {
+    setAjout(null);
+    setEnEdition(null);
   };
 
   const handleChange = (e) => {
@@ -171,29 +194,31 @@ export function AttestationsTab({
       return;
     }
 
+    const champs = {
+      ...(ajout === 'decennale'
+        ? {
+            assureur: form.assureur.trim(),
+            numero_police: form.numero_police.trim() || null,
+            date_debut: form.date_debut,
+            date_fin: form.date_fin,
+          }
+        : {
+            date_attestation: form.date_attestation,
+            code_securite: form.code_securite.trim().toUpperCase() || null,
+          }),
+      siret: normaliserSiret(form.siret) || null,
+    };
+
     setSaving(true);
     try {
-      await addAttestation(
-        {
-          soustraitant_id: soustraitantId,
-          type: ajout,
-          ...(ajout === 'decennale'
-            ? {
-                assureur: form.assureur.trim(),
-                numero_police: form.numero_police.trim() || null,
-                date_debut: form.date_debut,
-                date_fin: form.date_fin,
-              }
-            : {
-                date_attestation: form.date_attestation,
-                code_securite: form.code_securite.trim().toUpperCase() || null,
-              }),
-          siret: normaliserSiret(form.siret) || null,
-        },
-        form.file
-      );
-      setAjout(null);
-      toast({ title: ajout === 'decennale' ? 'Décennale ajoutée ✅' : 'Attestation URSSAF ajoutée ✅' });
+      if (enEdition) {
+        await updateAttestation(enEdition, champs, form.file);
+        toast({ title: ajout === 'decennale' ? 'Décennale modifiée ✅' : 'Attestation URSSAF modifiée ✅' });
+      } else {
+        await addAttestation({ soustraitant_id: soustraitantId, type: ajout, ...champs }, form.file);
+        toast({ title: ajout === 'decennale' ? 'Décennale ajoutée ✅' : 'Attestation URSSAF ajoutée ✅' });
+      }
+      fermerFormulaire();
     } catch (err) {
       toast({ title: 'Erreur', description: err.message || "Impossible d'enregistrer", variant: 'destructive' });
     } finally {
@@ -227,6 +252,9 @@ export function AttestationsTab({
           <Eye className="h-4 w-4" />
         </Button>
       )}
+      <Button size="icon" variant="ghost" title="Modifier" onClick={() => ouvrirEdition(attestation)}>
+        <Pencil className="h-4 w-4" />
+      </Button>
       <Button size="icon" variant="ghost" title="Supprimer" onClick={() => handleDelete(attestation)}>
         <Trash2 className="h-4 w-4 text-destructive" />
       </Button>
@@ -234,7 +262,9 @@ export function AttestationsTab({
   );
 
   // ─── Lignes d'attestation (version discrète dans l'historique) ───
-  const LigneDecennale = (a, discret = false) => (
+  const LigneDecennale = (a, discret = false) => enEdition?.id === a.id ? (
+    <div key={a.id}>{FormulaireAjout()}</div>
+  ) : (
     <div key={a.id} className={cn('flex items-center justify-between gap-3 p-3 border rounded-md', discret && 'bg-muted/30 opacity-80')}>
       <div className="min-w-0 space-y-1">
         <div className="flex items-center gap-2 flex-wrap">
@@ -262,7 +292,9 @@ export function AttestationsTab({
     </div>
   );
 
-  const LigneUrssaf = (a, discret = false) => (
+  const LigneUrssaf = (a, discret = false) => enEdition?.id === a.id ? (
+    <div key={a.id}>{FormulaireAjout()}</div>
+  ) : (
     <div key={a.id} className={cn('flex items-center justify-between gap-3 p-3 border rounded-md', discret && 'bg-muted/30 opacity-80')}>
       <div className="min-w-0 space-y-1">
         <div className="flex items-center gap-2 flex-wrap">
@@ -315,6 +347,12 @@ export function AttestationsTab({
 
   const FormulaireAjout = () => (
     <form onSubmit={handleSubmit} className="space-y-3 p-4 border rounded-md bg-muted/30">
+      {enEdition && (
+        <p className="text-sm font-medium flex items-center gap-2">
+          <Pencil className="h-4 w-4" />
+          {ajout === 'decennale' ? 'Modifier la décennale' : "Modifier l'attestation URSSAF"}
+        </p>
+      )}
       {ajout === 'decennale' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">
@@ -357,7 +395,11 @@ export function AttestationsTab({
         </div>
       )}
       <div className="space-y-1">
-        <Label htmlFor="file">Fichier (PDF : informations remplies automatiquement, à vérifier)</Label>
+        <Label htmlFor="file">
+          {enEdition
+            ? `Remplacer le fichier (facultatif${enEdition.nom_fichier ? ` · actuel : ${enEdition.nom_fichier}` : ''})`
+            : 'Fichier (PDF : informations remplies automatiquement, à vérifier)'}
+        </Label>
         <Input
           id="file"
           type="file"
@@ -371,7 +413,7 @@ export function AttestationsTab({
         )}
       </div>
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={() => setAjout(null)}>
+        <Button type="button" variant="outline" onClick={fermerFormulaire}>
           <X className="mr-2 h-4 w-4" />Annuler
         </Button>
         <Button type="submit" disabled={saving || lecture}>{saving ? 'Enregistrement...' : 'Enregistrer'}</Button>
@@ -407,7 +449,7 @@ export function AttestationsTab({
                 : 'Artisan qui ne travaille plus avec nous : renseignez la date du dernier chantier pour contrôler la décennale.'}
             </p>
           )}
-          {ajout === 'decennale' && FormulaireAjout()}
+          {ajout === 'decennale' && !enEdition && FormulaireAjout()}
           {decennales.length === 0 && ajout !== 'decennale' && !decennaleNonRequise && (
             <p className="text-center py-6 text-muted-foreground">Aucune décennale enregistrée</p>
           )}
@@ -444,7 +486,7 @@ export function AttestationsTab({
                 : "URSSAF non requise pour cet artisan : elle n'est pas contrôlée."}
             </p>
           )}
-          {ajout === 'urssaf' && FormulaireAjout()}
+          {ajout === 'urssaf' && !enEdition && FormulaireAjout()}
           {urssafs.length === 0 && ajout !== 'urssaf' && !urssafNonRequise && (
             <p className="text-center py-6 text-muted-foreground">Aucune attestation URSSAF enregistrée</p>
           )}

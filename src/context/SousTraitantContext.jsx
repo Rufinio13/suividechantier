@@ -320,6 +320,43 @@ export function SousTraitantProvider({ children }) {
     }
   };
 
+  // ✅ Correction d'une décennale / URSSAF ; un nouveau fichier remplace l'ancien
+  const updateAttestation = async (attestation, updates, file = null) => {
+    let nouveauPath = null;
+    try {
+      if (file) {
+        const ext = file.name.split(".").pop();
+        nouveauPath = `artisans/${attestation.soustraitant_id}/${attestation.type}_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+        const { error: uploadError } = await supabase.storage.from(BUCKET_ATTESTATIONS).upload(nouveauPath, file);
+        if (uploadError) throw uploadError;
+      }
+
+      const { data, error } = await supabase
+        .from("artisan_attestations")
+        .update({
+          ...updates,
+          ...(nouveauPath ? { storage_path: nouveauPath, nom_fichier: file.name } : {}),
+        })
+        .eq("id", attestation.id)
+        .select()
+        .single();
+      if (error) throw error;
+
+      // Ancien fichier supprimé seulement une fois la ligne à jour
+      if (nouveauPath && attestation.storage_path) {
+        const { error: storageError } = await supabase.storage.from(BUCKET_ATTESTATIONS).remove([attestation.storage_path]);
+        if (storageError) console.error("⚠️ Ancien fichier de l'attestation non supprimé :", storageError);
+      }
+
+      setAttestations((prev) => prev.map((a) => (a.id === attestation.id ? data : a)));
+      return data;
+    } catch (err) {
+      console.error("❌ updateAttestation :", err);
+      if (nouveauPath) await supabase.storage.from(BUCKET_ATTESTATIONS).remove([nouveauPath]);
+      throw err;
+    }
+  };
+
   const deleteAttestation = async (attestation) => {
     const { error } = await supabase.from("artisan_attestations").delete().eq("id", attestation.id);
     if (error) { console.error("❌ deleteAttestation :", error); throw error; }
@@ -366,6 +403,7 @@ export function SousTraitantProvider({ children }) {
         removeIndisponibilite,
         attestations,
         addAttestation,
+        updateAttestation,
         deleteAttestation,
         getConformite,
         nbArtisansNonConformes,
