@@ -35,11 +35,11 @@ const FORM_VIDE = {
 
 const formatDate = (d) => (d ? format(parseISO(d), 'dd/MM/yyyy', { locale: fr }) : '—');
 
-function BadgeValidite({ valide }) {
+function BadgeValidite({ valide, libelleOk = 'Valide', libelleKo = 'Expirée' }) {
   return valide ? (
-    <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100">Valide</Badge>
+    <Badge className="bg-green-100 text-green-800 border-green-200 hover:bg-green-100">{libelleOk}</Badge>
   ) : (
-    <Badge variant="destructive">Expirée</Badge>
+    <Badge variant="destructive">{libelleKo}</Badge>
   );
 }
 
@@ -52,7 +52,17 @@ function BadgeSiret({ siretDocument, siretArtisan }) {
   );
 }
 
-export function AttestationsTab({ soustraitantId, siretArtisan = '', decennaleNonRequise = false, urssafNonRequise = false }) {
+export function AttestationsTab({
+  soustraitantId,
+  siretArtisan = '',
+  decennaleNonRequise = false,
+  urssafNonRequise: urssafNonRequiseFiche = false,
+  inactif = false,           // ne travaille plus avec nous
+  dateDernierChantier = null, // yyyy-MM-dd
+}) {
+  // Artisan qui ne travaille plus avec nous : plus d'URSSAF, décennale contrôlée à la date du dernier chantier
+  const urssafNonRequise = urssafNonRequiseFiche || inactif;
+  const dateRefDecennale = inactif && dateDernierChantier ? parseISO(dateDernierChantier) : new Date();
   const { toast } = useToast();
   const { attestations: toutes = [], addAttestation, deleteAttestation } = useSousTraitant();
   const [ajout, setAjout] = useState(null); // 'decennale' | 'urssaf' | null
@@ -72,7 +82,9 @@ export function AttestationsTab({ soustraitantId, siretArtisan = '', decennaleNo
   // En cours : décennales valides ou à venir (sinon la plus récente) ; URSSAF : la plus récente.
   // Les autres sont rangées dans l'historique.
   const aujourdhui = format(new Date(), 'yyyy-MM-dd');
-  const nonExpirees = decennales.filter((a) => a.date_fin >= aujourdhui);
+  const nonExpirees = inactif
+    ? decennales.filter((a) => isDecennaleValide(a, dateRefDecennale)) // celles qui couvrent le dernier chantier
+    : decennales.filter((a) => a.date_fin >= aujourdhui);
   const decennalesCourantes = nonExpirees.length > 0 ? nonExpirees : decennales.slice(0, 1);
   const decennalesHistorique = decennales.filter((a) => !decennalesCourantes.includes(a));
   const [urssafCourante, ...urssafsHistorique] = urssafs;
@@ -227,9 +239,17 @@ export function AttestationsTab({ soustraitantId, siretArtisan = '', decennaleNo
       <div className="min-w-0 space-y-1">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium">{a.assureur}</span>
-          {!decennaleNonRequise && (a.date_debut > aujourdhui
-            ? <Badge variant="secondary">À venir</Badge>
-            : <BadgeValidite valide={isDecennaleValide(a)} />)}
+          {!decennaleNonRequise && (inactif
+            ? (dateDernierChantier && (
+                <BadgeValidite
+                  valide={isDecennaleValide(a, dateRefDecennale)}
+                  libelleOk="Couvre le dernier chantier"
+                  libelleKo="Ne couvre pas le dernier chantier"
+                />
+              ))
+            : a.date_debut > aujourdhui
+              ? <Badge variant="secondary">À venir</Badge>
+              : <BadgeValidite valide={isDecennaleValide(a)} />)}
           <BadgeSiret siretDocument={a.siret} siretArtisan={siretArtisan} />
         </div>
         {a.numero_police && <p className="text-sm text-muted-foreground truncate">Police n° {a.numero_police}</p>}
@@ -380,6 +400,13 @@ export function AttestationsTab({ soustraitantId, siretArtisan = '', decennaleNo
               Décennale non requise pour cet artisan : elle n'est pas contrôlée.
             </p>
           )}
+          {!decennaleNonRequise && inactif && (
+            <p className={`text-sm p-3 rounded-md border ${dateDernierChantier ? 'bg-slate-50 text-muted-foreground' : 'bg-red-50 border-red-200 text-red-800'}`}>
+              {dateDernierChantier
+                ? `Artisan qui ne travaille plus avec nous : seule la décennale couvrant le dernier chantier (${formatDate(dateDernierChantier)}) est demandée.`
+                : 'Artisan qui ne travaille plus avec nous : renseignez la date du dernier chantier pour contrôler la décennale.'}
+            </p>
+          )}
           {ajout === 'decennale' && FormulaireAjout()}
           {decennales.length === 0 && ajout !== 'decennale' && !decennaleNonRequise && (
             <p className="text-center py-6 text-muted-foreground">Aucune décennale enregistrée</p>
@@ -412,7 +439,9 @@ export function AttestationsTab({ soustraitantId, siretArtisan = '', decennaleNo
           </a>
           {urssafNonRequise && (
             <p className="text-sm p-3 rounded-md bg-slate-50 border text-muted-foreground">
-              URSSAF non requise pour cet artisan : elle n'est pas contrôlée.
+              {inactif && !urssafNonRequiseFiche
+                ? "Artisan qui ne travaille plus avec nous : l'URSSAF n'est plus contrôlée."
+                : "URSSAF non requise pour cet artisan : elle n'est pas contrôlée."}
             </p>
           )}
           {ajout === 'urssaf' && FormulaireAjout()}

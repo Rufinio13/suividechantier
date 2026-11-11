@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
-import { getConformiteArtisan } from "@/lib/attestations";
+import { getConformiteArtisan, optionsConformite } from "@/lib/attestations";
 
 const BUCKET_ATTESTATIONS = "documents-chantiers";
 
@@ -338,10 +338,7 @@ export function SousTraitantProvider({ children }) {
     return Object.fromEntries(
       (sousTraitants || []).map((st) => [
         st.id,
-        getConformiteArtisan(parArtisan[st.id] || [], new Date(), {
-          decennaleRequise: !st.decennale_non_requise,
-          urssafRequise: !st.urssaf_non_requise,
-        }),
+        getConformiteArtisan(parArtisan[st.id] || [], new Date(), optionsConformite(st)),
       ])
     );
   }, [sousTraitants, attestations]);

@@ -220,6 +220,26 @@ export function SousTraitantDetails() {
     }
   };
 
+  // Travaille toujours avec nous ? Sinon, date du dernier chantier (contrôle décennale à cette date)
+  const toggleTravailleActuellement = async (checked) => {
+    try {
+      await updateSousTraitant(sousTraitant.id, { travaille_actuellement: !!checked });
+      toast({ title: checked ? "Artisan actif ✅" : "Artisan marqué comme ne travaillant plus avec nous ✅" });
+    } catch (error) {
+      toast({ title: "Erreur", description: "Impossible de mettre à jour (le script SQL a-t-il été lancé ?)", variant: "destructive" });
+    }
+  };
+
+  const saveDateDernierChantier = async (valeur) => {
+    if ((valeur || null) === (sousTraitant.date_dernier_chantier || null)) return;
+    try {
+      await updateSousTraitant(sousTraitant.id, { date_dernier_chantier: valeur || null });
+      toast({ title: "Date du dernier chantier enregistrée ✅" });
+    } catch (error) {
+      toast({ title: "Erreur", description: "Impossible d'enregistrer la date", variant: "destructive" });
+    }
+  };
+
   const handleDelete = async () => {
     if (!sousTraitant) return;
     if (!window.confirm(`Supprimer ${sousTraitant.nomsocieteST} ?\n\nSes marchés, documents, attestations, notifications et indisponibilités seront définitivement supprimés. Ses tâches et SAV resteront dans le planning, sans artisan assigné.`)) return;
@@ -354,6 +374,36 @@ export function SousTraitantDetails() {
                     </Label>
                   </div>
                 </div>
+                <div className="flex flex-wrap items-center gap-x-8 gap-y-3 md:col-span-2 lg:col-span-3 pt-2 border-t">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="travaille_actuellement"
+                      checked={sousTraitant.travaille_actuellement !== false}
+                      onCheckedChange={toggleTravailleActuellement}
+                    />
+                    <Label htmlFor="travaille_actuellement" className="cursor-pointer">
+                      Travaille toujours pour nous
+                    </Label>
+                  </div>
+                  {sousTraitant.travaille_actuellement === false && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Label htmlFor="date_dernier_chantier" className="whitespace-nowrap">
+                        Date du dernier chantier :
+                      </Label>
+                      <Input
+                        id="date_dernier_chantier"
+                        type="date"
+                        key={sousTraitant.date_dernier_chantier || 'vide'}
+                        defaultValue={sousTraitant.date_dernier_chantier || ''}
+                        onBlur={(e) => saveDateDernierChantier(e.target.value)}
+                        className={`w-44 ${!sousTraitant.date_dernier_chantier ? 'border-red-400' : ''}`}
+                      />
+                      <span className="text-xs text-muted-foreground w-full sm:w-auto">
+                        Seule la décennale couvrant cette date est demandée (plus d'URSSAF).
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -379,6 +429,8 @@ export function SousTraitantDetails() {
                 siretArtisan={sousTraitant.siret || ''}
                 decennaleNonRequise={!!sousTraitant.decennale_non_requise}
                 urssafNonRequise={!!sousTraitant.urssaf_non_requise}
+                inactif={sousTraitant.travaille_actuellement === false}
+                dateDernierChantier={sousTraitant.date_dernier_chantier || null}
               />
             </TabsContent>
 

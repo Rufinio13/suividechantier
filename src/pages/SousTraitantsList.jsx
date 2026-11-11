@@ -135,6 +135,12 @@ export function SousTraitantsList() {
                 </CardHeader>
 
                 <CardContent className="flex-grow space-y-2.5 text-sm">
+                  {st.travaille_actuellement === false && (
+                    <span className="inline-block rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+                      Ne travaille plus avec nous
+                      {st.date_dernier_chantier && ` · dernier chantier ${st.date_dernier_chantier.split('-').reverse().join('/')}`}
+                    </span>
+                  )}
                   {nomComplet && (
                     <p className="text-muted-foreground truncate" title={nomComplet}>{nomComplet}</p>
                   )}

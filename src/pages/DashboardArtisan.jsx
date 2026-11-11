@@ -12,12 +12,13 @@ import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabaseClient';
 import { useIndicateursArtisan } from '@/hooks/useIndicateursArtisan';
 import { IndicateursArtisan } from '@/components/artisan/IndicateursArtisan';
+import { BandeauConformiteArtisan } from '@/components/artisan/BandeauConformiteArtisan';
 
 export function DashboardArtisan() {
   const { profile } = useAuth();
   const preview = useArtisanPreview();
   const { chantiers, taches, lots, loading: chantierLoading, loadTaches } = useChantier();
-  const { loading: stLoading, indisponibilites, addIndisponibilite, removeIndisponibilite } = useSousTraitant();
+  const { loading: stLoading, indisponibilites, addIndisponibilite, removeIndisponibilite, getConformite } = useSousTraitant();
 
   const [selectedTache, setSelectedTache] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -190,6 +191,8 @@ export function DashboardArtisan() {
         </h1>
         <p className="text-muted-foreground">Voici ce qui vous attend</p>
       </div>
+
+      <BandeauConformiteArtisan conformite={getConformite(monSousTraitantId)} />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <IndicateursArtisan totaux={totaux} basePath={basePath} />
