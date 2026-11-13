@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { PhotosTab, usePhotosChantier, estPhotoNonVue } from '@/components/photos/PhotosTab';
 import { usePhotosVues } from '@/hooks/usePhotosVues';
+import { usePhotosLibres } from '@/hooks/usePhotosLibres';
 import { useAuth } from '@/hooks/useAuth';
 import { ChantierForm } from '@/components/ChantierForm.jsx';
 import { Planning } from '@/pages/Planning.jsx';
@@ -39,7 +40,8 @@ export function ChantierDetails() {
 
   // ✅ Notifications photos : point rouge tant que l'onglet Photos n'a pas été ouvert
   const { profile } = useAuth();
-  const { photos: photosChantier } = usePhotosChantier(id);
+  const { photosLibres, changerLotPhotoLibre } = usePhotosLibres(id);
+  const { photos: photosChantier } = usePhotosChantier(id, photosLibres);
   const {
     vuAt: photosVuAt,
     charge: photosVuesChargees,
@@ -258,6 +260,8 @@ export function ChantierDetails() {
                 chantierId={chantier.id}
                 vuAtPrecedent={photosVuAtPrecedent}
                 notificationsActives={notifsPhotosActives}
+                photosLibres={photosLibres}
+                changerLotPhotoLibre={changerLotPhotoLibre}
               />
             </TabsContent>
           </Tabs>

@@ -9,10 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, ListChecks, FolderOpen, AlertTriangle, User, MapPin } from 'lucide-react';
+import { ArrowLeft, ListChecks, FolderOpen, AlertTriangle, User, MapPin, Camera } from 'lucide-react';
 import { TachesArtisanTab } from '@/components/artisan/TachesArtisanTab';
 import { DocumentsArtisanTab } from '@/components/artisan/DocumentsArtisanTab';
 import { NonConformitesArtisanTab } from '@/components/artisan/NonConformitesArtisanTab';
+import { PhotosArtisanTab } from '@/components/artisan/PhotosArtisanTab';
 import { supabase } from '@/lib/supabaseClient';
 
 export function ChantierDetailsArtisan() {
@@ -22,11 +23,11 @@ export function ChantierDetailsArtisan() {
   const { chantiers, taches, loading } = useChantier();
   const { controles, modelesCQ } = useReferentielCQ();
 
-  // Onglet demandé depuis l'accueil (?onglet=documents|nc|taches)
+  // Onglet demandé depuis l'accueil (?onglet=documents|photos|nc|taches)
   const [searchParams] = useSearchParams();
   const ongletDemande = searchParams.get('onglet');
   const [activeTab, setActiveTab] = useState(
-    ['documents', 'nc', 'taches'].includes(ongletDemande) ? ongletDemande : 'documents'
+    ['documents', 'photos', 'nc', 'taches'].includes(ongletDemande) ? ongletDemande : 'documents'
   );
   const [docsASignerCount, setDocsASignerCount] = useState(0);
   const [nouveauxDocsCount, setNouveauxDocsCount] = useState(0);
@@ -218,7 +219,7 @@ export function ChantierDetailsArtisan() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 gap-2 h-auto p-2">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-2 h-auto p-2">
           <TabsTrigger value="taches" className="flex items-center justify-center">
             <ListChecks className="mr-2 h-4 w-4" /> Mes Tâches
           </TabsTrigger>
@@ -238,6 +239,9 @@ export function ChantierDetailsArtisan() {
                 )}
               </div>
             )}
+          </TabsTrigger>
+          <TabsTrigger value="photos" className="flex items-center justify-center">
+            <Camera className="mr-2 h-4 w-4" /> Photos
           </TabsTrigger>
           <TabsTrigger value="nc" className="flex items-center justify-center relative">
             <AlertTriangle className="mr-2 h-4 w-4" /> Non-Conformités
@@ -261,6 +265,9 @@ export function ChantierDetailsArtisan() {
               setTimeout(() => setActiveTab('documents'), 500);
             }}
           />
+        </TabsContent>
+        <TabsContent value="photos" className="mt-6">
+          <PhotosArtisanTab chantierId={id} soustraitantId={monSousTraitantId} />
         </TabsContent>
         <TabsContent value="nc" className="mt-6">
           <NonConformitesArtisanTab chantierId={id} soustraitantId={monSousTraitantId} />

@@ -20,13 +20,14 @@ import { openStorageFile } from '@/lib/storage';
 import { useAuth } from '@/hooks/useAuth';
 import { enregistrerPhotos, enregistrerUnePhoto, choixDossierDisponible } from '@/lib/enregistrerPhotos';
 
-const GENERAL = '__general__';
+export const GENERAL = '__general__';
 
 const ORIGINES = {
   tache: { label: 'Tâche', className: 'bg-blue-100 text-blue-800' },
   reprise_nc: { label: 'Reprise NC', className: 'bg-green-100 text-green-800' },
   controle_qualite: { label: 'Contrôle qualité', className: 'bg-amber-100 text-amber-800' },
   compte_rendu: { label: 'Compte rendu', className: 'bg-purple-100 text-purple-800' },
+  ajout_artisan: { label: 'Photo artisan', className: 'bg-orange-100 text-orange-800' },
 };
 
 const normaliserPhoto = (p) => (typeof p === 'string' ? { url: p } : p || {});
@@ -64,7 +65,7 @@ export function estPhotoNonVue(photo, vuAt, userId) {
 }
 
 // Liste de toutes les photos d'un chantier (artisans + constructeur), triées de la plus récente à la plus ancienne.
-export function usePhotosChantier(chantierId) {
+export function usePhotosChantier(chantierId, photosLibres = []) {
   const { taches = [], lots = [], sousTraitants = [] } = useChantier();
   const { controles = [], modelesCQ = [] } = useReferentielCQ();
   const { getComptesRendusByChantier } = useCompteRendu();
@@ -121,6 +122,7 @@ export function usePhotosChantier(chantierId) {
           origine: 'tache',
           detail: tache.nom || 'Tâche',
           entreprise,
+          soustraitantId: st?.id || null,
           auteur: photo.auteur_nom ? `${photo.auteur_nom} (${entreprise})` : entreprise,
           auteurFiltre: entreprise,
           lotId: tache.lotid || null,
@@ -167,6 +169,7 @@ export function usePhotosChantier(chantierId) {
                     origine,
                     detail: nomPoint,
                     entreprise,
+                    soustraitantId: estArtisan ? (res.soustraitant_id || null) : null,
                     auteur: estArtisan
                       ? (photo.auteur_nom ? `${photo.auteur_nom} (${entreprise})` : entreprise)
                       : auteurLabel(photo, 'Constructeur (auteur non enregistré)'),
@@ -212,19 +215,49 @@ export function usePhotosChantier(chantierId) {
       });
     });
 
+    // 4. Photos ajoutées directement par les artisans (table photos_chantier)
+    photosLibres.forEach((row) => {
+      if (!row?.url) return;
+      const st = row.soustraitant_id ? sousTraitants.find((x) => x.id === row.soustraitant_id) : null;
+      const entreprise = nomSousTraitant(st) || 'Artisan';
+      liste.push({
+        key: `libre-${row.id}`,
+        url: row.url,
+        origine: 'ajout_artisan',
+        detail: row.commentaire || 'Photo de chantier',
+        entreprise,
+        soustraitantId: row.soustraitant_id || null,
+        auteur: row.auteur_nom ? `${row.auteur_nom} (${entreprise})` : entreprise,
+        auteurFiltre: entreprise,
+        description: row.commentaire || '',
+        lotId: row.lot_id || null,
+        lotModifiable: true,
+        date: row.created_at,
+        dateUpload: row.created_at,
+        auteurId: row.auteur_id || null,
+        ref: { type: 'libre', row },
+      });
+    });
+
     return liste.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tachesChantier, controles, modelesCQ, sousTraitants, getComptesRendusByChantier, chantierId]);
+  }, [tachesChantier, controles, modelesCQ, sousTraitants, getComptesRendusByChantier, chantierId, photosLibres]);
 
   return { photos, lots, lotsChantier, autresLots, nomLot };
 }
 
-export function PhotosTab({ chantierId, vuAtPrecedent = null, notificationsActives = false }) {
+export function PhotosTab({
+  chantierId,
+  vuAtPrecedent = null,
+  notificationsActives = false,
+  photosLibres = [],
+  changerLotPhotoLibre = null,
+}) {
   const { toast } = useToast();
   const { profile } = useAuth();
   const { saveControleFromModele } = useReferentielCQ();
   const { updateCompteRendu } = useCompteRendu();
-  const { photos, lots, lotsChantier, autresLots, nomLot } = usePhotosChantier(chantierId);
+  const { photos, lots, lotsChantier, autresLots, nomLot } = usePhotosChantier(chantierId, photosLibres);
 
   const [filtreLot, setFiltreLot] = useState('');
   const [filtreAuteur, setFiltreAuteur] = useState('');
@@ -338,7 +371,10 @@ export function PhotosTab({ chantierId, vuAtPrecedent = null, notificationsActiv
     const lotId = valeur === GENERAL ? null : valeur;
     setEnregistrement(true);
     try {
-      if (photo.ref.type === 'cr') {
+      if (photo.ref.type === 'libre') {
+        if (!changerLotPhotoLibre) throw new Error('Modification non disponible');
+        await changerLotPhotoLibre(photo.ref.row.id, lotId);
+      } else if (photo.ref.type === 'cr') {
         const { cr, url } = photo.ref;
         await updateCompteRendu(cr.id, { photos: (cr.photos || []).map((p) => majPhoto(p, url, lotId)) });
       } else if (photo.ref.type === 'cq') {
