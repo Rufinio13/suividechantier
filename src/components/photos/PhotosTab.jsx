@@ -15,10 +15,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 import { StorageImage } from '@/components/StorageImage.jsx';
 import { openStorageFile } from '@/lib/storage';
 import { useAuth } from '@/hooks/useAuth';
-import { enregistrerPhotos, enregistrerUnePhoto, messageErreurEnregistrement } from '@/lib/enregistrerPhotos';
+import { enregistrerPhotos, enregistrerUnePhoto, choixDossierDisponible, messageErreurEnregistrement } from '@/lib/enregistrerPhotos';
 
 export const GENERAL = '__general__';
 
@@ -327,16 +328,35 @@ export function PhotosTab({
 
   const nomLotPhoto = (p) => (p.lotId ? nomLot(p.lotId) : 'General');
 
-  const enregistrerSelection = async () => {
+  const enregistrerSelection = async (telechargement = false) => {
     const choisies = photos.filter((p) => selection.has(p.key));
     if (choisies.length === 0) return;
     try {
       const res = await enregistrerPhotos(
         choisies.map((p) => ({ photo: p, nomLot: nomLotPhoto(p) })),
-        (fait, total) => setProgression({ fait, total })
+        (fait, total) => setProgression({ fait, total }),
+        { telechargement }
       );
+      if (res.annule) {
+        // Annulation… ou dossier refusé par Chrome (lecteur cloud / réseau) : on propose le téléchargement
+        toast({
+          title: 'Aucune photo enregistrée',
+          description:
+            "Si vous aviez choisi un dossier sur pCloud, un NAS ou un lecteur réseau, Chrome le refuse : choisissez un dossier du PC (C:), ou téléchargez les photos dans Téléchargements.",
+          duration: 15000,
+          action: (
+            <ToastAction altText="Télécharger les photos" onClick={() => enregistrerSelection(true)}>
+              Télécharger
+            </ToastAction>
+          ),
+        });
+        return;
+      }
       if (res.erreurs === 0) {
-        toast({ title: 'Téléchargement lancé', description: `${res.ok} photo(s) envoyée(s) au navigateur.` });
+        toast({
+          title: 'Photos enregistrées',
+          description: `${res.ok} photo(s) ${res.dossier ? `enregistrée(s) dans le dossier « ${res.nomDossier || 'choisi'} »` : 'téléchargée(s) dans Téléchargements'}.`,
+        });
         quitterSelection();
       } else {
         toast({
@@ -355,7 +375,8 @@ export function PhotosTab({
 
   const enregistrerPhotoOuverte = async () => {
     try {
-      await enregistrerUnePhoto(photoOuverte, nomLotPhoto(photoOuverte));
+      const ok = await enregistrerUnePhoto(photoOuverte, nomLotPhoto(photoOuverte));
+      if (ok) toast({ title: 'Photo enregistrée' });
     } catch (error) {
       console.error('❌ Erreur enregistrement photo :', error);
       toast({ title: "Impossible d'enregistrer la photo", description: messageErreurEnregistrement(error), variant: 'destructive' });
@@ -475,7 +496,7 @@ export function PhotosTab({
                 Tout désélectionner
               </Button>
             )}
-            <Button size="sm" onClick={enregistrerSelection} disabled={selection.size === 0 || !!progression}>
+            <Button size="sm" onClick={() => enregistrerSelection()} disabled={selection.size === 0 || !!progression}>
               {progression
                 ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {progression.fait}/{progression.total}</>
                 : <><Download className="mr-2 h-4 w-4" /> Enregistrer</>}
@@ -485,9 +506,9 @@ export function PhotosTab({
             </Button>
           </div>
           <p className="text-xs text-blue-800 w-full">
-            Pour choisir le dossier à chaque photo (fenêtre « Enregistrer sous ») : dans Chrome, Paramètres → Téléchargements →
-            activez « Toujours demander où enregistrer les fichiers ». Sinon, les photos vont dans votre dossier Téléchargements.
-            Si Chrome demande l'autorisation de télécharger plusieurs fichiers, cliquez sur « Autoriser ».
+            {choixDossierDisponible()
+              ? "Une seule fenêtre s'ouvre : allez dans le dossier voulu (ou créez-en un avec « Nouveau dossier »), puis cliquez sur « Sélectionner un dossier » : toutes les photos y sont copiées. Choisissez un dossier du PC (disque C:) : Chrome refuse les lecteurs cloud ou réseau (pCloud, NAS) et la racine de Bureau, Documents, Images ou Téléchargements."
+              : 'Votre navigateur ne permet pas de choisir le dossier : les photos iront dans Téléchargements. Utilisez Chrome ou Edge pour choisir le dossier.'}
           </p>
         </div>
       )}
