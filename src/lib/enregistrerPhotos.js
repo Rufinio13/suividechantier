@@ -66,14 +66,18 @@ const estRefusNavigateur = (e) => ['SecurityError', 'NotAllowedError', 'TypeErro
  * Doit être appelé directement depuis un clic (le sélecteur de dossier l'exige).
  * Retourne { ok, erreurs, annule, dossier } ; dossier = false si téléchargement classique.
  */
-export async function enregistrerPhotos(elements, onProgression = () => {}) {
+export async function enregistrerPhotos(elements, onProgression = () => {}, { classique = false } = {}) {
   let dossier = null;
-  if (choixDossierDisponible()) {
+  if (!classique && choixDossierDisponible()) {
     try {
       // id : Chrome/Edge se souviennent du dernier dossier choisi
       dossier = await window.showDirectoryPicker({ id: 'photos-chantier', mode: 'readwrite' });
     } catch (e) {
-      if (estAnnulation(e)) return { ok: 0, erreurs: 0, annule: true, dossier: true };
+      // Chrome renvoie aussi une « annulation » quand il refuse le dossier (lecteur cloud pCloud/Drive, réseau…)
+      if (estAnnulation(e)) {
+        console.warn('Choix du dossier annulé ou refusé par le navigateur :', e);
+        return { ok: 0, erreurs: 0, annule: true, dossier: true };
+      }
       if (!estRefusNavigateur(e)) throw e;
       console.warn('Choix du dossier impossible, téléchargement classique :', e);
       dossier = null;
@@ -110,7 +114,7 @@ export async function enregistrerPhotos(elements, onProgression = () => {}) {
     onProgression(i + 1, elements.length);
   }
 
-  return { ok, erreurs, annule: false, dossier: !!dossier, derniereErreur };
+  return { ok, erreurs, annule: false, dossier: !!dossier, nomDossier: dossier?.name, derniereErreur };
 }
 
 /** Enregistre une seule photo : fenêtre « Enregistrer sous » si disponible. Retourne false si annulé. */

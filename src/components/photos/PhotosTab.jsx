@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 import { StorageImage } from '@/components/StorageImage.jsx';
 import { openStorageFile } from '@/lib/storage';
 import { useAuth } from '@/hooks/useAuth';
@@ -327,17 +328,32 @@ export function PhotosTab({
 
   const nomLotPhoto = (p) => (p.lotId ? nomLot(p.lotId) : 'General');
 
-  const enregistrerSelection = async () => {
+  const enregistrerSelection = async ({ classique = false } = {}) => {
     const choisies = photos.filter((p) => selection.has(p.key));
     if (choisies.length === 0) return;
     try {
       const res = await enregistrerPhotos(
         choisies.map((p) => ({ photo: p, nomLot: nomLotPhoto(p) })),
-        (fait, total) => setProgression({ fait, total })
+        (fait, total) => setProgression({ fait, total }),
+        { classique }
       );
-      if (res.annule) return;
+      if (res.annule) {
+        toast({
+          title: 'Aucune photo enregistrée',
+          description:
+            "Le dossier n'a pas été accepté. Chrome ne peut pas écrire directement sur un lecteur cloud ou réseau (pCloud, Google Drive, NAS…) : choisissez un dossier du PC (C:), ou téléchargez les photos.",
+          variant: 'destructive',
+          duration: 15000,
+          action: (
+            <ToastAction altText="Télécharger les photos" onClick={() => enregistrerSelection({ classique: true })}>
+              Télécharger
+            </ToastAction>
+          ),
+        });
+        return;
+      }
       if (res.erreurs === 0) {
-        toast({ title: 'Photos enregistrées', description: `${res.ok} photo(s) enregistrée(s)${res.dossier ? ' dans le dossier choisi' : ' dans vos téléchargements'}.` });
+        toast({ title: 'Photos enregistrées', description: `${res.ok} photo(s) enregistrée(s)${res.dossier ? ` dans le dossier « ${res.nomDossier || 'choisi'} »` : ' dans vos téléchargements'}.` });
         quitterSelection();
       } else {
         toast({
@@ -480,7 +496,7 @@ export function PhotosTab({
             <Button size="sm" onClick={enregistrerSelection} disabled={selection.size === 0 || !!progression}>
               {progression
                 ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {progression.fait}/{progression.total}</>
-                : <><Download className="mr-2 h-4 w-4" /> Enregistrer sur mon PC</>}
+                : <><Download className="mr-2 h-4 w-4" /> {choixDossierDisponible() ? 'Choisir le dossier et enregistrer' : 'Enregistrer sur mon PC'}</>}
             </Button>
             <Button variant="ghost" size="sm" onClick={quitterSelection} disabled={!!progression}>
               <X className="mr-1 h-4 w-4" /> Annuler
@@ -488,8 +504,9 @@ export function PhotosTab({
           </div>
           {choixDossierDisponible() && (
             <p className="text-xs text-blue-800 w-full">
-              Astuce : Windows refuse d'enregistrer directement dans Bureau, Téléchargements, Documents ou Images.
-              Dans la fenêtre, ouvrez ou créez un sous-dossier (bouton « Nouveau dossier »), puis cliquez sur « Sélectionner le dossier ».
+              Comment ça marche : 1) une fenêtre s'ouvre, allez dans le dossier où ranger les photos (ou créez-en un avec « Nouveau dossier ») ;
+              2) cliquez sur « Sélectionner le dossier » (si le navigateur demande une autorisation, acceptez-la). Les photos sont alors copiées dans ce dossier.
+              Windows refuse la racine de Bureau, Téléchargements, Documents ou Images : choisissez un sous-dossier.
             </p>
           )}
           {!choixDossierDisponible() && (
