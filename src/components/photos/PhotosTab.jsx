@@ -6,7 +6,7 @@
 import React, { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { Image as ImageIcon, User, Layers, Calendar, ExternalLink, Download, CheckSquare, Check, X, Loader2 } from 'lucide-react';
+import { Image as ImageIcon, User, Layers, Calendar, ExternalLink, Download, Loader2 } from 'lucide-react';
 import { useChantier } from '@/context/ChantierContext.jsx';
 import { useReferentielCQ } from '@/context/ReferentielCQContext.jsx';
 import { useCompteRendu } from '@/context/CompteRenduContext.jsx';
@@ -15,11 +15,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { ToastAction } from '@/components/ui/toast';
 import { StorageImage } from '@/components/StorageImage.jsx';
 import { openStorageFile } from '@/lib/storage';
 import { useAuth } from '@/hooks/useAuth';
-import { enregistrerPhotos, enregistrerUnePhoto, choixDossierDisponible, messageErreurEnregistrement } from '@/lib/enregistrerPhotos';
+import { telechargerPhoto, messageErreurEnregistrement } from '@/lib/enregistrerPhotos';
 
 export const GENERAL = '__general__';
 
@@ -266,10 +265,7 @@ export function PhotosTab({
   const [photoOuverteKey, setPhotoOuverteKey] = useState(null);
   const [enregistrement, setEnregistrement] = useState(false);
 
-  // Sélection pour enregistrement sur le PC
-  const [modeSelection, setModeSelection] = useState(false);
-  const [selection, setSelection] = useState(() => new Set());
-  const [progression, setProgression] = useState(null); // { fait, total }
+  const [telechargement, setTelechargement] = useState(false);
 
   const estNouvelle = (p) => notificationsActives && estPhotoNonVue(p, vuAtPrecedent, profile?.id);
 
@@ -311,75 +307,18 @@ export function PhotosTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photosFiltrees, lots]);
 
-  // ============ SÉLECTION ET ENREGISTREMENT SUR LE PC ============
-  const basculer = (key) => setSelection((prev) => {
-    const s = new Set(prev);
-    if (s.has(key)) s.delete(key); else s.add(key);
-    return s;
-  });
-  const basculerGroupe = (items) => setSelection((prev) => {
-    const s = new Set(prev);
-    const tous = items.every((p) => s.has(p.key));
-    items.forEach((p) => (tous ? s.delete(p.key) : s.add(p.key)));
-    return s;
-  });
-  const toutSelectionner = () => setSelection(new Set(photosFiltrees.map((p) => p.key)));
-  const quitterSelection = () => { setModeSelection(false); setSelection(new Set()); };
-
+  // ============ TÉLÉCHARGEMENT ============
   const nomLotPhoto = (p) => (p.lotId ? nomLot(p.lotId) : 'General');
 
-  const enregistrerSelection = async (telechargement = false) => {
-    const choisies = photos.filter((p) => selection.has(p.key));
-    if (choisies.length === 0) return;
+  const telechargerPhotoOuverte = async () => {
+    setTelechargement(true);
     try {
-      const res = await enregistrerPhotos(
-        choisies.map((p) => ({ photo: p, nomLot: nomLotPhoto(p) })),
-        (fait, total) => setProgression({ fait, total }),
-        { telechargement }
-      );
-      if (res.annule) {
-        // Annulation… ou dossier refusé par Chrome (lecteur cloud / réseau) : on propose le téléchargement
-        toast({
-          title: 'Aucune photo enregistrée',
-          description:
-            "Si vous aviez choisi un dossier sur pCloud, un NAS ou un lecteur réseau, Chrome le refuse : choisissez un dossier du PC (C:), ou téléchargez les photos dans Téléchargements.",
-          duration: 15000,
-          action: (
-            <ToastAction altText="Télécharger les photos" onClick={() => enregistrerSelection(true)}>
-              Télécharger
-            </ToastAction>
-          ),
-        });
-        return;
-      }
-      if (res.erreurs === 0) {
-        toast({
-          title: 'Photos enregistrées',
-          description: `${res.ok} photo(s) ${res.dossier ? `enregistrée(s) dans le dossier « ${res.nomDossier || 'choisi'} »` : 'téléchargée(s) dans Téléchargements'}.`,
-        });
-        quitterSelection();
-      } else {
-        toast({
-          title: res.ok ? 'Enregistrement partiel' : "Aucune photo n'a été enregistrée",
-          description: `${res.ok} photo(s) enregistrée(s), ${res.erreurs} en erreur. ${messageErreurEnregistrement(res.derniereErreur)}`,
-          variant: 'destructive',
-        });
-      }
+      await telechargerPhoto(photoOuverte, nomLotPhoto(photoOuverte));
     } catch (error) {
-      console.error('❌ Erreur enregistrement photos :', error);
-      toast({ title: "Impossible d'enregistrer les photos", description: messageErreurEnregistrement(error), variant: 'destructive' });
+      console.error('❌ Erreur téléchargement photo :', error);
+      toast({ title: 'Impossible de télécharger la photo', description: messageErreurEnregistrement(error), variant: 'destructive' });
     } finally {
-      setProgression(null);
-    }
-  };
-
-  const enregistrerPhotoOuverte = async () => {
-    try {
-      const ok = await enregistrerUnePhoto(photoOuverte, nomLotPhoto(photoOuverte));
-      if (ok) toast({ title: 'Photo enregistrée' });
-    } catch (error) {
-      console.error('❌ Erreur enregistrement photo :', error);
-      toast({ title: "Impossible d'enregistrer la photo", description: messageErreurEnregistrement(error), variant: 'destructive' });
+      setTelechargement(false);
     }
   };
 
@@ -475,43 +414,7 @@ export function PhotosTab({
         <span className="text-sm text-muted-foreground sm:ml-auto">
           {photosFiltrees.length} photo{photosFiltrees.length > 1 ? 's' : ''}
         </span>
-        {!modeSelection && (
-          <Button variant="outline" size="sm" onClick={() => setModeSelection(true)}>
-            <CheckSquare className="mr-2 h-4 w-4" /> Sélectionner
-          </Button>
-        )}
       </div>
-
-      {modeSelection && (
-        <div className="sticky top-0 z-10 flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:items-center rounded-lg border bg-blue-50 border-blue-200 p-3">
-          <span className="text-sm font-medium text-blue-900">
-            {selection.size} photo{selection.size > 1 ? 's' : ''} sélectionnée{selection.size > 1 ? 's' : ''}
-          </span>
-          <div className="flex flex-wrap gap-2 sm:ml-auto">
-            <Button variant="outline" size="sm" onClick={toutSelectionner} disabled={!!progression}>
-              Tout sélectionner ({photosFiltrees.length})
-            </Button>
-            {selection.size > 0 && (
-              <Button variant="outline" size="sm" onClick={() => setSelection(new Set())} disabled={!!progression}>
-                Tout désélectionner
-              </Button>
-            )}
-            <Button size="sm" onClick={() => enregistrerSelection()} disabled={selection.size === 0 || !!progression}>
-              {progression
-                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {progression.fait}/{progression.total}</>
-                : <><Download className="mr-2 h-4 w-4" /> Enregistrer</>}
-            </Button>
-            <Button variant="ghost" size="sm" onClick={quitterSelection} disabled={!!progression}>
-              <X className="mr-1 h-4 w-4" /> Annuler
-            </Button>
-          </div>
-          <p className="text-xs text-blue-800 w-full">
-            {choixDossierDisponible()
-              ? "Une seule fenêtre s'ouvre : allez dans le dossier voulu (ou créez-en un avec « Nouveau dossier »), puis cliquez sur « Sélectionner un dossier » : toutes les photos y sont copiées. Choisissez un dossier du PC (disque C:) : Chrome refuse les lecteurs cloud ou réseau (pCloud, NAS) et la racine de Bureau, Documents, Images ou Téléchargements."
-              : 'Votre navigateur ne permet pas de choisir le dossier : les photos iront dans Téléchargements. Utilisez Chrome ou Edge pour choisir le dossier.'}
-          </p>
-        </div>
-      )}
 
       {groupes.length === 0 && (
         <p className="text-sm text-muted-foreground py-6 text-center">Aucune photo ne correspond aux filtres.</p>
@@ -529,33 +432,16 @@ export function PhotosTab({
                 {groupe.items.filter(estNouvelle).length} nouvelle{groupe.items.filter(estNouvelle).length > 1 ? 's' : ''}
               </span>
             )}
-            {modeSelection && (
-              <Button variant="link" size="sm" className="h-auto p-0 ml-2 text-xs font-normal" onClick={() => basculerGroupe(groupe.items)}>
-                {groupe.items.every((p) => selection.has(p.key)) ? 'Désélectionner le lot' : 'Sélectionner le lot'}
-              </Button>
-            )}
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
             {groupe.items.map((p) => (
               <button
                 key={p.key}
                 type="button"
-                onClick={() => (modeSelection ? basculer(p.key) : setPhotoOuverteKey(p.key))}
-                aria-pressed={modeSelection ? selection.has(p.key) : undefined}
-                className={`relative text-left rounded-lg border bg-white overflow-hidden hover:shadow-md transition ${
-                  modeSelection && selection.has(p.key) ? 'ring-2 ring-blue-500 border-blue-500' : ''
-                }`}
+                onClick={() => setPhotoOuverteKey(p.key)}
+                className="relative text-left rounded-lg border bg-white overflow-hidden hover:shadow-md transition"
               >
                 <StorageImage src={p.url} alt={p.detail} className="w-full h-32 object-cover" />
-                {modeSelection && (
-                  <span
-                    className={`absolute top-2 left-2 h-5 w-5 rounded border-2 flex items-center justify-center ${
-                      selection.has(p.key) ? 'bg-blue-500 border-blue-500 text-white' : 'bg-white/90 border-slate-400'
-                    }`}
-                  >
-                    {selection.has(p.key) && <Check className="h-3.5 w-3.5" />}
-                  </span>
-                )}
                 {estNouvelle(p) && (
                   <span className="absolute top-2 right-2 h-3 w-3 rounded-full bg-red-500 ring-2 ring-white" title="Nouvelle photo" />
                 )}
@@ -600,8 +486,11 @@ export function PhotosTab({
                 )}
               </div>
               <div className="flex justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={enregistrerPhotoOuverte}>
-                  <Download className="mr-2 h-4 w-4" /> Enregistrer
+                <Button size="sm" onClick={telechargerPhotoOuverte} disabled={telechargement}>
+                  {telechargement
+                    ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    : <Download className="mr-2 h-4 w-4" />}
+                  Télécharger
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => openStorageFile(photoOuverte.url)}>
                   <ExternalLink className="mr-2 h-4 w-4" /> Ouvrir en plein écran

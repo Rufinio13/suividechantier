@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Calendar, Building2, Menu, X, LogOut, Wrench, User, Eye, ArrowLeft } from 'lucide-react';
@@ -19,10 +19,6 @@ export function LayoutArtisan() {
   const [savCount, setSavCount] = useState(0);
   const [ncCount, setNcCount] = useState(0);
   const [docsASignerCount, setDocsASignerCount] = useState(0);
-  const [nouveauxDocsCount, setNouveauxDocsCount] = useState(0);
-  const [tachesEnRetardCount, setTachesEnRetardCount] = useState(0);
-  const [nouvellesTachesCount, setNouvellesTachesCount] = useState(0);
-  const [tachesModifieesCount, setTachesModifieesCount] = useState(0);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -42,75 +38,6 @@ export function LayoutArtisan() {
         .map(t => t.chantierid)
     )];
   }, [monSousTraitantId, taches]);
-
-  // Tâches réellement assignées à l'artisan (et datées, donc visibles au calendrier)
-  const mesTacheIdsKey = useMemo(() => {
-    if (!monSousTraitantId || !taches) return '';
-    return taches
-      .filter(t => t.assignetype === 'soustraitant' && t.assigneid === monSousTraitantId && t.datedebut)
-      .map(t => t.id)
-      .sort()
-      .join(',');
-  }, [monSousTraitantId, taches]);
-
-  const loadNotificationsCount = useCallback(async () => {
-    if (!monSousTraitantId) return;
-    try {
-      const { data, error } = await supabase
-        .from('notifications_taches_artisan')
-        .select('type, vu, tache_id')
-        .eq('soustraitant_id', monSousTraitantId)
-        .eq('vu', false);
-      if (error) throw error;
-
-      // ✅ Ignorer les notifications de tâches supprimées / réassignées / sans dates :
-      // elles ne sont jamais visibles au calendrier et ne pourraient jamais s'effacer
-      const mesTacheIds = new Set(mesTacheIdsKey.split(',').filter(Boolean));
-      const visibles = data.filter(n => mesTacheIds.has(n.tache_id));
-
-      setNouvellesTachesCount(visibles.filter(n => n.type === 'nouvelle_tache').length);
-      setTachesModifieesCount(visibles.filter(n => n.type === 'date_modifiee').length);
-    } catch (error) {
-      console.error('Erreur comptage notifications:', error);
-    }
-  }, [monSousTraitantId, mesTacheIdsKey]);
-
-  useEffect(() => {
-    const loadTachesEnRetard = () => {
-      if (!monSousTraitantId || !taches) return;
-      try {
-        const maintenant = new Date();
-        const enRetard = taches.filter(t => {
-          const estMonTache = t.assignetype === 'soustraitant' && t.assigneid === monSousTraitantId;
-          const nonTerminee = !t.artisan_termine && !t.constructeur_valide;
-          const dateFinPassee = t.datefin && new Date(t.datefin) < maintenant;
-          return estMonTache && nonTerminee && dateFinPassee;
-        });
-        setTachesEnRetardCount(enRetard.length);
-      } catch (error) {
-        console.error('Erreur comptage tâches en retard:', error);
-      }
-    };
-    loadTachesEnRetard();
-    const interval = setInterval(loadTachesEnRetard, 30000);
-    return () => clearInterval(interval);
-  }, [monSousTraitantId, taches]);
-
-  useEffect(() => {
-    loadNotificationsCount();
-    const interval = setInterval(loadNotificationsCount, 30000);
-
-    const handleNotificationsUpdated = () => {
-      console.log('🔔 Événement notifications-updated reçu → rechargement immédiat');
-      loadNotificationsCount();
-    };
-    window.addEventListener('notifications-updated', handleNotificationsUpdated);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('notifications-updated', handleNotificationsUpdated);
-    };
-  }, [loadNotificationsCount]);
 
   useEffect(() => {
     const loadNcCount = () => {
@@ -193,24 +120,12 @@ export function LayoutArtisan() {
           .in('chantier_id', mesChantierIds)
           .or(`partage_type.eq.tous,artisan_id.eq.${monSousTraitantId}`);
         if (error) throw error;
-        let aSignerCount = 0;
-        let nouveauxCount = 0;
-        data.forEach(doc => {
-          if (
-            doc.necessite_signature &&
-            doc.artisan_assigne_signature === monSousTraitantId &&
-            doc.signature_statut === 'en_attente'
-          ) {
-            aSignerCount++;
-          } else if (
-            !doc.necessite_signature &&
-            (!doc.artisans_vus || !doc.artisans_vus.includes(monSousTraitantId))
-          ) {
-            nouveauxCount++;
-          }
-        });
+        const aSignerCount = data.filter(doc =>
+          doc.necessite_signature &&
+          doc.artisan_assigne_signature === monSousTraitantId &&
+          doc.signature_statut === 'en_attente'
+        ).length;
         setDocsASignerCount(aSignerCount);
-        setNouveauxDocsCount(nouveauxCount);
       } catch (error) {
         console.error('Erreur comptage documents:', error);
       }
@@ -250,11 +165,7 @@ export function LayoutArtisan() {
       href: basePath,
       icon: Calendar,
       exact: true,
-      badges: [
-        { count: tachesEnRetardCount, variant: 'destructive', label: 'En retard' },
-        { count: nouvellesTachesCount, variant: 'info', label: 'Nouvelles' },
-        { count: tachesModifieesCount, variant: 'success', label: 'Modifiées' }
-      ]
+      badges: []
     },
     {
       name: 'Mes chantiers',
@@ -262,8 +173,7 @@ export function LayoutArtisan() {
       icon: Building2,
       badges: [
         { count: ncCount, variant: 'destructive', label: 'NC' },
-        { count: docsASignerCount, variant: 'warning', label: 'À signer' },
-        { count: nouveauxDocsCount, variant: 'info', label: 'Nouveaux' }
+        { count: docsASignerCount, variant: 'warning', label: 'À signer' }
       ]
     },
     { name: 'SAV', href: `${basePath}/sav`, icon: Wrench, badge: savCount },

@@ -203,9 +203,9 @@ export function CalendrierView({
       const lot = lots.find(l => l.id === tache.lotid);
       const lotNom = lot?.lot || 'Sans lot';
       
-      const displayName = (isArtisanView && chantierNoms && tache.chantierid) 
-        ? chantierNoms[tache.chantierid] 
-        : tache.nom;
+      // Artisan : nom du client (fourni via chantierNoms) au-dessus du nom de la tâche
+      const codeClient = isArtisanView && chantierNoms && tache.chantierid ? chantierNoms[tache.chantierid] : '';
+      const displayName = codeClient ? `${codeClient} – ${tache.nom}` : tache.nom;
       
       const isEnRetard = isArtisanView && 
                          tache.datefin &&
@@ -223,6 +223,7 @@ export function CalendrierView({
         ...tache,
         lotNom,
         displayName,
+        codeClient,
         isEnRetard,
         isNouvelleTache,
         isDateModifiee,
@@ -257,8 +258,56 @@ export function CalendrierView({
     });
   };
 
+  const legende = (
+    <>
+      {!chantierColors && (
+        <div className="flex flex-wrap gap-3 text-xs items-center">
+          <span className="font-medium">Légende :</span>
+          <span className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-green-500"></div>
+            À faire
+          </span>
+          <span className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-yellow-500"></div>
+            Terminée par artisan
+          </span>
+          <span className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-blue-500"></div>
+            Validée
+          </span>
+          <span className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-orange-500"></div>
+            En retard
+          </span>
+          <span className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-red-600"></div>
+            {isArtisanView ? 'Jour indisponible' : 'Conflit / Artisan indisponible'}
+          </span>
+          {modifsNonVuesParTache && (
+            <span className="flex items-center gap-1">
+              <div className={cn('w-3 h-3 rounded-full', PASTILLE_MODIF_CLASS)}></div>
+              Planning modifié (à consulter)
+            </span>
+          )}
+        </div>
+      )}
+
+      {canManageIndisponibilites && (
+        <div className="flex flex-wrap gap-3 text-xs items-center">
+          <span className="flex items-center gap-1">
+            <div className="w-4 h-4 rounded bg-gray-300"></div>
+            Indisponible — cliquez sur un jour pour basculer votre disponibilité
+          </span>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="space-y-4">
+      {/* Artisan : légende au-dessus du calendrier */}
+      {isArtisanView && legende}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={goToPreviousMonth}>
@@ -354,21 +403,22 @@ export function CalendrierView({
                         }}
                       >
                         <div className="font-medium flex items-center gap-1">
-                          {isArtisanView && tache.isNouvelleTache && (
-                            <span 
-                              className="inline-block w-2 h-2 rounded-full bg-blue-600 flex-shrink-0" 
-                              title="Nouvelle tâche"
-                            ></span>
-                          )}
-
-                          {(hasPastilleModif(tache.id) || tache.isDateModifiee) && (
+                          {/* Artisan : pas de pastille (les nouveautés sont listées au-dessus du calendrier) */}
+                          {!isArtisanView && hasPastilleModif(tache.id) && (
                             <span
                               className={cn('inline-block w-2 h-2 rounded-full flex-shrink-0', PASTILLE_MODIF_CLASS)}
                               title="Planning modifié"
                             ></span>
                           )}
 
-                          <span className="truncate">{tache.displayName}</span>
+                          {tache.codeClient ? (
+                            <span className="min-w-0">
+                              <span className="block truncate font-bold">{tache.codeClient}</span>
+                              <span className="block truncate font-normal">{tache.nom}</span>
+                            </span>
+                          ) : (
+                            <span className="truncate">{tache.displayName}</span>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -380,58 +430,8 @@ export function CalendrierView({
         ))}
       </div>
 
-      {!chantierColors && (
-        <div className="flex flex-wrap gap-3 text-xs items-center">
-          <span className="font-medium">Légende :</span>
-          <span className="flex items-center gap-1">
-            <div className="w-4 h-4 rounded bg-green-500"></div>
-            À faire
-          </span>
-          <span className="flex items-center gap-1">
-            <div className="w-4 h-4 rounded bg-yellow-500"></div>
-            Terminée par artisan
-          </span>
-          <span className="flex items-center gap-1">
-            <div className="w-4 h-4 rounded bg-blue-500"></div>
-            Validée
-          </span>
-          <span className="flex items-center gap-1">
-            <div className="w-4 h-4 rounded bg-orange-500"></div>
-            En retard
-          </span>
-          <span className="flex items-center gap-1">
-            <div className="w-4 h-4 rounded bg-red-600"></div>
-            Conflit / Artisan indisponible
-          </span>
-          {modifsNonVuesParTache && (
-            <span className="flex items-center gap-1">
-              <div className={cn('w-3 h-3 rounded-full', PASTILLE_MODIF_CLASS)}></div>
-              Planning modifié (à consulter)
-            </span>
-          )}
-        </div>
-      )}
-
-      {canManageIndisponibilites && (
-        <div className="flex flex-wrap gap-3 text-xs items-center">
-          {isArtisanView && (
-            <>
-              <span className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded-full bg-blue-600"></div>
-                Nouvelle tâche
-              </span>
-              <span className="flex items-center gap-1">
-                <div className={cn('w-3 h-3 rounded-full', PASTILLE_MODIF_CLASS)}></div>
-                Date modifiée
-              </span>
-            </>
-          )}
-          <span className="flex items-center gap-1">
-            <div className="w-4 h-4 rounded bg-gray-300"></div>
-            Indisponible — cliquez sur un jour pour basculer votre disponibilité
-          </span>
-        </div>
-      )}
+      {/* Constructeur : légende sous le calendrier */}
+      {!isArtisanView && legende}
     </div>
   );
 }

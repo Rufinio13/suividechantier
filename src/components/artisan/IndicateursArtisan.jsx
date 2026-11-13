@@ -27,7 +27,7 @@ function Tuile({ to, icon: Icon, valeur, label, couleur }) {
 }
 
 // Moitié du bloc "Chantiers / Tâches"
-function DemiBloc({ to, icon: Icon, valeur, label, className = '' }) {
+function DemiBloc({ to, icon: Icon, valeur, label, detail, className = '' }) {
   return (
     <Link
       to={to}
@@ -40,13 +40,23 @@ function DemiBloc({ to, icon: Icon, valeur, label, className = '' }) {
       <div>
         <div className="text-4xl font-bold leading-none tabular-nums">{valeur}</div>
         <div className="mt-1 text-sm font-medium leading-tight text-slate-700">{label}</div>
+        {detail && <div className="mt-0.5 text-xs font-medium leading-tight text-slate-600">{detail}</div>}
       </div>
     </Link>
   );
 }
 
+// "dont 2 nouvelles et 1 modifiée" (rien si aucune)
+function detailNotifs(nouvelles = 0, modifiees = 0) {
+  const parts = [
+    nouvelles > 0 && `${nouvelles} nouvelle${nouvelles > 1 ? 's' : ''}`,
+    modifiees > 0 && `${modifiees} modifiée${modifiees > 1 ? 's' : ''}`,
+  ].filter(Boolean);
+  return parts.length ? `dont ${parts.join(' et ')}` : null;
+}
+
 // Accueil artisan : compteurs cliquables vers la bonne liste
-export function IndicateursArtisan({ totaux, basePath }) {
+export function IndicateursArtisan({ totaux, basePath, tachesNouvelles = 0, tachesModifiees = 0 }) {
   const chantiersUrl = `${basePath}/chantiers`;
   const enRetard = totaux.tachesEnRetard > 0;
 
@@ -66,6 +76,7 @@ export function IndicateursArtisan({ totaux, basePath }) {
           icon={ListChecks}
           valeur={totaux.tachesAFaire}
           label="Tâches à faire"
+          detail={detailNotifs(tachesNouvelles, tachesModifiees)}
         />
       </div>
 

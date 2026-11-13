@@ -10,8 +10,9 @@ import { TacheDetailModalArtisan } from '@/components/TacheDetailModalArtisan';
 import { Calendar, HardHat } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabaseClient';
-import { useIndicateursArtisan } from '@/hooks/useIndicateursArtisan';
+import { useIndicateursArtisan, estTacheAFaire } from '@/hooks/useIndicateursArtisan';
 import { IndicateursArtisan } from '@/components/artisan/IndicateursArtisan';
+import { NouveautesTachesArtisan } from '@/components/artisan/NouveautesTachesArtisan';
 import { BandeauConformiteArtisan } from '@/components/artisan/BandeauConformiteArtisan';
 
 export function DashboardArtisan() {
@@ -59,7 +60,15 @@ export function DashboardArtisan() {
     };
     loadNotifications();
     const interval = setInterval(loadNotifications, 30000);
-    return () => clearInterval(interval);
+    // Retour sur l'onglet / l'appli : relire tout de suite (la modif a pu être faite ailleurs)
+    const onVisible = () => { if (document.visibilityState === 'visible') loadNotifications(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', loadNotifications);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', loadNotifications);
+    };
   }, [monSousTraitantId]);
 
   const mesTaches = useMemo(() => {
@@ -68,6 +77,26 @@ export function DashboardArtisan() {
       t.assignetype === 'soustraitant' && t.assigneid === monSousTraitantId
     );
   }, [taches, monSousTraitantId]);
+
+  // Bloc "Tâches à faire" : nombre de tâches à faire avec une notification non vue.
+  // Seules les tâches datées comptent (elles s'ouvrent depuis le calendrier, ce qui efface la notification).
+  const nouveautesTaches = useMemo(() => {
+    const nonVues = notifications.filter(n => !n.vu);
+    return mesTaches
+      .filter(t => t.datedebut && estTacheAFaire(t))
+      .map(tache => ({
+        tache,
+        nouvelle: nonVues.some(n => n.tache_id === tache.id && n.type === 'nouvelle_tache'),
+        modif: nonVues.find(n => n.tache_id === tache.id && n.type === 'date_modifiee') || null,
+      }))
+      .filter(i => i.nouvelle || i.modif)
+      .sort((a, b) => String(a.tache.datedebut).localeCompare(String(b.tache.datedebut)));
+  }, [mesTaches, notifications]);
+
+  const notifsTachesAFaire = useMemo(() => ({
+    nouvelles: nouveautesTaches.filter(i => i.nouvelle).length,
+    modifiees: nouveautesTaches.filter(i => i.modif).length,
+  }), [nouveautesTaches]);
 
   const mesChantiers = useMemo(() => {
     if (!mesTaches.length) return [];
@@ -81,11 +110,13 @@ export function DashboardArtisan() {
     return map;
   }, [mesChantiers]);
 
-  const chantierColors = useMemo(() => {
-    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
-    const colorMap = {};
-    mesChantiers.forEach((c, i) => { colorMap[c.id] = colors[i % colors.length]; });
-    return colorMap;
+  // Calendrier : nom du client en majuscules au-dessus du nom de la tâche
+  const codesClient = useMemo(() => {
+    const map = {};
+    mesChantiers.forEach(c => {
+      map[c.id] = (c.client_nom || c.nomchantier || '').trim().toUpperCase();
+    });
+    return map;
   }, [mesChantiers]);
 
   const mesIndisponibiliteDates = useMemo(() => {
@@ -150,6 +181,16 @@ export function DashboardArtisan() {
     setIsModalOpen(true);
   };
 
+  // Depuis la liste des nouveautés : ouvrir la tâche comme depuis le calendrier
+  const handleOuvrirNouveaute = (tache) => {
+    const aModif = nouveautesTaches.some(i => i.tache.id === tache.id && i.modif);
+    handleTacheClick({ ...tache, isDateModifiee: aModif });
+  };
+
+  const handleToutMarquerVu = () => {
+    marquerNotificationsVues(notifications.filter(n => !n.vu).map(n => n.id));
+  };
+
   const handleModalClose = () => {
     setIsModalOpen(false);
     setSelectedTache(null);
@@ -195,8 +236,20 @@ export function DashboardArtisan() {
       <BandeauConformiteArtisan conformite={getConformite(monSousTraitantId)} />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-        <IndicateursArtisan totaux={totaux} basePath={basePath} />
+        <IndicateursArtisan
+          totaux={totaux}
+          basePath={basePath}
+          tachesNouvelles={notifsTachesAFaire.nouvelles}
+          tachesModifiees={notifsTachesAFaire.modifiees}
+        />
       </motion.div>
+
+      <NouveautesTachesArtisan
+        items={nouveautesTaches}
+        chantierNoms={chantierNoms}
+        onOuvrir={handleOuvrirNouveaute}
+        onToutMarquerVu={preview ? null : handleToutMarquerVu}
+      />
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
         <Card>
@@ -213,12 +266,11 @@ export function DashboardArtisan() {
               conflictsByChantier={{}}
               onEditTache={handleTacheClick}
               onAddTache={() => {}}
-              chantierColors={chantierColors}
-              chantierNoms={chantierNoms}
+              chantierNoms={codesClient}
               readOnly={true}
               isArtisanView={true}
               notifications={notifications}
-              onNotificationsVues={preview ? null : marquerNotificationsVues}
+              /* Les notifications ne passent « vues » qu'à l'ouverture de la tâche (handleTacheClick) */
               indisponibiliteDates={mesIndisponibiliteDates}
               onToggleIndisponibilite={handleToggleIndisponibilite}
               canManageIndisponibilites={true}
