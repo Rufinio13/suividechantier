@@ -12,6 +12,8 @@ import { supabase } from '@/lib/supabaseClient';
 import { useArtisanPreview } from '@/context/ArtisanPreviewContext';
 import { StorageImage } from '@/components/StorageImage.jsx';
 import { TacheModificationInfo } from '@/components/planning/TacheModificationInfo';
+import { useAuth } from '@/hooks/useAuth';
+import { auteurPhoto } from '@/lib/photoAuteur';
 
 export function TacheDetailModalArtisan({
   isOpen,
@@ -24,6 +26,7 @@ export function TacheDetailModalArtisan({
   onSuccess
 }) {
   const { toast } = useToast();
+  const { profile } = useAuth();
   const preview = useArtisanPreview();
   const basePath = preview?.basePath || '/artisan';
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,7 +80,8 @@ export function TacheDetailModalArtisan({
           uploadedUrls.push({
             url: urlData.publicUrl,
             name: file.name,
-            uploaded_at: new Date().toISOString()
+            uploaded_at: new Date().toISOString(),
+            ...auteurPhoto(profile)
           });
         }
 

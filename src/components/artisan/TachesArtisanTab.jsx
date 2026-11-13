@@ -11,10 +11,13 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 import { StorageImage } from '@/components/StorageImage.jsx';
 import { openStorageFile } from '@/lib/storage';
+import { useAuth } from '@/hooks/useAuth';
+import { auteurPhoto } from '@/lib/photoAuteur';
 
 export function TachesArtisanTab({ chantierId, soustraitantId }) {
   const { taches, lots, loadTaches } = useChantier();
   const { toast } = useToast();
+  const { profile } = useAuth();
 
   const [photos, setPhotos] = useState({});
   const [uploadingPhotos, setUploadingPhotos] = useState({});
@@ -90,7 +93,8 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
           uploadedUrls.push({
             url: urlData.publicUrl,
             name: file.name,
-            uploaded_at: new Date().toISOString()
+            uploaded_at: new Date().toISOString(),
+            ...auteurPhoto(profile)
           });
         }
 

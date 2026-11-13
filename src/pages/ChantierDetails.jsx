@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useChantier } from '@/context/ChantierContext.jsx';
@@ -7,8 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   ArrowLeft, Edit, Trash2, ListChecks, CheckSquare, FileText, 
-  User, Phone, Mail, MapPin, Package, FolderOpen, Info, Briefcase
+  User, Phone, Mail, MapPin, Package, FolderOpen, Info, Briefcase, Camera
 } from 'lucide-react';
+import { PhotosTab, usePhotosChantier, estPhotoNonVue } from '@/components/photos/PhotosTab';
+import { usePhotosVues } from '@/hooks/usePhotosVues';
+import { useAuth } from '@/hooks/useAuth';
 import { ChantierForm } from '@/components/ChantierForm.jsx';
 import { Planning } from '@/pages/Planning.jsx';
 import { ControlQualite } from '@/pages/ControlQualite.jsx';
@@ -33,6 +36,35 @@ export function ChantierDetails() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [activeTab, setActiveTab] = useState("planning");
+
+  // ✅ Notifications photos : point rouge tant que l'onglet Photos n'a pas été ouvert
+  const { profile } = useAuth();
+  const { photos: photosChantier } = usePhotosChantier(id);
+  const {
+    vuAt: photosVuAt,
+    charge: photosVuesChargees,
+    actif: notifsPhotosActives,
+    marquerVu: marquerPhotosVues,
+  } = usePhotosVues(id);
+  const [photosVuAtPrecedent, setPhotosVuAtPrecedent] = useState(null);
+  const visitePhotosEnregistree = useRef(false);
+
+  useEffect(() => {
+    if (activeTab !== "photos") {
+      visitePhotosEnregistree.current = false;
+      return;
+    }
+    if (!photosVuesChargees || visitePhotosEnregistree.current) return;
+    visitePhotosEnregistree.current = true;
+    // On garde la date de la visite précédente pour marquer les nouvelles photos pendant cette visite
+    setPhotosVuAtPrecedent(photosVuAt);
+    marquerPhotosVues();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, photosVuesChargees]);
+
+  const nbPhotosNonVues = notifsPhotosActives && activeTab !== "photos"
+    ? photosChantier.filter((p) => estPhotoNonVue(p, photosVuAt, profile?.id)).length
+    : 0;
 
   const chantier = useMemo(
     () => chantiers?.find((c) => c.id === id),
@@ -182,6 +214,19 @@ export function ChantierDetails() {
                 <span className="hidden sm:inline">Compte Rendu</span>
                 <span className="sm:hidden">CR</span>
               </TabsTrigger>
+              <TabsTrigger value="photos" className="relative flex items-center justify-center">
+                <Camera className="mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">Photos</span>
+                <span className="sm:hidden">📷</span>
+                {nbPhotosNonVues > 0 && (
+                  <span
+                    className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center"
+                    title={`${nbPhotosNonVues} nouvelle(s) photo(s)`}
+                  >
+                    {nbPhotosNonVues}
+                  </span>
+                )}
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="planning" className="mt-6">
@@ -206,6 +251,14 @@ export function ChantierDetails() {
 
             <TabsContent value="compte-rendu" className="mt-6">
               <CompteRendu isEmbedded embeddedChantierId={chantier.id} />
+            </TabsContent>
+
+            <TabsContent value="photos" className="mt-6">
+              <PhotosTab
+                chantierId={chantier.id}
+                vuAtPrecedent={photosVuAtPrecedent}
+                notificationsActives={notifsPhotosActives}
+              />
             </TabsContent>
           </Tabs>
         </>

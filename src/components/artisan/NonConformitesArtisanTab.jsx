@@ -13,10 +13,13 @@ import { useToast } from '@/components/ui/use-toast';
 import { v4 as uuidv4 } from 'uuid';
 import { StorageImage } from '@/components/StorageImage.jsx';
 import { openStorageFile } from '@/lib/storage';
+import { useAuth } from '@/hooks/useAuth';
+import { auteurPhoto } from '@/lib/photoAuteur';
 
 export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
   const { modelesCQ, controles, saveControleFromModele } = useReferentielCQ();
   const { toast } = useToast();
+  const { profile } = useAuth();
   
   const [dateIntervention, setDateIntervention] = useState({});
   const [commentaireReprise, setCommentaireReprise] = useState({});
@@ -241,7 +244,7 @@ export function NonConformitesArtisanTab({ chantierId, soustraitantId }) {
             .from('photos-reprises')
             .getPublicUrl(filePath);
 
-          uploadedUrls.push({ url: urlData.publicUrl, name: file.name });
+          uploadedUrls.push({ url: urlData.publicUrl, name: file.name, uploaded_at: new Date().toISOString(), ...auteurPhoto(profile) });
         }
 
         setPhotosReprise(prev => ({

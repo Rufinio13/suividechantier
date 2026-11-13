@@ -6,6 +6,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Upload, X, Image as ImageIcon, FileText, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/hooks/useAuth';
+import { auteurPhoto } from '@/lib/photoAuteur';
 import { StorageImage } from '@/components/StorageImage.jsx';
 
 export function ImageUploadCQ({ 
@@ -73,7 +74,8 @@ export function ImageUploadCQ({
           uploadedImages.push({
             url: publicUrl,
             nom: file.name,
-            uploadedAt: new Date().toISOString()
+            uploadedAt: new Date().toISOString(),
+            ...auteurPhoto(profile)
           });
         }
 

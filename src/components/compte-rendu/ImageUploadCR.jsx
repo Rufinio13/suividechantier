@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Camera, X, Eye, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { auteurPhoto } from '@/lib/photoAuteur';
 import { StorageImage } from '@/components/StorageImage.jsx';
 
 export function ImageUploadCR({ 
@@ -57,7 +58,8 @@ export function ImageUploadCR({
           url: publicUrl,
           nom: fileName,
           description: '',
-          uploadedAt: new Date().toISOString()
+          uploadedAt: new Date().toISOString(),
+          ...auteurPhoto(profile)
         });
 
         console.log('✅ Photo uploadée:', publicUrl);
