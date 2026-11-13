@@ -58,6 +58,8 @@ async function nomLibre(dossier, base, ext) {
 }
 
 const estAnnulation = (e) => e?.name === 'AbortError';
+// Sélecteur interdit dans ce contexte (navigateur Brave, page affichée dans un cadre, etc.)
+const estRefusNavigateur = (e) => ['SecurityError', 'NotAllowedError', 'TypeError'].includes(e?.name);
 
 /**
  * Enregistre plusieurs photos. Chaque élément : { photo, nomLot }.
@@ -68,15 +70,19 @@ export async function enregistrerPhotos(elements, onProgression = () => {}) {
   let dossier = null;
   if (choixDossierDisponible()) {
     try {
-      dossier = await window.showDirectoryPicker({ mode: 'readwrite', startIn: 'pictures' });
+      // id : Chrome/Edge se souviennent du dernier dossier choisi
+      dossier = await window.showDirectoryPicker({ id: 'photos-chantier', mode: 'readwrite' });
     } catch (e) {
       if (estAnnulation(e)) return { ok: 0, erreurs: 0, annule: true, dossier: true };
-      throw e;
+      if (!estRefusNavigateur(e)) throw e;
+      console.warn('Choix du dossier impossible, téléchargement classique :', e);
+      dossier = null;
     }
   }
 
   let ok = 0;
   let erreurs = 0;
+  let derniereErreur = null;
   onProgression(0, elements.length);
 
   for (let i = 0; i < elements.length; i++) {
@@ -98,12 +104,13 @@ export async function enregistrerPhotos(elements, onProgression = () => {}) {
       ok++;
     } catch (e) {
       console.error('❌ Erreur enregistrement photo :', photo.url, e);
+      derniereErreur = e;
       erreurs++;
     }
     onProgression(i + 1, elements.length);
   }
 
-  return { ok, erreurs, annule: false, dossier: !!dossier };
+  return { ok, erreurs, annule: false, dossier: !!dossier, derniereErreur };
 }
 
 /** Enregistre une seule photo : fenêtre « Enregistrer sous » si disponible. Retourne false si annulé. */
@@ -113,22 +120,36 @@ export async function enregistrerUnePhoto(photo, nomLot) {
     let fichier;
     try {
       const ext = extension(photo.url);
-      fichier = await window.showSaveFilePicker({
-        suggestedName: `${base}.${ext}`,
-        startIn: 'pictures',
-        types: [{ description: 'Image', accept: { 'image/*': ['.jpg', '.jpeg', '.png', '.webp', '.heic', '.gif'] } }],
-      });
+      fichier = await window.showSaveFilePicker({ id: 'photos-chantier', suggestedName: `${base}.${ext}` });
     } catch (e) {
       if (estAnnulation(e)) return false;
-      throw e;
+      if (!estRefusNavigateur(e)) throw e;
+      console.warn('Fenêtre « Enregistrer sous » impossible, téléchargement classique :', e);
+      fichier = null;
     }
-    const blob = await telechargerBlob(photo.url);
-    const flux = await fichier.createWritable();
-    await flux.write(blob);
-    await flux.close();
-    return true;
+    if (fichier) {
+      const blob = await telechargerBlob(photo.url);
+      const flux = await fichier.createWritable();
+      await flux.write(blob);
+      await flux.close();
+      return true;
+    }
   }
   const blob = await telechargerBlob(photo.url);
   saveAs(blob, `${base}.${extension(photo.url, blob)}`);
   return true;
+}
+
+/** Message d'erreur compréhensible pour l'utilisateur. */
+export function messageErreurEnregistrement(e) {
+  if (!e) return '';
+  if (e.name === 'NotAllowedError' || e.name === 'SecurityError') {
+    return "Le navigateur a refusé l'accès à ce dossier. Choisissez un sous-dossier (par exemple créez « Photos chantier » dans Images ou Documents).";
+  }
+  if (e.name === 'NotFoundError') return "Le dossier choisi n'existe plus.";
+  if (e.name === 'QuotaExceededError') return 'Espace disque insuffisant.';
+  if (/Téléchargement impossible|Failed to fetch|URL invalide/i.test(e.message || '')) {
+    return "La photo n'a pas pu être récupérée depuis le serveur (connexion ou droits d'accès).";
+  }
+  return `${e.name || 'Erreur'} : ${e.message || e}`;
 }

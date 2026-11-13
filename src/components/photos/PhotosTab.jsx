@@ -18,7 +18,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { StorageImage } from '@/components/StorageImage.jsx';
 import { openStorageFile } from '@/lib/storage';
 import { useAuth } from '@/hooks/useAuth';
-import { enregistrerPhotos, enregistrerUnePhoto, choixDossierDisponible } from '@/lib/enregistrerPhotos';
+import { enregistrerPhotos, enregistrerUnePhoto, choixDossierDisponible, messageErreurEnregistrement } from '@/lib/enregistrerPhotos';
 
 export const GENERAL = '__general__';
 
@@ -340,11 +340,15 @@ export function PhotosTab({
         toast({ title: 'Photos enregistrées', description: `${res.ok} photo(s) enregistrée(s)${res.dossier ? ' dans le dossier choisi' : ' dans vos téléchargements'}.` });
         quitterSelection();
       } else {
-        toast({ title: 'Enregistrement partiel', description: `${res.ok} photo(s) enregistrée(s), ${res.erreurs} en erreur.`, variant: 'destructive' });
+        toast({
+          title: res.ok ? 'Enregistrement partiel' : "Aucune photo n'a été enregistrée",
+          description: `${res.ok} photo(s) enregistrée(s), ${res.erreurs} en erreur. ${messageErreurEnregistrement(res.derniereErreur)}`,
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error('❌ Erreur enregistrement photos :', error);
-      toast({ title: 'Erreur', description: "Impossible d'enregistrer les photos dans ce dossier", variant: 'destructive' });
+      toast({ title: "Impossible d'enregistrer les photos", description: messageErreurEnregistrement(error), variant: 'destructive' });
     } finally {
       setProgression(null);
     }
@@ -356,7 +360,7 @@ export function PhotosTab({
       if (ok) toast({ title: 'Photo enregistrée' });
     } catch (error) {
       console.error('❌ Erreur enregistrement photo :', error);
-      toast({ title: 'Erreur', description: "Impossible d'enregistrer la photo", variant: 'destructive' });
+      toast({ title: "Impossible d'enregistrer la photo", description: messageErreurEnregistrement(error), variant: 'destructive' });
     }
   };
 
@@ -482,6 +486,12 @@ export function PhotosTab({
               <X className="mr-1 h-4 w-4" /> Annuler
             </Button>
           </div>
+          {choixDossierDisponible() && (
+            <p className="text-xs text-blue-800 w-full">
+              Astuce : Windows refuse d'enregistrer directement dans Bureau, Téléchargements, Documents ou Images.
+              Dans la fenêtre, ouvrez ou créez un sous-dossier (bouton « Nouveau dossier »), puis cliquez sur « Sélectionner le dossier ».
+            </p>
+          )}
           {!choixDossierDisponible() && (
             <p className="text-xs text-blue-800 w-full">
               Votre navigateur ne permet pas de choisir le dossier : les photos iront dans vos téléchargements.

@@ -3,11 +3,10 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useChantier } from '@/context/ChantierContext.jsx';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   ArrowLeft, Edit, Trash2, ListChecks, CheckSquare, FileText, 
-  User, Phone, Mail, MapPin, Package, FolderOpen, Info, Briefcase, Camera
+  User, Phone, Mail, MapPin, Package, FolderOpen, Briefcase, Camera
 } from 'lucide-react';
 import { PhotosTab, usePhotosChantier, estPhotoNonVue } from '@/components/photos/PhotosTab';
 import { usePhotosVues } from '@/hooks/usePhotosVues';
@@ -110,125 +109,92 @@ export function ChantierDetails() {
         <ChantierForm chantier={chantier} onSuccess={() => setIsEditing(false)} />
       ) : (
         <>
-          {/* HEADER */}
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
-            <div>
-              <Button variant="outline" size="sm" asChild className="mb-3">
-                <Link to="/chantiers">
-                  <ArrowLeft className="mr-2 h-4 w-4" /> Retour
-                </Link>
+          {/* EN-TÊTE COMPACT */}
+          <div className="rounded-xl border bg-white shadow-sm p-4 sm:p-5 space-y-3">
+            <div className="flex items-start gap-3">
+              <Button variant="ghost" size="icon" asChild className="shrink-0 -ml-2" title="Retour aux chantiers">
+                <Link to="/chantiers"><ArrowLeft className="h-5 w-5" /></Link>
               </Button>
-              <h1 className="text-3xl font-bold tracking-tight">{chantier.nomchantier}</h1>
+              <h1 className="flex-1 min-w-0 text-2xl font-bold tracking-tight break-words pt-0.5">{chantier.nomchantier}</h1>
+              <div className="flex gap-2 shrink-0">
+                <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
+                  <Edit className="h-4 w-4 sm:mr-2" /><span className="hidden sm:inline">Modifier</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDelete}
+                  className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                  title="Supprimer le chantier"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
-            <div className="flex space-x-2">
-              <Button variant="outline" onClick={() => setIsEditing(true)}>
-                <Edit className="mr-2 h-4 w-4" /> Modifier
-              </Button>
-              <Button variant="destructive" onClick={handleDelete}>
-                <Trash2 className="mr-2 h-4 w-4" /> Supprimer
-              </Button>
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600 sm:pl-10">
+              <span className="flex items-center gap-2">
+                <User className="h-4 w-4 text-slate-400" />
+                {[chantier.client_prenom, chantier.client_nom].filter(Boolean).join(' ') || <span className="text-slate-400">Client non renseigné</span>}
+              </span>
+              {chantier.client_tel && (
+                <a href={`tel:${chantier.client_tel}`} className="flex items-center gap-2 hover:text-primary">
+                  <Phone className="h-4 w-4 text-slate-400" />{chantier.client_tel}
+                </a>
+              )}
+              {chantier.client_mail && (
+                <a href={`mailto:${chantier.client_mail}`} className="flex items-center gap-2 hover:text-primary break-all">
+                  <Mail className="h-4 w-4 text-slate-400 shrink-0" />{chantier.client_mail}
+                </a>
+              )}
+              {[chantier.adresse, [chantier.codepostal, chantier.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ') && (
+                <span className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-slate-400 shrink-0" />{[chantier.adresse, [chantier.codepostal, chantier.ville].filter(Boolean).join(' ')].filter(Boolean).join(', ')}
+                </span>
+              )}
             </div>
+
+            {chantier.description && (
+              <p className="text-sm text-slate-500 whitespace-pre-wrap border-t pt-3 sm:pl-10">{chantier.description}</p>
+            )}
           </div>
 
-          {/* INFO GÉNÉRALES */}
-          <Card className="bg-gradient-to-br from-slate-50 to-slate-100 border-slate-200 shadow-lg">
-            <CardHeader>
-              <CardTitle>Informations Générales</CardTitle>
-            </CardHeader>
-
-            <CardContent className="space-y-4 text-sm">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="flex items-center">
-                  <User className="mr-3 h-5 w-5 text-primary" />
-                  <span className="font-medium">Client :</span>
-                  &nbsp;{chantier.client_prenom} {chantier.client_nom}
-                </div>
-
-                <div className="flex items-center">
-                  <Phone className="mr-3 h-5 w-5 text-green-600" />
-                  <span className="font-medium">Téléphone :</span>
-                  &nbsp;{chantier.client_tel || "N/A"}
-                </div>
-
-                <div className="flex items-center">
-                  <Mail className="mr-3 h-5 w-5 text-red-600" />
-                  <span className="font-medium">Email :</span>
-                  &nbsp;{chantier.client_mail || "N/A"}
-                </div>
-
-                <div className="flex items-center">
-                  <MapPin className="mr-3 h-5 w-5 text-primary" />
-                  <span className="font-medium">Adresse :</span>
-                  &nbsp;
-                  <span className="text-slate-700">
-                    {chantier.adresse && chantier.adresse}
-                    {chantier.adresse && (chantier.codepostal || chantier.ville) && ", "}
-                    {chantier.codepostal} {chantier.ville}
-                    {!chantier.adresse && !chantier.codepostal && !chantier.ville && (
-                      <span className="text-slate-400">N/A</span>
-                    )}
-                  </span>
-                </div>
-
-                {chantier.description && (
-                  <div className="md:col-span-2 lg:col-span-3 flex items-start pt-2 mt-2 border-t">
-                    <Info className="mr-3 h-5 w-5 text-slate-500 mt-1" />
-                    <p className="text-slate-600 whitespace-pre-wrap">
-                      {chantier.description}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* ✅ TABS - Planning → Commandes → Documents → Marchés → CQ → CR */}
+          {/* ONGLETS EN TUILES */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="flex w-full overflow-x-auto gap-1 h-auto p-2 justify-start">
-              <TabsTrigger value="planning" className="flex items-center justify-center">
-                <ListChecks className="mr-2 h-4 w-4" /> 
-                <span className="hidden sm:inline">Planning</span>
-                <span className="sm:hidden">Plan</span>
-              </TabsTrigger>
-              <TabsTrigger value="commandes" className="flex items-center justify-center">
-                <Package className="mr-2 h-4 w-4" /> 
-                <span className="hidden sm:inline">Commandes</span>
-                <span className="sm:hidden">📦</span>
-              </TabsTrigger>
-              <TabsTrigger value="documents" className="flex items-center justify-center">
-                <FolderOpen className="mr-2 h-4 w-4" /> 
-                <span className="hidden sm:inline">Documents</span>
-                <span className="sm:hidden">📁</span>
-              </TabsTrigger>
-              <TabsTrigger value="marches" className="flex items-center justify-center">
-                <Briefcase className="mr-2 h-4 w-4" /> 
-                <span className="hidden sm:inline">Marchés</span>
-                <span className="sm:hidden">📋</span>
-              </TabsTrigger>
-              <TabsTrigger value="controle-qualite" className="flex items-center justify-center">
-                <CheckSquare className="mr-2 h-4 w-4" /> 
-                <span className="hidden sm:inline">Contrôle Qualité</span>
-                <span className="sm:hidden">CQ</span>
-              </TabsTrigger>
-              <TabsTrigger value="compte-rendu" className="flex items-center justify-center">
-                <FileText className="mr-2 h-4 w-4" /> 
-                <span className="hidden sm:inline">Compte Rendu</span>
-                <span className="sm:hidden">CR</span>
-              </TabsTrigger>
-              <TabsTrigger value="photos" className="relative flex items-center justify-center">
-                <Camera className="mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">Photos</span>
-                <span className="sm:hidden">📷</span>
-                {nbPhotosNonVues > 0 && (
-                  <span
-                    className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center"
-                    title={`${nbPhotosNonVues} nouvelle(s) photo(s)`}
-                  >
-                    {nbPhotosNonVues}
+            <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 gap-2 h-auto bg-transparent p-0">
+              {[
+                { value: "planning", label: "Planning", icon: ListChecks },
+                { value: "commandes", label: "Commandes", icon: Package },
+                { value: "documents", label: "Documents", icon: FolderOpen },
+                { value: "marches", label: "Marchés", icon: Briefcase },
+                { value: "controle-qualite", label: "Contrôle qualité", court: "Qualité", icon: CheckSquare },
+                { value: "compte-rendu", label: "Compte rendu", court: "C. rendu", icon: FileText },
+                { value: "photos", label: "Photos", icon: Camera, badge: nbPhotosNonVues },
+              ].map(({ value, label, court, icon: Icon, badge }) => (
+                <TabsTrigger
+                  key={value}
+                  value={value}
+                  className="relative flex flex-col items-center justify-center gap-1.5 h-auto min-h-[68px] px-1 py-3 rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm whitespace-normal text-center transition-colors hover:border-primary/50 hover:text-primary data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md"
+                >
+                  <Icon className="h-5 w-5" />
+                  <span className="text-xs sm:text-sm font-medium leading-tight">
+                    {court ? (
+                      <>
+                        <span className="sm:hidden">{court}</span>
+                        <span className="hidden sm:inline">{label}</span>
+                      </>
+                    ) : label}
                   </span>
-                )}
-              </TabsTrigger>
+                  {badge > 0 && (
+                    <span
+                      className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center ring-2 ring-white"
+                      title={`${badge} nouvelle(s) photo(s)`}
+                    >
+                      {badge}
+                    </span>
+                  )}
+                </TabsTrigger>
+              ))}
             </TabsList>
 
             <TabsContent value="planning" className="mt-6">
