@@ -59,10 +59,16 @@ const formatTaille = (octets) => {
   return mo < 1 ? `${Math.round(octets / 1024)} Ko` : `${mo.toFixed(1)} Mo`;
 };
 
+// Date du jour au format AAAA-MM-JJ (champ date)
+const aujourdhui = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess, initialFiles = null }) {
   const { toast } = useToast();
   const { user } = useAuth();
-  const { taches = [], sousTraitants = [], lots = [], chantiers = [] } = useChantier();
+  const { taches = [], sousTraitants = [], lots = [], chantiers = [], updateChantier } = useChantier();
   const { getConformite } = useSousTraitant();
 
   const [files, setFiles] = useState([]);
@@ -75,6 +81,9 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess, in
   const [partageType, setPartageType] = useState('tous');
   const [artisanId, setArtisanId] = useState('');
   const [necessiteSignature, setNecessiteSignature] = useState(false);
+  // Marché déjà signé (scan papier) : pas de mail, marché directement « Signé »
+  const [dejaSigne, setDejaSigne] = useState(false);
+  const [dateSignature, setDateSignature] = useState(() => aujourdhui());
   const [uploading, setUploading] = useState(false);
 
   const sortedLots = useMemo(() => [...lots].sort((a, b) => (a.lot || '').localeCompare(b.lot || '')), [lots]);
@@ -150,6 +159,7 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess, in
   const reinitialiser = () => {
     setFiles([]); setTypeDocument('autre'); setTypePlan(''); setLotId(''); setPartageType('tous');
     setArtisanId(''); setNecessiteSignature(false); setProgression(null); setIsDragging(false);
+    setDejaSigne(false); setDateSignature(aujourdhui());
   };
 
   const handleClose = () => {
@@ -160,6 +170,7 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess, in
 
   const handleTypeDocumentChange = (newType) => {
     setTypeDocument(newType); setTypePlan(''); setLotId(''); setArtisanId(''); setPartageType('tous'); setNecessiteSignature(false);
+    setDejaSigne(false); setDateSignature(aujourdhui());
   };
 
   const getExpediteurProfile = async () => {
@@ -195,6 +206,15 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess, in
       signature_statut: (typeDocument === 'marche_travaux' || necessiteSignature) ? 'en_attente' : 'non_requis',
     };
 
+    // Marché déjà signé sur papier : le scan est le document signé
+    const marcheDejaSigne = typeDocument === 'marche_travaux' && dejaSigne;
+    const dateSignatureISO = marcheDejaSigne ? new Date(`${dateSignature}T12:00:00`).toISOString() : null;
+    if (marcheDejaSigne) {
+      documentData.signature_statut = 'signe';
+      documentData.signature_artisan_date = dateSignatureISO;
+      documentData.signature_artisan_nom = 'Signé (scan papier)';
+    }
+
     const { data: insertedDoc, error: dbError } = await supabase.from('documents_chantier').insert(documentData).select().single();
     if (dbError) {
       // Pas de fichier orphelin dans le stockage
@@ -206,10 +226,19 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess, in
       await supabase.from('marches_travaux').insert({
         chantier_id: chantierId, lot_id: lotId, soustraitant_id: artisanId,
         document_id: insertedDoc.id, date_envoi: new Date().toISOString(),
+        ...(marcheDejaSigne ? { date_signature: dateSignatureISO } : {}),
       });
 
+      // Lot retiré de l'onglet Marchés : il y revient dès qu'un marché est envoyé
+      const retires = (chantiers.find(c => c.id === chantierId)?.lots_marches_retires || []).map(String);
+      if (retires.includes(String(lotId))) {
+        await updateChantier(chantierId, { lots_marches_retires: retires.filter(id => id !== String(lotId)) })
+          .catch(err => console.error('❌ Remise du lot dans les marchés :', err));
+      }
+
+      // Pas de mail pour un marché déjà signé sur papier
       const artisan = sousTraitants.find(st => st.id === artisanId);
-      const destinataire = await getArtisanEmailInfo(artisan, supabase);
+      const destinataire = marcheDejaSigne ? null : await getArtisanEmailInfo(artisan, supabase);
       if (destinataire?.email) {
         await sendNotificationEmail('nouveau_document', destinataire.email, {
           nomFichier: file.name, chantierNom,
@@ -231,6 +260,9 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess, in
     if (typeDocument === 'marche_travaux') {
       if (!lotId) { toast({ title: 'Erreur', description: 'Veuillez sélectionner un lot', variant: 'destructive' }); return; }
       if (!artisanId) { toast({ title: 'Erreur', description: 'Veuillez sélectionner un artisan', variant: 'destructive' }); return; }
+      if (dejaSigne && (!dateSignature || dateSignature > aujourdhui())) {
+        toast({ title: 'Erreur', description: 'Veuillez indiquer une date de signature valide (pas dans le futur)', variant: 'destructive' }); return;
+      }
     }
     if (typeDocument !== 'marche_travaux') {
       if (partageType === 'specifique' && !artisanId) { toast({ title: 'Erreur', description: 'Veuillez sélectionner un artisan', variant: 'destructive' }); return; }
@@ -386,6 +418,36 @@ export function DocumentUploadModal({ isOpen, onClose, chantierId, onSuccess, in
                     <option value="">{artisansParLot.length === 0 ? 'Aucun artisan disponible' : 'Sélectionner un artisan...'}</option>
                     {artisansParLot.map(st => <option key={st.id} value={st.id}>{st.nom}{st.aJour ? '' : ' ⚠️ non à jour'}</option>)}
                   </select>
+                </div>
+              )}
+              {lotId && artisanId && (
+                <div className="p-3 border rounded-md space-y-3">
+                  <p className="text-sm font-medium">Ce marché est-il déjà signé par l'artisan ?</p>
+                  <div className="flex gap-2">
+                    {[{ v: false, l: 'Non, à faire signer' }, { v: true, l: 'Oui, scan signé' }].map(o => (
+                      <button key={o.l} type="button" onClick={() => setDejaSigne(o.v)}
+                        className={`flex-1 px-3 py-2 rounded-md text-sm border transition ${
+                          dejaSigne === o.v ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                        }`}>
+                        {o.l}
+                      </button>
+                    ))}
+                  </div>
+                  {dejaSigne ? (
+                    <div className="space-y-2">
+                      <div>
+                        <Label htmlFor="date-signature-marche">Date de signature *</Label>
+                        <input id="date-signature-marche" type="date" value={dateSignature} max={aujourdhui()}
+                          onChange={(e) => setDateSignature(e.target.value)} required
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2" />
+                      </div>
+                      <p className="text-xs text-green-800 bg-green-50 border border-green-200 rounded p-2">
+                        ✓ Aucun mail ne sera envoyé à l'artisan. Le marché sera directement noté « Signé » dans l'onglet Marchés.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">L'artisan recevra un mail pour signer le marché.</p>
+                  )}
                 </div>
               )}
               {conformiteMarche && !conformiteMarche.ok && (

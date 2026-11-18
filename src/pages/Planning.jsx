@@ -6,7 +6,7 @@ import { useCommentaires } from '@/context/CommentairesContext.jsx';
 import { useReferentielCQ } from '@/context/ReferentielCQContext.jsx';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ArrowLeft, Plus, AlertTriangle, MessageSquare, Edit2, Trash2, X, Send } from 'lucide-react';
+import { ArrowLeft, Plus, AlertTriangle } from 'lucide-react';
 import { TacheFormModal } from '@/components/planning/TacheFormModal.jsx';
 import { TacheItem } from '@/components/planning/TacheItem.jsx';
 import { GanttChart } from '@/components/planning/GanttChart.jsx';
@@ -15,12 +15,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { format, parseISO } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { StorageImage } from '@/components/StorageImage.jsx';
 import { openStorageFile } from '@/lib/storage';
-import { CommentairesBloc, parseLignes } from '@/components/planning/CommentairesBloc.jsx';
+import { CommentairesBloc } from '@/components/planning/CommentairesBloc.jsx';
 
 export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   const params = useParams();
@@ -34,9 +33,6 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   // ✅ COMMENTAIRES
   const { 
     getCommentairesByChantier, 
-    addCommentaire, 
-    updateCommentaire,
-    deleteCommentaire,
     loading: loadingCommentaires 
   } = useCommentaires();
 
@@ -50,9 +46,7 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   const [prefilledDate, setPrefilledDate] = useState(null);
 
   // ✅ ÉTAT COMMENTAIRES
-  const [isCommentaireModalOpen, setIsCommentaireModalOpen] = useState(false);
-  const [editingCommentaire, setEditingCommentaire] = useState(null);
-  const [filtreCommentaires, setFiltreCommentaires] = useState('tout'); // tout | journal | bureau_etudes
+  const [filtreCommentaires, setFiltreCommentaires] = useState('tout'); // tout | journal | bureau_etudes | archives
 
   const chantier = useMemo(() => chantiers.find(c => c.id === chantierId), [chantiers, chantierId]);
 
@@ -80,19 +74,20 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
   }, [chantierId, getCommentairesByChantier]);
 
   // Sans catégorie (anciens commentaires) = journal
-  const commentairesJournal = useMemo(
-    () => commentaires.filter(c => (c.categorie || 'journal') === 'journal'),
-    [commentaires]
-  );
-  const commentairesBE = useMemo(
-    () => commentaires.filter(c => c.categorie === 'bureau_etudes'),
-    [commentaires]
-  );
+  const estJournal = (c) => (c.categorie || 'journal') === 'journal';
+  const estBE = (c) => c.categorie === 'bureau_etudes';
+  const actifs = useMemo(() => commentaires.filter(c => !c.archive), [commentaires]);
+  const archives = useMemo(() => commentaires.filter(c => c.archive), [commentaires]);
+  const commentairesJournal = useMemo(() => actifs.filter(estJournal), [actifs]);
+  const commentairesBE = useMemo(() => actifs.filter(estBE), [actifs]);
+  const archivesJournal = useMemo(() => archives.filter(estJournal), [archives]);
+  const archivesBE = useMemo(() => archives.filter(estBE), [archives]);
 
   const FILTRES_COMMENTAIRES = [
     { value: 'tout', label: 'Tout', count: commentairesJournal.length + commentairesBE.length },
     { value: 'journal', label: 'Journal', count: commentairesJournal.length },
     { value: 'bureau_etudes', label: "Bureau d'Études", count: commentairesBE.length },
+    { value: 'archives', label: 'Archivés', count: archives.length },
   ];
 
   // =========================================
@@ -242,118 +237,6 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
         description: "Impossible de supprimer la tâche.",
         variant: "destructive",
       });
-    }
-  };
-
-  // =========================================
-  // ✅ GESTION DES COMMENTAIRES MULTI-LIGNES
-  // =========================================
-  const handleOpenCommentaireModal = (commentaire = null, categorie = 'journal') => {
-    if (commentaire) {
-      setEditingCommentaire({
-        id: commentaire.id,
-        titre: commentaire.titre,
-        lignes: parseLignes(commentaire),
-        categorie: commentaire.categorie || 'journal',
-      });
-    } else {
-      setEditingCommentaire({
-        id: null,
-        titre: '',
-        lignes: [{ texte: '', checked: false }],
-        categorie,
-      });
-    }
-    setIsCommentaireModalOpen(true);
-  };
-
-  const handleCloseCommentaireModal = () => {
-    setIsCommentaireModalOpen(false);
-    setEditingCommentaire(null);
-  };
-
-  const handleAddLigne = () => {
-    setEditingCommentaire(prev => ({
-      ...prev,
-      lignes: [...prev.lignes, { texte: '', checked: false }]
-    }));
-  };
-
-  const handleRemoveLigne = (index) => {
-    setEditingCommentaire(prev => ({
-      ...prev,
-      lignes: prev.lignes.filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleChangeLigneTexte = (index, texte) => {
-    setEditingCommentaire(prev => ({
-      ...prev,
-      lignes: prev.lignes.map((ligne, i) => 
-        i === index ? { ...ligne, texte } : ligne
-      )
-    }));
-  };
-
-  const handleSaveCommentaire = async () => {
-    if (!editingCommentaire) return;
-    
-    if (!editingCommentaire.titre.trim()) {
-      alert('Veuillez remplir le titre');
-      return;
-    }
-
-    const lignesValides = editingCommentaire.lignes.filter(l => l.texte.trim());
-    if (lignesValides.length === 0) {
-      alert('Veuillez ajouter au moins une ligne de commentaire');
-      return;
-    }
-
-    try {
-      const texteJSON = JSON.stringify(lignesValides);
-
-      if (editingCommentaire.id) {
-        await updateCommentaire(editingCommentaire.id, {
-          titre: editingCommentaire.titre,
-          texte: texteJSON
-        });
-      } else {
-        await addCommentaire(
-          chantierId,
-          editingCommentaire.titre.trim(),
-          texteJSON,
-          editingCommentaire.categorie
-        );
-      }
-      handleCloseCommentaireModal();
-    } catch (error) {
-      console.error('Erreur lors de la sauvegarde du commentaire:', error);
-      alert('Erreur lors de la sauvegarde du commentaire');
-    }
-  };
-
-  const handleDeleteCommentaire = async (commentaireId) => {
-    if (window.confirm("Êtes-vous sûr de vouloir supprimer ce commentaire ?")) {
-      try {
-        await deleteCommentaire(commentaireId);
-      } catch (error) {
-        console.error('Erreur lors de la suppression:', error);
-        alert('Erreur lors de la suppression du commentaire');
-      }
-    }
-  };
-
-  const handleToggleLigne = async (commentaire, ligneIndex) => {
-    try {
-      const lignes = parseLignes(commentaire);
-      lignes[ligneIndex].checked = !lignes[ligneIndex].checked;
-
-      await updateCommentaire(commentaire.id, {
-        texte: JSON.stringify(lignes)
-      });
-    } catch (error) {
-      console.error('Erreur lors du toggle:', error);
-      alert('Erreur lors de la mise à jour');
     }
   };
 
@@ -730,28 +613,20 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
         ))}
       </div>
 
-      {filtreCommentaires !== 'bureau_etudes' && (
-        <CommentairesBloc
-          categorie="journal"
-          commentaires={commentairesJournal}
-          onAdd={() => handleOpenCommentaireModal(null, 'journal')}
-          onEdit={(c) => handleOpenCommentaireModal(c)}
-          onDelete={handleDeleteCommentaire}
-          onToggleLigne={handleToggleLigne}
-          className={isEmbedded ? 'shadow-none border-0 mt-4' : 'mt-4'}
-        />
-      )}
-
-      {filtreCommentaires !== 'journal' && (
-        <CommentairesBloc
-          categorie="bureau_etudes"
-          commentaires={commentairesBE}
-          onAdd={() => handleOpenCommentaireModal(null, 'bureau_etudes')}
-          onEdit={(c) => handleOpenCommentaireModal(c)}
-          onDelete={handleDeleteCommentaire}
-          onToggleLigne={handleToggleLigne}
-          className={isEmbedded ? 'shadow-none border-0 mt-4' : 'mt-4'}
-        />
+      {filtreCommentaires === 'archives' ? (
+        <>
+          <CommentairesBloc categorie="journal" chantierId={chantierId} commentaires={archivesJournal} archives className={isEmbedded ? 'shadow-none border-0 mt-4' : 'mt-4'} />
+          <CommentairesBloc categorie="bureau_etudes" chantierId={chantierId} commentaires={archivesBE} archives className={isEmbedded ? 'shadow-none border-0 mt-4' : 'mt-4'} />
+        </>
+      ) : (
+        <>
+          {filtreCommentaires !== 'bureau_etudes' && (
+            <CommentairesBloc categorie="journal" chantierId={chantierId} commentaires={commentairesJournal} className={isEmbedded ? 'shadow-none border-0 mt-4' : 'mt-4'} />
+          )}
+          {filtreCommentaires !== 'journal' && (
+            <CommentairesBloc categorie="bureau_etudes" chantierId={chantierId} commentaires={commentairesBE} className={isEmbedded ? 'shadow-none border-0 mt-4' : 'mt-4'} />
+          )}
+        </>
       )}
 
       {/* MODALES */}
@@ -774,87 +649,6 @@ export function Planning({ isEmbedded = false, embeddedChantierId = null }) {
         />
       )}
 
-      {/* ✅ MODALE COMMENTAIRE MULTI-LIGNES */}
-      {isCommentaireModalOpen && editingCommentaire && (
-        <motion.div 
-          initial={{ opacity: 0 }} 
-          animate={{ opacity: 1 }}
-          className="fixed inset-0 bg-black/50 z-40 flex items-center justify-center p-4"
-          onClick={handleCloseCommentaireModal}
-        >
-          <Card className="w-full max-w-2xl z-50 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <CardHeader>
-              <CardTitle>
-                {editingCommentaire.categorie === 'bureau_etudes'
-                  ? (editingCommentaire.id ? 'Modifier la note BE' : "Nouvelle note Bureau d'Études")
-                  : (editingCommentaire.id ? 'Modifier le commentaire' : 'Nouveau commentaire')}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="commentaire-titre">Titre</Label>
-                <Input
-                  id="commentaire-titre"
-                  value={editingCommentaire.titre}
-                  onChange={(e) => setEditingCommentaire(prev => ({ 
-                    ...prev, 
-                    titre: e.target.value 
-                  }))}
-                  placeholder="Sujet du commentaire..."
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label>Lignes de commentaire</Label>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={handleAddLigne}
-                  >
-                    <Plus className="mr-1 h-4 w-4" /> Ajouter une ligne
-                  </Button>
-                </div>
-
-                <div className="space-y-2">
-                  {editingCommentaire.lignes.map((ligne, index) => (
-                    <div key={index} className="flex gap-2">
-                      <Input
-                        value={ligne.texte}
-                        onChange={(e) => handleChangeLigneTexte(index, e.target.value)}
-                        placeholder={`Ligne ${index + 1}...`}
-                        className="flex-1"
-                      />
-                      {editingCommentaire.lignes.length > 1 && (
-                        <Button 
-                          type="button" 
-                          variant="ghost" 
-                          size="icon" 
-                          onClick={() => handleRemoveLigne(index)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <X size={18} />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button variant="outline" onClick={handleCloseCommentaireModal}>
-                  Annuler
-                </Button>
-                <Button onClick={handleSaveCommentaire}>
-                  <Send className="mr-2 h-4 w-4" /> 
-                  {editingCommentaire.id ? 'Enregistrer' : 'Ajouter'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-      )}
     </div>
   );
 }

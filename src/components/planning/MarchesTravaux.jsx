@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Briefcase, CheckCircle, Clock, FileText, Download } from 'lucide-react';
+import { Briefcase, CheckCircle, Clock, FileText, Download, Trash2, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/components/ui/use-toast';
@@ -14,11 +14,36 @@ import { fr } from 'date-fns/locale';
 
 export function MarchesTravaux({ chantierId }) {
   const { toast } = useToast();
-  const { lots = [], sousTraitants = [], chantiers = [] } = useChantier();
+  const { lots = [], sousTraitants = [], chantiers = [], updateChantier } = useChantier();
   const { sousTraitants: artisans = [], attestations = [] } = useSousTraitant();
   const [marches, setMarches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generationPdf, setGenerationPdf] = useState(false);
+  const [voirRetires, setVoirRetires] = useState(false);
+
+  // Lots retirés du tableau pour ce chantier (« pas à faire »)
+  const lotsRetires = useMemo(() => {
+    const chantier = chantiers.find(c => c.id === chantierId);
+    return (chantier?.lots_marches_retires || []).map(String);
+  }, [chantiers, chantierId]);
+
+  const enregistrerRetires = async (liste, message) => {
+    try {
+      await updateChantier(chantierId, { lots_marches_retires: liste });
+      toast({ title: message });
+    } catch (error) {
+      console.error('❌ Lots retirés des marchés :', error);
+      toast({ title: 'Erreur', description: "Impossible d'enregistrer la modification", variant: 'destructive' });
+    }
+  };
+
+  const retirerLot = (row) => {
+    if (!window.confirm(`Retirer le lot « ${row.lotNom} » des marchés de ce chantier ?\n\nIl reviendra automatiquement si un marché est envoyé pour ce lot.`)) return;
+    enregistrerRetires([...new Set([...lotsRetires, String(row.lotId)])], 'Lot retiré des marchés');
+  };
+
+  const remettreLot = (lotId) =>
+    enregistrerRetires(lotsRetires.filter(id => id !== String(lotId)), 'Lot remis dans les marchés');
 
   // ✅ PDF « Liste des entreprises » (réception) : uniquement les lots avec un marché envoyé
   const exporterListeEntreprises = async () => {
@@ -131,7 +156,7 @@ export function MarchesTravaux({ chantierId }) {
   }, [chantierId]);
 
   // ✅ Créer une ligne par lot avec les infos du marché (si existe)
-  const tableData = useMemo(() => {
+  const toutesLignes = useMemo(() => {
     return lots.map(lot => {
       // Trouver le marché correspondant à ce lot
       const marche = marches.find(m => m.lot_id === lot.id);
@@ -154,6 +179,15 @@ export function MarchesTravaux({ chantierId }) {
       };
     });
   }, [lots, marches, sousTraitants]);
+
+  // Une ligne retirée reste visible si un marché a été envoyé pour son lot
+  const { tableData, lignesRetirees } = useMemo(() => {
+    const estRetire = (row) => !row.hasMarche && lotsRetires.includes(String(row.lotId));
+    return {
+      tableData: toutesLignes.filter(r => !estRetire(r)),
+      lignesRetirees: toutesLignes.filter(estRetire),
+    };
+  }, [toutesLignes, lotsRetires]);
 
   // ✅ Statistiques
   const stats = useMemo(() => {
@@ -253,6 +287,7 @@ export function MarchesTravaux({ chantierId }) {
                     <th className="text-left p-3 font-medium text-sm">Date envoi</th>
                     <th className="text-left p-3 font-medium text-sm">Date signature</th>
                     <th className="text-left p-3 font-medium text-sm">Statut</th>
+                    <th className="p-3 w-12"><span className="sr-only">Retirer</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -310,10 +345,43 @@ export function MarchesTravaux({ chantierId }) {
                           </Badge>
                         )}
                       </td>
+
+                      {/* Retirer le lot (seulement sans marché) */}
+                      <td className="p-3 text-right">
+                        {!row.hasMarche && (
+                          <Button variant="ghost" size="icon" title="Retirer ce lot (pas à faire sur ce chantier)"
+                            onClick={() => retirerLot(row)}
+                            className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50">
+                            <Trash2 size={16} />
+                          </Button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Lots retirés : possibilité de les remettre */}
+          {lignesRetirees.length > 0 && (
+            <div className="mt-4 pt-3 border-t">
+              <button type="button" onClick={() => setVoirRetires(v => !v)}
+                className="text-sm text-muted-foreground hover:text-foreground hover:underline underline-offset-2">
+                {voirRetires ? 'Masquer' : 'Voir'} les lots retirés ({lignesRetirees.length})
+              </button>
+              {voirRetires && (
+                <ul className="mt-2 space-y-1">
+                  {lignesRetirees.map(row => (
+                    <li key={row.lotId} className="flex items-center justify-between gap-2 px-3 py-1.5 rounded bg-muted/40">
+                      <span className="text-sm text-muted-foreground line-through">{row.lotNom}</span>
+                      <Button variant="ghost" size="sm" onClick={() => remettreLot(row.lotId)} className="h-7">
+                        <RotateCcw className="mr-1 h-3.5 w-3.5" /> Remettre
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </CardContent>
@@ -331,6 +399,7 @@ export function MarchesTravaux({ chantierId }) {
                 <li>• Sélectionnez le lot et l'artisan concerné</li>
                 <li>• Le marché apparaîtra automatiquement dans ce tableau avec la date d'envoi</li>
                 <li>• Quand l'artisan signera le document, la date de signature sera remplie</li>
+                <li>• Un lot pas à faire sur ce chantier se retire avec la poubelle : il revient tout seul si un marché est envoyé pour ce lot</li>
               </ul>
             </div>
           </div>

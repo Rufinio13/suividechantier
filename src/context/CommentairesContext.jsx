@@ -4,6 +4,9 @@ import { useAuth } from '@/hooks/useAuth';
 
 const CommentairesContext = createContext();
 
+export const nouvelId = () =>
+  (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+
 export const useCommentaires = () => {
   const context = useContext(CommentairesContext);
   if (!context) {
@@ -156,6 +159,63 @@ export function CommentairesProvider({ children }) {
     
   };
 
+  // ✅ TÂCHES D'UN COMMENTAIRE (stockées en JSON dans `texte`)
+  // Relit la version en base avant d'écrire, pour ne pas écraser une tâche
+  // ou une réponse ajoutée entre-temps par un autre utilisateur.
+  const modifierLignes = async (commentaireId, transformer) => {
+    const { data, error } = await supabase
+      .from('commentaires_chantier')
+      .select('texte')
+      .eq('id', commentaireId)
+      .single();
+    if (error) throw error;
+
+    let lignes;
+    try {
+      lignes = typeof data?.texte === 'string' ? JSON.parse(data.texte) : data?.texte;
+    } catch {
+      lignes = null;
+    }
+    if (!Array.isArray(lignes)) lignes = data?.texte ? [{ texte: String(data.texte), checked: false }] : [];
+
+    return updateCommentaire(commentaireId, { texte: JSON.stringify(transformer(lignes)) });
+  };
+
+  // Retrouve une tâche par son id (nouvelles tâches) ou, à défaut, par sa position
+  const trouverIndex = (lignes, ligneId, index) => {
+    if (ligneId) {
+      const i = lignes.findIndex(l => l.id === ligneId);
+      if (i !== -1) return i;
+    }
+    return index;
+  };
+
+  // ✅ RÉPONSES PAR TÂCHE
+  const addReponse = async (commentaireId, ligneId, ligneIndex, texte) => {
+    const nouvelle = { id: nouvelId(), auteur, texte, date: new Date().toISOString() };
+    return modifierLignes(commentaireId, (lignes) => {
+      const i = trouverIndex(lignes, ligneId, ligneIndex);
+      if (!lignes[i]) throw new Error('Tâche introuvable');
+      lignes[i] = { ...lignes[i], reponses: [...(lignes[i].reponses || []), nouvelle] };
+      return lignes;
+    });
+  };
+
+  const deleteReponse = async (commentaireId, reponseId) => {
+    return modifierLignes(commentaireId, (lignes) =>
+      lignes.map(l => (l.reponses ? { ...l, reponses: l.reponses.filter(r => r.id !== reponseId) } : l))
+    );
+  };
+
+  // ✅ ARCHIVER / RESTAURER
+  const setArchive = async (commentaireId, archive) => {
+    return updateCommentaire(commentaireId, {
+      archive,
+      archive_le: archive ? new Date().toISOString() : null,
+      archive_par: archive ? auteur : null,
+    });
+  };
+
   const value = {
     commentaires,
     loading,
@@ -166,6 +226,10 @@ export function CommentairesProvider({ children }) {
     updateCommentaire,
     deleteCommentaire,
     togglePrisEnCompte,
+    modifierLignes,
+    addReponse,
+    deleteReponse,
+    setArchive,
     refreshCommentaires: fetchCommentaires
   };
 
