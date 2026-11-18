@@ -220,6 +220,20 @@ export function SAVArtisanCard({ sav }) {
             </div>
           )}
 
+          {/* Photos du constructeur (lecture seule) */}
+          {Array.isArray(sav.photos) && sav.photos.length > 0 && (
+            <div>
+              <span className="text-xs font-medium text-slate-600">Photos :</span>
+              <div className="flex gap-2 flex-wrap mt-1">
+                {sav.photos.map((photo, i) => (
+                  <StorageImage key={photo.url || i} src={photo.url} alt={photo.name || `Photo ${i + 1}`}
+                    className="h-16 w-16 object-cover rounded border cursor-pointer hover:opacity-80"
+                    onClick={() => openStorageFile(photo.url)} />
+                ))}
+              </div>
+            </div>
+          )}
+
           {sav.datePrevisionnelle && (
             <div>
               <span className="text-xs font-medium text-slate-600">Date prévisionnelle (constructeur) :</span>

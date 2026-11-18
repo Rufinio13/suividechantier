@@ -9,7 +9,8 @@ import { supabase } from '@/lib/supabaseClient';
  *                          (récapitulatif ; les champs d'une seule tâche à la racine restent acceptés)
  * - 'nouveau_document'   → data: { artisanPrenom, aCompte, nomFichier, chantierNom, typeDocument?, necessite_signature?, urlFichier? }
  * - 'non_conformite'     → data: { artisanPrenom, aCompte, pointControle, chantierNom, description?, photos?, plans?, dateReprise? }
- * - 'sav'                → data: { artisanPrenom, aCompte, titreSAV, chantierNom, description?, datePrevisionnelle? }
+ * - 'sav'                → data: { artisanPrenom, aCompte, titreSAV, chantierNom, description?, datePrevisionnelle?, nouvelleTache? }
+ *                          (nouvelleTache : texte d'une tâche ajoutée à un SAV déjà assigné)
  *
  * aCompte: true  → bouton d'action affiché dans le mail
  * aCompte: false → bouton masqué (artisan sans compte)
