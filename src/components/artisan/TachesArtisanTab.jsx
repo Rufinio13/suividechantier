@@ -184,18 +184,20 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
       {mesTaches.map((tache) => {
         const tacheId = tache.id;
         const lot = lots.find(l => l.id === tache.lotid);
-        const isDejaTermine = tache.artisan_termine || tache.constructeur_valide;
+        // Validée par le constructeur, ou clôturée par lui sans déclaration de l'artisan
+        const valideeConstructeur = !!(tache.constructeur_valide || tache.terminee);
+        const isDejaTermine = tache.artisan_termine || valideeConstructeur;
 
         // LOGIQUE CODE COULEUR
         const maintenant = new Date();
         const dateFinPassee = tache.datefin && new Date(tache.datefin) < maintenant;
-        
+
         let cardClass = 'bg-white border-slate-200';
         let badgeColor = null;
         let badgeText = '';
         let badgeIcon = null;
-        
-        if (tache.constructeur_valide) {
+
+        if (valideeConstructeur) {
           cardClass = 'bg-blue-50 border-blue-300';
           badgeColor = 'bg-blue-500';
           badgeText = 'Validée';
@@ -260,20 +262,22 @@ export function TachesArtisanTab({ chantierId, soustraitantId }) {
               {/* STATUT TERMINÉ */}
               {isDejaTermine && (
                 <div className={`p-3 rounded-md ${
-                  tache.constructeur_valide 
-                    ? 'bg-blue-100 border border-blue-300' 
+                  valideeConstructeur
+                    ? 'bg-blue-100 border border-blue-300'
                     : 'bg-yellow-100 border border-yellow-300'
                 }`}>
                   <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className={`h-4 w-4 ${tache.constructeur_valide ? 'text-blue-700' : 'text-yellow-700'}`} />
-                    <span className={`text-sm font-semibold ${tache.constructeur_valide ? 'text-blue-800' : 'text-yellow-800'}`}>
-                      {tache.constructeur_valide 
-                        ? `Validée par le constructeur le ${formatDate(tache.constructeur_valide_date)}`
+                    <CheckCircle className={`h-4 w-4 ${valideeConstructeur ? 'text-blue-700' : 'text-yellow-700'}`} />
+                    <span className={`text-sm font-semibold ${valideeConstructeur ? 'text-blue-800' : 'text-yellow-800'}`}>
+                      {valideeConstructeur
+                        ? (tache.constructeur_valide_date
+                            ? `Validée par le constructeur le ${formatDate(tache.constructeur_valide_date)}`
+                            : 'Validée par le constructeur')
                         : `Marquée terminée le ${formatDate(tache.artisan_termine_date)}`
                       }
                     </span>
                   </div>
-                  {!tache.constructeur_valide && (
+                  {!valideeConstructeur && (
                     <p className="text-xs text-yellow-700">
                       En attente de validation par le constructeur
                     </p>

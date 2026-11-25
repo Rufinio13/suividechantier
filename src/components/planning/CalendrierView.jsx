@@ -67,12 +67,13 @@ export function CalendrierView({
     const color = chantierColors[tache.chantierid];
     if (!color) return 'bg-gray-100 border-gray-300 text-gray-600';
     
-    const isEnRetard = isArtisanView && 
+    const isEnRetard = isArtisanView &&
                        tache.datefin &&
                        new Date(tache.datefin) < new Date() &&
                        !tache.artisan_termine &&
-                       !tache.constructeur_valide;
-    
+                       !tache.constructeur_valide &&
+                       !tache.terminee;
+
     return {
       backgroundColor: `${color}20`,
       borderColor: isEnRetard ? '#dc2626' : color,
@@ -208,12 +209,13 @@ export function CalendrierView({
       const codeClient = isArtisanView && chantierNoms && tache.chantierid ? chantierNoms[tache.chantierid] : '';
       const displayName = codeClient ? `${codeClient} – ${tache.nom}` : tache.nom;
       
-      const isEnRetard = isArtisanView && 
+      const isEnRetard = isArtisanView &&
                          tache.datefin &&
                          new Date(tache.datefin) < new Date() &&
                          !tache.artisan_termine &&
-                         !tache.constructeur_valide;
-      
+                         !tache.constructeur_valide &&
+                         !tache.terminee;
+
       const notifAffichee = (type) => isArtisanView && notifications.some(
         n => n.tache_id === tache.id && n.type === type && (!n.vu || notifsVuesCetteVisite.has(n.id))
       );

@@ -14,8 +14,12 @@ const aujourdhui = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+// Tâche validée / clôturée par le constructeur (validation du travail de l'artisan,
+// ou « Marquer comme terminée » quand l'artisan ne l'a pas déclarée)
+export const estValideeParConstructeur = (t) => !!(t.constructeur_valide || t.terminee);
+
 // Tâche pas encore terminée par l'artisan ni validée par le constructeur
-export const estTacheAFaire = (t) => !t.artisan_termine && !t.constructeur_valide;
+export const estTacheAFaire = (t) => !t.artisan_termine && !estValideeParConstructeur(t);
 
 // Tâche à faire dont la date de fin est passée (une tâche qui finit aujourd'hui n'est pas en retard)
 export const estTacheEnRetard = (t, jour = aujourdhui()) =>

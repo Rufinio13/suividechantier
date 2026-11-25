@@ -150,7 +150,9 @@ export function TacheDetailModalArtisan({
 
   if (!tache) return null;
 
-  const isDejaTermine = tache.artisan_termine || tache.constructeur_valide;
+  // Validée par le constructeur, ou clôturée par lui sans déclaration de l'artisan
+  const valideeConstructeur = !!(tache.constructeur_valide || tache.terminee);
+  const isDejaTermine = tache.artisan_termine || valideeConstructeur;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -213,7 +215,7 @@ export function TacheDetailModalArtisan({
               <div className="flex items-center gap-2 text-green-800">
                 <CheckCircle className="h-5 w-5" />
                 <span className="font-medium">
-                  {tache.constructeur_valide 
+                  {valideeConstructeur
                     ? '✅ Tâche validée par le constructeur'
                     : '✅ Tâche marquée terminée (en attente de validation)'}
                 </span>
