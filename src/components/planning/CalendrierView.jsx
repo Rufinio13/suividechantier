@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSousTraitant } from '@/context/SousTraitantContext';
 import { PASTILLE_MODIF_CLASS } from '@/components/planning/TacheModificationInfo';
+import { tacheTravailleLe } from '@/lib/joursOuvres';
 
 const JOURS_FERIES = [
   '2025-01-01', '2025-04-21', '2025-05-01', '2025-05-08', '2025-05-29', '2025-06-09',
@@ -232,14 +233,12 @@ export function CalendrierView({
   }, [taches, lots, conflictsByChantier, chantierColors, chantierNoms, isArtisanView, notifications, notifsVuesCetteVisite]);
 
   const getTachesForDay = (day) => {
-    if (isWeekend(day)) return [];
-    
     const dayStr = format(day, 'yyyy-MM-dd');
-    
-    if (JOURS_FERIES.includes(dayStr)) return [];
-    
+
     return tachesAvecLot.filter(tache => {
       if (!tache.datedebut) return false;
+      // Week-ends / fériés affichés seulement pour les tâches qui y travaillent
+      if (!tacheTravailleLe(tache, day)) return false;
       
       const tacheStart = format(parseISO(tache.datedebut), 'yyyy-MM-dd');
       const tacheEnd = tache.datefin ? format(parseISO(tache.datefin), 'yyyy-MM-dd') : tacheStart;
@@ -350,7 +349,8 @@ export function CalendrierView({
               const isNonOuvre = isWeekendDay || isFerie;
               const tachesForDay = getTachesForDay(day);
               const isIndisponible = !!indisponibiliteDates?.has(dayStr);
-              const canClickDay = canManageIndisponibilites ? !isNonOuvre : (!readOnly && !isNonOuvre);
+              // Ajout de tâche possible aussi un week-end / férié (tâche exceptionnelle)
+              const canClickDay = canManageIndisponibilites ? !isNonOuvre : !readOnly;
 
               return (
                 <div
@@ -365,7 +365,7 @@ export function CalendrierView({
                   )}
                   title={canManageIndisponibilites && isCurrentMonth && !isNonOuvre ? (isIndisponible ? 'Cliquer pour vous rendre disponible' : 'Cliquer pour vous déclarer indisponible') : undefined}
                   onClick={() => {
-                    if (isCurrentMonth && !isNonOuvre) {
+                    if (isCurrentMonth && canClickDay) {
                       handleDayClick(day);
                     }
                   }}

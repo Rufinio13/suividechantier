@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useMemo, useRef 
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
 import { parseISO, format, eachDayOfInterval, startOfDay } from "date-fns";
-import { addJoursOuvres } from "@/lib/joursOuvres";
+import { addJoursOuvres, dateFinTravaillee, countJoursTravailles, modeTache, tacheTravailleLe, MODE_OUVRES } from "@/lib/joursOuvres";
 import { sendNotificationEmail, getArtisanEmailInfo } from "@/lib/sendNotificationEmail";
 
 export const ChantierContext = createContext();
@@ -257,6 +257,7 @@ export function ChantierProvider({ children }) {
         const days = eachDayOfInterval({ start, end });
         
         days.forEach(day => {
+          if (!tacheTravailleLe(t, day)) return;
           const key = `${t.assigneid}-${format(day, "yyyy-MM-dd")}`;
           
           if (!conflicts[key]) {
@@ -346,6 +347,7 @@ export function ChantierProvider({ children }) {
       datedebut: tache.datedebut ?? null,
       datefin: tache.datefin ?? null,
       terminee: tache.terminee ?? false,
+      jours_travailles: tache.jours_travailles || MODE_OUVRES,
     };
 
     const { data, error } = await supabase
@@ -436,6 +438,7 @@ export function ChantierProvider({ children }) {
         constructeur_valide_date: safeUpdates.constructeur_valide_date ?? null,
         date_intervention_validee: safeUpdates.date_intervention_validee ?? null,
         date_intervention_validee_date: safeUpdates.date_intervention_validee_date ?? null,
+        jours_travailles: safeUpdates.jours_travailles || ancienneTache?.jours_travailles || MODE_OUVRES,
       })
       .eq("id", id)
       .select("*")
@@ -537,6 +540,8 @@ export function ChantierProvider({ children }) {
   // Décale de `diffJoursOuvres` jours OUVRÉS (week-ends et fériés ignorés) toutes les tâches
   // d'un chantier dont la date de début est postérieure à `fromDate` (utilisé après un
   // changement de date sur une tâche donnée).
+  // Une tâche en mode « Lun → Sam » ou « Tous les jours » garde son nombre de jours travaillés :
+  // sa date de fin est recalculée dans son propre mode à partir du nouveau début.
   // Les mails aux artisans restent en attente : l'appelant les envoie via envoyerMailsDecalage.
   const shiftTachesSuivantes = async (chantierId, fromDate, excludeId, diffJoursOuvres) => {
     if (!diffJoursOuvres || !chantierId || !fromDate) return [];
@@ -547,8 +552,19 @@ export function ChantierProvider({ children }) {
 
     const updated = [];
     for (const t of suivantes) {
-      const newDatedebut = format(addJoursOuvres(parseISO(t.datedebut), diffJoursOuvres), 'yyyy-MM-dd');
-      const newDatefin = t.datefin ? format(addJoursOuvres(parseISO(t.datefin), diffJoursOuvres), 'yyyy-MM-dd') : t.datefin;
+      const mode = modeTache(t);
+      let newDatedebut, newDatefin;
+      if (mode === MODE_OUVRES) {
+        newDatedebut = format(addJoursOuvres(parseISO(t.datedebut), diffJoursOuvres), 'yyyy-MM-dd');
+        newDatefin = t.datefin ? format(addJoursOuvres(parseISO(t.datefin), diffJoursOuvres), 'yyyy-MM-dd') : t.datefin;
+      } else {
+        // Le début bouge du même nombre de jours ouvrés que les autres tâches
+        const debut = parseISO(t.datedebut);
+        const nouveauDebut = addJoursOuvres(debut, diffJoursOuvres);
+        const duree = t.datefin ? countJoursTravailles(debut, parseISO(t.datefin), mode) : 0;
+        newDatedebut = format(nouveauDebut, 'yyyy-MM-dd');
+        newDatefin = duree > 0 ? format(dateFinTravaillee(nouveauDebut, duree, mode), 'yyyy-MM-dd') : t.datefin;
+      }
       updated.push(await updateTache(t.id, { ...t, datedebut: newDatedebut, datefin: newDatefin }, { differerMail: true }));
     }
     return updated;

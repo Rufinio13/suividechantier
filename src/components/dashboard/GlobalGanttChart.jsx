@@ -15,6 +15,7 @@ import { useSousTraitant } from '@/context/SousTraitantContext';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { calculateDateFinLogic, calculateDureeOuvree } from '@/context/chantierContextLogics/tacheLogics';
+import { tacheTravailleLe, modeTache, MODES_JOURS_TRAVAILLES } from '@/lib/joursOuvres';
 import { TacheModificationInfo, useModificationsTache, PASTILLE_MODIF_CLASS } from '@/components/planning/TacheModificationInfo';
 
 const MIN_DAY_WIDTH = 16;
@@ -77,7 +78,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         if (!startDate || !endDate) return;
         const days = eachDayOfInterval({ start: startOfDay(startDate), end: endOfDay(endDate) });
         days.forEach(day => {
-          if (isWeekend(day)) return;
+          if (!tacheTravailleLe(tache, day)) return;
           const dayKey = format(day, 'yyyy-MM-dd');
           const stId = tache.assigneid;
           if (!stAssignments[dayKey]) stAssignments[dayKey] = {};
@@ -124,7 +125,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         if (s && e) {
           const days = eachDayOfInterval({ start: startOfDay(s), end: endOfDay(e) });
           days.forEach(day => {
-            if (!isWeekend(day)) {
+            if (tacheTravailleLe(tache, day)) {
               const key = format(day, 'yyyy-MM-dd');
               if (!daysTasks.has(key)) daysTasks.set(key, []);
               daysTasks.get(key).push(tache);
@@ -205,11 +206,12 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
 
   const selectTaskAtIndex = (tasksForDay, index, chantierName) => {
     const tache = tasksForDay[index];
-    const duree = tache.datedebut && tache.datefin ? calculateDureeOuvree(tache.datedebut, tache.datefin) : '';
+    const mode = modeTache(tache);
+    const duree = tache.datedebut && tache.datefin ? calculateDureeOuvree(tache.datedebut, tache.datefin, mode) : '';
     setDayTasksList(tasksForDay);
     setDayTaskIndex(index);
     setSelectedTask({ ...tache, chantierName });
-    setFormData({ datedebut: tache.datedebut || '', duree: duree || '' });
+    setFormData({ datedebut: tache.datedebut || '', duree: duree || '', jours_travailles: mode });
   };
 
   const handleTaskClick = (tasksForDay, chantierName) => {
@@ -233,7 +235,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
     const dureeNum = parseInt(formData.duree, 10);
     if (isNaN(dureeNum) || dureeNum < 1) { alert('La durée doit être un nombre positif'); return; }
 
-    const nouvelleDatatefin = calculateDateFinLogic(formData.datedebut, dureeNum);
+    const nouvelleDatatefin = calculateDateFinLogic(formData.datedebut, dureeNum, formData.jours_travailles);
     setIsSaving(true);
 
     try {
@@ -242,6 +244,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
         chantierid: selectedTask.chantierid, lotid: selectedTask.lotid,
         assigneid: selectedTask.assigneid, assignetype: selectedTask.assignetype,
         datedebut: formData.datedebut, datefin: nouvelleDatatefin,
+        jours_travailles: formData.jours_travailles,
         terminee: selectedTask.terminee || false,
       });
       handleCloseDialog();
@@ -370,7 +373,6 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                     <React.Fragment key={`chantier-row-${chantier.id}`}>
                       <div className="absolute left-0 right-0 border-b border-slate-200/60" style={{ top: rowTop + ROW_HEIGHT - 1, height: 1, zIndex: 0 }} />
                       {allDays.map((day, dayIndex) => {
-                        if (isWeekend(day)) return null;
                         const dayKey = format(day, 'yyyy-MM-dd');
                         const tasksForDay = chantier.daysTasks.get(dayKey);
                         if (!tasksForDay || tasksForDay.length === 0) return null;
@@ -455,9 +457,17 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                     <Input id="duree" type="number" min="1" value={formData.duree} onChange={(e) => setFormData(prev => ({ ...prev, duree: e.target.value }))} />
                   </div>
                 </div>
-                {formData.datedebut && formData.duree && (
+                <div className="space-y-2">
+                  <Label htmlFor="jours_travailles_global">Jours travaillés</Label>
+                  <select id="jours_travailles_global" value={formData.jours_travailles}
+                    onChange={(e) => setFormData(prev => ({ ...prev, jours_travailles: e.target.value }))}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                    {MODES_JOURS_TRAVAILLES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                </div>
+                {formData.datedebut && parseInt(formData.duree, 10) > 0 && (
                   <div className="text-sm text-slate-600 bg-blue-50 p-2 rounded">
-                    📅 Date de fin calculée : <span className="font-semibold">{format(parseISO(calculateDateFinLogic(formData.datedebut, parseInt(formData.duree, 10))), 'dd/MM/yyyy', { locale: fr })}</span>
+                    📅 Date de fin calculée : <span className="font-semibold">{format(parseISO(calculateDateFinLogic(formData.datedebut, parseInt(formData.duree, 10), formData.jours_travailles)), 'dd/MM/yyyy', { locale: fr })}</span>
                   </div>
                 )}
               </div>

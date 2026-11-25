@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { parseISO, isValid, format, eachDayOfInterval, startOfDay } from "date-fns";
-import { diffJoursOuvres } from "@/lib/joursOuvres";
+import { diffJoursOuvres, MODES_JOURS_TRAVAILLES, MODE_OUVRES, modeTache, modeSuggerePourDebut } from "@/lib/joursOuvres";
 import { fr } from "date-fns/locale";
 import { calculateDateFinLogic, calculateDureeOuvree } from "@/context/chantierContextLogics/tacheLogics";
 import { useSousTraitant } from "@/context/SousTraitantContext";
@@ -51,8 +51,13 @@ export function TacheFormModal({
   const [formData, setFormData] = useState({
     nom: "", description: "", lotid: "", datedebut: "", duree: "",
     datefin: "", assigneid: "", assignetype: "", terminee: false, constructeur_valide: false,
-    date_intervention_validee: false,
+    date_intervention_validee: false, jours_travailles: MODE_OUVRES,
   });
+
+  const modeSuggere = useMemo(
+    () => modeSuggerePourDebut(formData.datedebut, formData.jours_travailles),
+    [formData.datedebut, formData.jours_travailles]
+  );
 
   const sortedLots = useMemo(() => [...(globalLots || [])].sort((a, b) => (a.lot || "").localeCompare(b.lot || "")), [globalLots]);
 
@@ -76,8 +81,10 @@ export function TacheFormModal({
   useEffect(() => {
     if (!isOpen) return;
     if (tache) {
-      const duree = tache.datedebut && tache.datefin ? calculateDureeOuvree(tache.datedebut, tache.datefin) : "";
+      const mode = modeTache(tache);
+      const duree = tache.datedebut && tache.datefin ? calculateDureeOuvree(tache.datedebut, tache.datefin, mode) : "";
       setFormData({
+        jours_travailles: mode,
         nom: tache.nom || "", description: tache.description || "",
         lotid: tache.lotid || (sortedLots?.[0]?.id || ""),
         datedebut: tache.datedebut || "", duree, datefin: tache.datefin || "",
@@ -90,19 +97,19 @@ export function TacheFormModal({
         nom: "", description: "", lotid: sortedLots?.[0]?.id || "",
         datedebut: prefilledDate || "", duree: "", datefin: "",
         assigneid: "", assignetype: "", terminee: false, constructeur_valide: false,
-        date_intervention_validee: false,
+        date_intervention_validee: false, jours_travailles: MODE_OUVRES,
       });
     }
   }, [isOpen, tache, sortedLots, prefilledDate]);
 
   useEffect(() => {
     if (formData.datedebut && formData.duree) {
-      const fin = calculateDateFinLogic(formData.datedebut, parseInt(formData.duree, 10));
+      const fin = calculateDateFinLogic(formData.datedebut, parseInt(formData.duree, 10), formData.jours_travailles);
       setFormData(prev => ({ ...prev, datefin: fin }));
     } else {
       setFormData(prev => ({ ...prev, datefin: "" }));
     }
-  }, [formData.datedebut, formData.duree]);
+  }, [formData.datedebut, formData.duree, formData.jours_travailles]);
 
   const assignableEntities = useMemo(() => {
     if (!formData.lotid) return [];
@@ -140,11 +147,19 @@ export function TacheFormModal({
     const deb = parseISO(formData.datedebut);
     if (!isValid(deb)) { alert("Date de début invalide"); return; }
 
-    const datefin = calculateDateFinLogic(formData.datedebut, parseInt(formData.duree, 10));
+    if (modeSuggere) {
+      const ok = await confirm(
+        `Le ${format(deb, 'EEEE dd/MM/yyyy', { locale: fr })} n'est pas un jour travaillé pour cette tâche : elle commencera en réalité le jour travaillé suivant.\n\nEnregistrer quand même ?`
+      );
+      if (!ok) return;
+    }
+
+    const datefin = calculateDateFinLogic(formData.datedebut, parseInt(formData.duree, 10), formData.jours_travailles);
     const payload = {
       nom: formData.nom, description: formData.description || null,
       chantierid: chantierId, lotid: formData.lotid,
       datedebut: formData.datedebut, datefin,
+      jours_travailles: formData.jours_travailles || MODE_OUVRES,
       assigneid: formData.assigneid || null, assignetype: formData.assignetype || null,
       terminee: formData.terminee || false,
     };
@@ -232,6 +247,33 @@ export function TacheFormModal({
               <Input type="number" min="1" id="duree" name="duree" value={formData.duree} onChange={handleChange} required />
             </div>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="jours_travailles">Jours travaillés</Label>
+            <select id="jours_travailles" name="jours_travailles" value={formData.jours_travailles} onChange={handleChange}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+              {MODES_JOURS_TRAVAILLES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+            {formData.datefin && (
+              <p className="text-xs text-slate-600">
+                Fin prévue : <span className="font-semibold">{format(parseISO(formData.datefin), 'EEEE dd/MM/yyyy', { locale: fr })}</span>
+              </p>
+            )}
+          </div>
+          {modeSuggere && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-md flex items-start gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-900 space-y-2">
+                <p>
+                  Le {format(parseISO(formData.datedebut), 'EEEE dd/MM', { locale: fr })} n'est pas compté dans
+                  « {MODES_JOURS_TRAVAILLES.find(m => m.value === formData.jours_travailles)?.label} » : la tâche serait décalée au jour travaillé suivant.
+                </p>
+                <Button type="button" size="sm" variant="outline" className="border-amber-400 bg-white"
+                  onClick={() => setFormData(prev => ({ ...prev, jours_travailles: modeSuggere }))}>
+                  Passer en « {MODES_JOURS_TRAVAILLES.find(m => m.value === modeSuggere)?.label} »
+                </Button>
+              </div>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="lotid">Lot <span className="text-red-500">*</span></Label>
             <select id="lotid" name="lotid" value={formData.lotid} onChange={(e) => handleSelectChange("lotid", e.target.value)} required

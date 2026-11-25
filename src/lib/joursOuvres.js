@@ -1,4 +1,4 @@
-import { addDays, format, isWeekend } from 'date-fns';
+import { addDays, format, getDay, isWeekend, parseISO } from 'date-fns';
 
 // Liste des jours fériés 2025-2026
 export const JOURS_FERIES = [
@@ -12,30 +12,63 @@ export const isJourFerie = (date) => JOURS_FERIES.includes(format(date, 'yyyy-MM
 
 export const isJourOuvre = (date) => !isWeekend(date) && !isJourFerie(date);
 
-export const countJoursOuvres = (startDate, endDate) => {
+// ─── Jours travaillés d'une tâche ────────────────────────────────────────────
+// 'ouvres'  : lundi → vendredi, hors fériés (par défaut)
+// 'lun_sam' : lundi → samedi, hors dimanches et fériés
+// 'tous'    : tous les jours, week-ends et fériés compris
+export const MODE_OUVRES = 'ouvres';
+export const MODES_JOURS_TRAVAILLES = [
+  { value: 'ouvres', label: 'Lun → Ven hors fériés' },
+  { value: 'lun_sam', label: 'Lun → Sam hors fériés' },
+  { value: 'tous', label: 'Tous les jours (week-ends et fériés compris)' },
+];
+
+export const modeTache = (tache) => tache?.jours_travailles || MODE_OUVRES;
+
+export const isJourTravaille = (date, mode = MODE_OUVRES) => {
+  if (mode === 'tous') return true;
+  if (mode === 'lun_sam') return getDay(date) !== 0 && !isJourFerie(date);
+  return isJourOuvre(date);
+};
+
+// Une tâche occupe-t-elle ce jour (dans sa plage de dates ET un jour travaillé de son mode) ?
+export const tacheTravailleLe = (tache, date) => isJourTravaille(date, modeTache(tache));
+
+export const countJoursTravailles = (startDate, endDate, mode = MODE_OUVRES) => {
   let count = 0;
   let current = startDate;
   while (current <= endDate) {
-    if (isJourOuvre(current)) count++;
+    if (isJourTravaille(current, mode)) count++;
     current = addDays(current, 1);
   }
   return count;
 };
 
-// Avance (n > 0) ou recule (n < 0) une date de n jours OUVRÉS (week-ends et fériés ignorés)
-export const addJoursOuvres = (date, n) => {
+// Date de fin (incluse) d'une tâche de `duree` jours travaillés commençant à `startDate`
+export const dateFinTravaillee = (startDate, duree, mode = MODE_OUVRES) => {
+  let current = startDate;
+  let comptes = 0;
+  while (comptes < duree) {
+    if (isJourTravaille(current, mode)) comptes++;
+    if (comptes < duree) current = addDays(current, 1);
+  }
+  return current;
+};
+
+// Avance (n > 0) ou recule (n < 0) une date de n jours travaillés
+export const addJoursTravailles = (date, n, mode = MODE_OUVRES) => {
   let result = date;
   let remaining = Math.abs(n);
   const step = n >= 0 ? 1 : -1;
   while (remaining > 0) {
     result = addDays(result, step);
-    if (isJourOuvre(result)) remaining--;
+    if (isJourTravaille(result, mode)) remaining--;
   }
   return result;
 };
 
-// Nombre de jours OUVRÉS séparant oldDate de newDate (signé : positif si newDate est après oldDate)
-export const diffJoursOuvres = (oldDate, newDate) => {
+// Nombre de jours travaillés séparant oldDate de newDate (signé : positif si newDate est après oldDate)
+export const diffJoursTravailles = (oldDate, newDate, mode = MODE_OUVRES) => {
   if (oldDate.getTime() === newDate.getTime()) return 0;
   const forward = newDate > oldDate;
   const step = forward ? 1 : -1;
@@ -43,7 +76,22 @@ export const diffJoursOuvres = (oldDate, newDate) => {
   let current = oldDate;
   while (current.getTime() !== newDate.getTime()) {
     current = addDays(current, step);
-    if (isJourOuvre(current)) count += step;
+    if (isJourTravaille(current, mode)) count += step;
   }
   return count;
 };
+
+// Le jour de début choisi n'est pas travaillé dans ce mode : renvoie le mode à proposer
+// (samedi → 'lun_sam', dimanche ou férié → 'tous'), sinon null.
+export const modeSuggerePourDebut = (dateDebutStr, mode = MODE_OUVRES) => {
+  if (!dateDebutStr) return null;
+  const date = parseISO(dateDebutStr);
+  if (isNaN(date.getTime()) || isJourTravaille(date, mode)) return null;
+  if (getDay(date) === 6 && !isJourFerie(date)) return 'lun_sam';
+  return 'tous';
+};
+
+// ─── Versions « jours ouvrés » (lun → ven hors fériés), conservées pour l'existant ──
+export const countJoursOuvres = (startDate, endDate) => countJoursTravailles(startDate, endDate, MODE_OUVRES);
+export const addJoursOuvres = (date, n) => addJoursTravailles(date, n, MODE_OUVRES);
+export const diffJoursOuvres = (oldDate, newDate) => diffJoursTravailles(oldDate, newDate, MODE_OUVRES);

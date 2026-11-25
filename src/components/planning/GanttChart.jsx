@@ -8,7 +8,7 @@ import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
 import { useConfirm } from '@/hooks/useConfirm';
 import { PASTILLE_MODIF_CLASS } from '@/components/planning/TacheModificationInfo';
-import { isJourOuvre, countJoursOuvres, diffJoursOuvres } from '@/lib/joursOuvres';
+import { isJourOuvre, diffJoursOuvres, countJoursTravailles, dateFinTravaillee, modeTache, tacheTravailleLe } from '@/lib/joursOuvres';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -40,6 +40,7 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
         try {
           const days = eachDayOfInterval({ start: startOfDay(tacheDateDebut), end: startOfDay(tacheDateFin) });
           for (const day of days) {
+            if (!tacheTravailleLe(tache, day)) continue;
             const dateStr = format(day, 'yyyy-MM-dd');
             const key = `${tache.assigneid}-${dateStr}`;
             const conflict = conflictsByChantier[key];
@@ -62,13 +63,9 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
     if (daysDragged === 0) return;
 
     const newStartDate = addDays(item.start, daysDragged);
-    const joursOuvres = countJoursOuvres(item.start, item.end);
-    let newEndDate = newStartDate;
-    let joursOuvresComptes = 0;
-    while (joursOuvresComptes < joursOuvres) {
-      if (isJourOuvre(newEndDate)) joursOuvresComptes++;
-      if (joursOuvresComptes < joursOuvres) newEndDate = addDays(newEndDate, 1);
-    }
+    const mode = modeTache(item.rawTache);
+    const joursOuvres = countJoursTravailles(item.start, item.end, mode);
+    const newEndDate = dateFinTravaillee(newStartDate, joursOuvres, mode);
 
     const ancienneDateDebut = format(item.start, 'yyyy-MM-dd');
     await updateTache(item.id, {
@@ -193,7 +190,7 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
               let current = startOfDay(item.start);
               const end = startOfDay(item.end);
               while (current <= end) {
-                if (isJourOuvre(current)) {
+                if (tacheTravailleLe(item.rawTache, current)) {
                   const offset = differenceInDays(current, overallStartDate);
                   segments.push({ date: current, offset: offset * dayWidth, width: dayWidth - 1, color: getColorForSegment(item, current) });
                 }
