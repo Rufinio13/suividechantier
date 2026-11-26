@@ -16,6 +16,56 @@ import { PdfViewer } from '@/components/PdfViewer';
 import { PDFDocument, rgb } from 'pdf-lib';
 import { TYPE_PLAN_LABELS, TYPES_PLAN } from '@/components/planning/DocumentUploadModal';
 
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Réessaie un appel Supabase ({ data, error }) jusqu'à 3 fois : réseau mobile instable.
+async function withRetry(fn, tentatives = 3) {
+  let res;
+  for (let i = 0; i < tentatives; i++) {
+    try {
+      res = await fn();
+    } catch (err) {
+      res = { data: null, error: err };
+    }
+    if (!res.error) return res;
+    if (i < tentatives - 1) await wait(1000 * (i + 1));
+  }
+  return res;
+}
+
+// Remplace les caractères non pris en charge par la police standard du PDF (WinAnsi).
+function pdfSafeText(text) {
+  const winAnsiExtra = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ';
+  return Array.from(String(text))
+    .map(ch => {
+      const code = ch.charCodeAt(0);
+      if ((code >= 0x20 && code <= 0x7e) || (code >= 0xa0 && code <= 0xff) || winAnsiExtra.includes(ch)) return ch;
+      const special = { 'Ł': 'L', 'ł': 'l', 'Đ': 'D', 'đ': 'd', 'ı': 'i', 'ß': 'ss' };
+      if (special[ch]) return special[ch];
+      const base = ch.normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const ok = Array.from(base).every(c => {
+        const k = c.charCodeAt(0);
+        return k >= 0x20 && k <= 0x7e;
+      });
+      return ok && base ? base : '?';
+    })
+    .join('');
+}
+
+function messageErreurSignature(etape, error) {
+  const msg = error?.message || '';
+  if (/session|jwt|token|row-level security|not authorized|unauthorized/i.test(msg)) {
+    return 'Votre session a expiré. Reconnectez-vous puis signez à nouveau.';
+  }
+  if (/failed to fetch|network|load failed|timeout|offline/i.test(msg) || (typeof navigator !== 'undefined' && navigator.onLine === false)) {
+    return 'Connexion internet instable. Vérifiez votre réseau (ou passez en Wi-Fi) puis réessayez.';
+  }
+  if (etape === 'pdf') {
+    return "Le fichier PDF de ce marché n'a pas pu être préparé pour la signature. Prévenez le constructeur pour qu'il le dépose à nouveau.";
+  }
+  return msg || 'Impossible de signer le document. Réessayez dans un instant.';
+}
+
 // ✅ CONFIGURATION DES TYPES DE DOCUMENTS
 const DOCUMENT_CATEGORIES = [
   { 
@@ -230,9 +280,9 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
       setSignatureData(null);
       
       try {
-        const { data, error } = await supabase.storage
-          .from('documents-chantiers')
-          .download(doc.storage_path);
+        const { data, error } = await withRetry(() =>
+          supabase.storage.from('documents-chantiers').download(doc.storage_path)
+        );
 
         if (error) throw error;
 
@@ -243,9 +293,11 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
 
       } catch (error) {
         console.error('Erreur chargement PDF:', error);
+        // Sans ça, l'écran resterait bloqué sur le chargement
+        closeSignatureView();
         toast({
           title: 'Erreur',
-          description: 'Impossible de charger le document',
+          description: 'Impossible de charger le document. Vérifiez votre connexion puis réessayez.',
           variant: 'destructive',
         });
       }
@@ -297,49 +349,73 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
     }
 
     setSigning(true);
+    let etape = 'session';
 
     try {
-      const { data: pdfBlob, error: downloadError } = await supabase.storage
-        .from('documents-chantiers')
-        .download(selectedDoc.storage_path);
+      // Téléphone resté en veille pendant la lecture : le jeton de connexion a pu
+      // expirer sans être renouvelé (minuteurs suspendus). On le rafraîchit avant
+      // d'écrire, sinon l'envoi est refusé par les règles de sécurité.
+      const { data: sessionData } = await supabase.auth.getSession();
+      const expiresAt = sessionData?.session?.expires_at;
+      if (!sessionData?.session || (expiresAt && expiresAt * 1000 - Date.now() < 120000)) {
+        const { error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) {
+          throw new Error('Votre session a expiré. Reconnectez-vous puis signez à nouveau.');
+        }
+      }
 
-      if (downloadError) throw downloadError;
+      // Réutiliser le PDF déjà chargé pour l'aperçu (évite un 2e téléchargement sur réseau mobile)
+      etape = 'chargement';
+      let sourceBlob = pdfBlob;
+      if (!sourceBlob) {
+        const { data, error: downloadError } = await withRetry(() =>
+          supabase.storage.from('documents-chantiers').download(selectedDoc.storage_path)
+        );
+        if (downloadError) throw downloadError;
+        sourceBlob = data;
+      }
 
-      const arrayBuffer = await pdfBlob.arrayBuffer();
+      etape = 'pdf';
+      const arrayBuffer = await sourceBlob.arrayBuffer();
       const pdfDoc = await PDFDocument.load(arrayBuffer);
 
-      const signatureImage = await pdfDoc.embedPng(signatureData);
+      const signatureImage = await pdfDoc.embedPng(signatureData.dataUrl);
 
-      const pages = pdfDoc.getPages();
-      const signatureWidth = 150;
-      const signatureHeight = 50;
+      // Cadre de 150×50 pt, en conservant les proportions du tracé
+      const boxW = 150;
+      const boxH = 50;
+      const ratio = (signatureData.width || 3) / (signatureData.height || 1);
+      const signatureWidth = ratio > boxW / boxH ? boxW : boxH * ratio;
+      const signatureHeight = ratio > boxW / boxH ? boxW / ratio : boxH;
 
-      const nomComplet = `${profile.prenom} ${profile.nom}`;
+      const nomComplet = [profile?.prenom, profile?.nom].filter(Boolean).join(' ').trim() || 'Artisan';
       const dateSignature = format(new Date(), "dd/MM/yyyy 'à' HH:mm", { locale: fr });
 
-      pages.forEach((page) => {
+      pdfDoc.getPages().forEach((page) => {
         const { width } = page.getSize();
 
-        const x = width - signatureWidth - 50;
+        const x = width - boxW - 50;
         const y = 50;
 
         page.drawImage(signatureImage, {
-          x,
-          y,
+          x: x + (boxW - signatureWidth) / 2,
+          y: y + (boxH - signatureHeight) / 2,
           width: signatureWidth,
           height: signatureHeight,
         });
 
         const textX = x - 100;
-        
-        page.drawText(`Signé par: ${nomComplet}`, {
+
+        // La police standard du PDF ne connaît que l'alphabet latin de base :
+        // un nom avec ş, ł, ț… ferait échouer toute la signature.
+        page.drawText(pdfSafeText(`Signé par: ${nomComplet}`), {
           x: textX,
           y: y + 30,
           size: 8,
           color: rgb(0, 0, 0),
         });
 
-        page.drawText(`Date: ${dateSignature}`, {
+        page.drawText(pdfSafeText(`Date: ${dateSignature}`), {
           x: textX,
           y: y + 15,
           size: 8,
@@ -350,38 +426,45 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
       const pdfBytes = await pdfDoc.save();
       const pdfFile = new Blob([pdfBytes], { type: 'application/pdf' });
 
-      const timestamp = Date.now();
-      // ✅ chantier_id dans le chemin : la policy storage en déduit la société
-      const signedFileName = `${selectedDoc.chantier_id}_signed_${timestamp}_${selectedDoc.nom_fichier}`;
-      const signedPath = `signed/${signedFileName}`;
+      // ✅ chantier_id dans le chemin : la policy storage en déduit la société.
+      // Nom de fichier nettoyé (accents, espaces, apostrophes) : certains caractères
+      // sont refusés par le stockage.
+      etape = 'envoi';
+      const nomFichierSur = (selectedDoc.nom_fichier || 'document.pdf')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-zA-Z0-9._-]+/g, '_');
 
-      console.log('📤 Upload PDF signé vers:', signedPath);
-
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('documents-chantiers')
-        .upload(signedPath, pdfFile, {
-          contentType: 'application/pdf',
-          upsert: false
-        });
-
-      if (uploadError) {
-        console.error('❌ Erreur upload storage:', uploadError);
-        throw new Error(`Upload failed: ${uploadError.message}`);
+      let signedPath = null;
+      let derniereErreur = null;
+      for (let tentative = 0; tentative < 3 && !signedPath; tentative++) {
+        // Nouveau nom à chaque tentative : si un envoi précédent a abouti sans
+        // que la réponse arrive (réseau coupé), on n'échoue pas sur "déjà existant".
+        const path = `signed/${selectedDoc.chantier_id}_signed_${Date.now()}_${nomFichierSur}`;
+        const { error: uploadError } = await supabase.storage
+          .from('documents-chantiers')
+          .upload(path, pdfFile, { contentType: 'application/pdf', upsert: false });
+        if (!uploadError) {
+          signedPath = path;
+        } else {
+          derniereErreur = uploadError;
+          console.error(`❌ Erreur upload storage (tentative ${tentative + 1}):`, uploadError);
+          await wait(1000 * (tentative + 1));
+        }
       }
+      if (!signedPath) throw derniereErreur || new Error("Échec de l'envoi");
 
-      console.log('✅ Upload réussi:', uploadData);
-
-      console.log('📝 Mise à jour BDD document ID:', selectedDoc.id);
-      
-      const { error: updateError } = await supabase
-        .from('documents_chantier')
-        .update({
-          signature_statut: 'signe',
-          signature_artisan_date: new Date().toISOString(),
-          signature_artisan_nom: nomComplet,
-          document_signe_url: signedPath,
-        })
-        .eq('id', selectedDoc.id);
+      etape = 'enregistrement';
+      const { error: updateError } = await withRetry(() =>
+        supabase
+          .from('documents_chantier')
+          .update({
+            signature_statut: 'signe',
+            signature_artisan_date: new Date().toISOString(),
+            signature_artisan_nom: nomComplet,
+            document_signe_url: signedPath,
+          })
+          .eq('id', selectedDoc.id)
+      );
 
       if (updateError) {
         console.error('❌ Erreur update BDD:', updateError);
@@ -418,10 +501,10 @@ export function DocumentsArtisanTab({ chantierId, soustraitantId, disableSignatu
       }, 1000);
 
     } catch (error) {
-      console.error('❌ Erreur signature complète:', error);
+      console.error(`❌ Erreur signature (étape ${etape}):`, error);
       toast({
-        title: 'Erreur',
-        description: error.message || 'Impossible de signer le document',
+        title: 'La signature n\'a pas pu être enregistrée',
+        description: messageErreurSignature(etape, error),
         variant: 'destructive',
       });
     } finally {

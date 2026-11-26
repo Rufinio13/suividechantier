@@ -2,6 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
+// Safari iOS ne libère la mémoire d'un canvas qu'une fois ramené à 0×0 :
+// sans ça, chaque re-rendu (rotation…) s'additionne jusqu'au plantage de l'onglet.
+function clearPages(pagesEl) {
+  pagesEl.querySelectorAll('canvas').forEach(c => { c.width = 0; c.height = 0; });
+  pagesEl.innerHTML = '';
+}
+
 // Affichage d'un PDF page par page avec pdf.js.
 // Remplace l'<iframe>, que les navigateurs mobiles n'affichent pas
 // (Android : cadre vide, iOS : première page seulement).
@@ -15,7 +22,12 @@ export function PdfViewer({ blob, url, maxHeight = '70vh' }) {
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const update = () => setWidth(Math.floor(el.clientWidth));
+    // Ignorer les variations de quelques pixels (barre de défilement) qui
+    // relanceraient tout le rendu pour rien
+    const update = () => {
+      const w = Math.floor(el.clientWidth);
+      setWidth(prev => (Math.abs(prev - w) < 24 ? prev || w : w));
+    };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
@@ -30,8 +42,10 @@ export function PdfViewer({ blob, url, maxHeight = '70vh' }) {
     (async () => {
       try {
         setStatus('loading');
-        const pdfjs = await import('pdfjs-dist');
-        const { default: workerUrl } = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+        // Build "legacy" : inclut les polyfills (Promise.withResolvers, etc.)
+        // absents des iPhone sous iOS < 17.4 et des anciens Android.
+        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        const { default: workerUrl } = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url');
         pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
         pdf = await pdfjs.getDocument({ data: await blob.arrayBuffer(), isEvalSupported: false }).promise;
@@ -40,7 +54,7 @@ export function PdfViewer({ blob, url, maxHeight = '70vh' }) {
 
         const pagesEl = containerRef.current?.querySelector('[data-pages]');
         if (!pagesEl) return;
-        pagesEl.innerHTML = '';
+        clearPages(pagesEl);
 
         // Plafonné à 2 pour limiter la mémoire sur les téléphones
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -73,6 +87,8 @@ export function PdfViewer({ blob, url, maxHeight = '70vh' }) {
     return () => {
       cancelled = true;
       pdf?.destroy();
+      const pagesEl = containerRef.current?.querySelector('[data-pages]');
+      if (pagesEl) clearPages(pagesEl);
     };
   }, [blob, width]);
 
