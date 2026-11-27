@@ -18,7 +18,7 @@ export const useCommentaires = () => {
 export function CommentairesProvider({ children }) {
   const { user, profile } = useAuth();
   const nomsociete = profile?.nomsociete;
-  const auteur = profile?.nom || user?.email || 'Utilisateur';
+  const auteur = [profile?.prenom, profile?.nom].filter(Boolean).join(' ') || user?.email || 'Utilisateur';
 
   const [commentaires, setCommentaires] = useState([]);
   const [loading, setLoading] = useState(true);

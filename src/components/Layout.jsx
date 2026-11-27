@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Menu, X, LogOut, HardHat, Truck, Wrench, Users, ShieldCheck, ListChecks, Package, User } from 'lucide-react';
+import { LayoutDashboard, Menu, X, LogOut, HardHat, Truck, Wrench, Users, ShieldCheck, ListChecks, Package, User, Ruler } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import logoEvabois from '@/assets/logo-evabois.png';
 import { MonCompte } from '@/pages/MonCompte.jsx';
 import { useSousTraitant } from '@/context/SousTraitantContext.jsx';
+import { useCommentaires } from '@/context/CommentairesContext.jsx';
+import { parseTaches } from '@/components/taches/TachesInline.jsx';
+import { estEnRetard } from '@/lib/bureauEtudes';
 
 
 export function Layout() {
@@ -17,6 +20,13 @@ export function Layout() {
   const navigate = useNavigate();
   const { signOut } = useAuth();
   const { nbArtisansNonConformes = 0 } = useSousTraitant();
+  const { commentaires = [] } = useCommentaires();
+
+  // Points BE dont la date prévisionnelle est dépassée
+  const nbPointsBEEnRetard = React.useMemo(() => commentaires
+    .filter(c => c.categorie === 'bureau_etudes' && !c.archive)
+    .reduce((n, c) => n + parseTaches(c.texte).filter(estEnRetard).length, 0),
+  [commentaires]);
 
   const navItems = [
     { name: 'Tableau de bord', href: '/', icon: LayoutDashboard },
@@ -27,6 +37,7 @@ export function Layout() {
     { name: 'Référentiel Commande', href: '/referentiel-commande', icon: Package },
     { name: 'Lots', href: '/lots', icon: ListChecks },
     { name: 'SAV', href: '/sav', icon: Wrench },
+    { name: 'BE', href: '/bureau-etudes', icon: Ruler, alerte: nbPointsBEEnRetard, alerteTitre: 'point(s) BE en retard' },
     { name: 'Mon Compte', href: '/mon-compte', icon: User },
   ];
 

@@ -17,7 +17,11 @@ export function Login() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() =>
+    new URLSearchParams(window.location.search).get('desactive')
+      ? 'Ce compte a été désactivé par le gérant de votre société.'
+      : ''
+  );
   const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const handleLogin = async (e) => {
@@ -31,6 +35,8 @@ export function Login() {
         setError('Email ou mot de passe incorrect. Veuillez réessayer.');
       } else if (signInError.message.includes('Email not confirmed')) {
         setError('Votre email n\'a pas été confirmé. Veuillez vérifier votre boîte mail.');
+      } else if (/banned/i.test(signInError.message)) {
+        setError('Ce compte a été désactivé par le gérant de votre société.');
       } else if (signInError.message.includes('Invalid email')) {
         setError('Format d\'email invalide.');
       } else {

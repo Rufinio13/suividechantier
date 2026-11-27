@@ -30,6 +30,14 @@ import { SetPassword } from '@/pages/SetPassword.jsx';
 import { ActiverCompte } from '@/pages/ActiverCompte.jsx';
 import { useAuth } from '@/hooks/useAuth.jsx';
 import { MonCompte } from '@/pages/MonCompte.jsx';
+import { BureauEtudes } from '@/pages/BureauEtudes.jsx';
+
+// Compte désactivé par le gérant : déconnexion immédiate
+function CompteDesactive() {
+  const { signOut } = useAuth();
+  React.useEffect(() => { signOut(); }, []);
+  return <Navigate to="/login?desactive=1" replace />;
+}
 
 export function PrivateRoute({ children }) {
   const { user, profile, loading } = useAuth();
@@ -53,6 +61,8 @@ export function PrivateRoute({ children }) {
   }
 
   if (!user) return <Navigate to="/login" replace />;
+
+  if (profile?.actif === false) return <CompteDesactive />;
 
   const currentPath = location.pathname;
 
@@ -102,6 +112,7 @@ function App() {
             <Route path="sous-traitants/:id" element={<SousTraitantDetails />} />
             <Route path="fournisseurs" element={<FournisseursList />} />
             <Route path="sav" element={<SAVList />} />
+            <Route path="bureau-etudes" element={<BureauEtudes />} />
             <Route path="mon-compte" element={<MonCompte />} />
           </Route>
 

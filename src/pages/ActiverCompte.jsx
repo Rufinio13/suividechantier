@@ -56,7 +56,7 @@ export function ActiverCompte() {
 
     setLoading(true);
     try {
-      const { email } = await callAcceptInvitation({ token, password });
+      const { email, userType } = await callAcceptInvitation({ token, password });
 
       // Connexion directe avec le compte créé
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
@@ -64,7 +64,7 @@ export function ActiverCompte() {
         navigate('/login');
         return;
       }
-      navigate('/artisan');
+      navigate(userType === 'constructeur' ? '/' : '/artisan');
     } catch (err) {
       setError(err.message);
     } finally {

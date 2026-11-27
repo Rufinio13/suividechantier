@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useToast } from '@/components/ui/use-toast';
 import { useCommentaires, nouvelId } from '@/context/CommentairesContext.jsx';
 import { Plus, Edit2, Trash2, MessageSquare, Ruler, Check, Archive, ArchiveRestore } from 'lucide-react';
-import { SaisieRapide, AjoutTache, LigneTache, parseTaches, formatDateHeure } from '@/components/taches/TachesInline.jsx';
+import { SaisieRapide, parseTaches, formatDateHeure } from '@/components/taches/TachesInline.jsx';
+import { TableauPointsBE } from '@/components/taches/PointsBE.jsx';
 
 // Couleurs communes : bleu clair en cours, vert clair quand tout est coché, gris si archivé
 const COULEURS = {
@@ -47,10 +48,11 @@ export const CATEGORIES_COMMENTAIRE = {
 
 export const parseLignes = (commentaire) => parseTaches(commentaire.texte);
 
-function CommentaireCarte({ commentaire, archives }) {
+// Une note (journal ou BE) : titre + points à cocher. Utilisée par le Planning et l'onglet BE.
+export function CommentaireCarte({ commentaire, archives }) {
   const { toast } = useToast();
   const {
-    updateCommentaire, deleteCommentaire, modifierLignes, addReponse, deleteReponse, setArchive, auteur,
+    updateCommentaire, deleteCommentaire, modifierLignes, setArchive, auteur,
   } = useCommentaires();
 
   const [titreEdite, setTitreEdite] = useState(null);
@@ -67,9 +69,12 @@ function CommentaireCarte({ commentaire, archives }) {
     toast({ title: 'Erreur', description: message, variant: 'destructive' });
   };
 
-  const ajouterLigne = async (texte) => {
+  // Point complet { texte, importance, date_prevue, commentaire, qui } saisi dans le tableau
+  const ajouterLigne = async (point) => {
     try {
-      await modifierLignes(commentaire.id, (l) => [...l, { id: nouvelId(), texte, checked: false }]);
+      await modifierLignes(commentaire.id, (l) => [...l, {
+        id: nouvelId(), checked: false, importance: 'normale', ...point,
+      }]);
       return true;
     } catch (error) {
       erreur("Impossible d'ajouter la tâche.", error);
@@ -154,27 +159,15 @@ function CommentaireCarte({ commentaire, archives }) {
         </div>
       </div>
 
-      {/* Tâches à cocher, chacune avec ses réponses */}
-      <ul className="space-y-1.5">
-        {lignes.map((ligne, index) => (
-          <LigneTache
-            key={ligne.id || index}
-            idCase={`ligne-${commentaire.id}-${index}`}
-            ligne={ligne}
-            index={index}
-            lectureSeule={archives}
-            couleurTexte={s.texte}
-            auteur={auteur}
-            onModifier={(transformer) => modifierLignes(commentaire.id, transformer)}
-            onAddReponse={(texte) => addReponse(commentaire.id, ligne.id, index, texte)}
-            onDeleteReponse={(reponseId) => deleteReponse(commentaire.id, reponseId)}
-            onErreur={erreur}
-          />
-        ))}
-      </ul>
-
-      {/* Ajout direct d'une tâche : bouton (téléphone) ou Entrée (ordinateur) */}
-      {!archives && <AjoutTache onAjouter={ajouterLigne} />}
+      {/* Tableau priorité / désignation / date / commentaire / qui / terminé (journal et BE) */}
+      <TableauPointsBE
+        lignes={lignes}
+        lectureSeule={archives}
+        auteur={auteur}
+        onModifier={(transformer) => modifierLignes(commentaire.id, transformer)}
+        onErreur={erreur}
+        onAjouter={(point) => ajouterLigne(point)}
+      />
 
       <p className="text-xs mt-3 italic text-slate-600">
         Par {commentaire.auteur} - {formatDateHeure(commentaire.date)}
@@ -194,18 +187,16 @@ export function CommentairesBloc({ categorie, chantierId, commentaires, archives
   const { addCommentaire } = useCommentaires();
 
   const [titre, setTitre] = useState('');
-  const [premiereTache, setPremiereTache] = useState('');
   const [envoi, setEnvoi] = useState(false);
 
+  // Les tâches s'ajoutent ensuite dans le tableau de la note
   const creer = async () => {
     const t = titre.trim();
     if (!t || envoi) return;
     setEnvoi(true);
     try {
-      const lignes = premiereTache.trim() ? [{ id: nouvelId(), texte: premiereTache.trim(), checked: false }] : [];
-      await addCommentaire(chantierId, t, JSON.stringify(lignes), categorie);
+      await addCommentaire(chantierId, t, JSON.stringify([]), categorie);
       setTitre('');
-      setPremiereTache('');
     } catch (error) {
       console.error('Erreur création commentaire:', error);
       toast({ title: 'Erreur', description: "Impossible d'ajouter le commentaire.", variant: 'destructive' });
@@ -228,8 +219,6 @@ export function CommentairesBloc({ categorie, chantierId, commentaires, archives
           <div className="flex flex-col sm:flex-row gap-2 pt-3">
             <SaisieRapide value={titre} onChange={setTitre} onSubmit={creer}
               placeholder={theme.placeholder} className="h-9 sm:flex-1" />
-            <SaisieRapide value={premiereTache} onChange={setPremiereTache} onSubmit={creer}
-              placeholder="Première tâche (facultatif)" className="h-9 sm:flex-1" />
             <Button onClick={creer} disabled={!titre.trim() || envoi} className="h-9">
               <Plus className="mr-1 h-4 w-4" /> Ajouter
             </Button>

@@ -9,6 +9,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { User, Mail, Phone, MapPin, Lock, Save, Loader2, Briefcase } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { POSTES } from '@/lib/postes';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { EquipeAgence } from '@/components/compte/EquipeAgence';
+import { Building2 } from 'lucide-react';
 
 export function MonCompte() {
   const { toast } = useToast();
@@ -18,6 +21,8 @@ export function MonCompte() {
   const [saving, setSaving] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [userType, setUserType] = useState(null); // ✅ pour savoir si artisan ou constructeur
+  const [posteEnregistre, setPosteEnregistre] = useState(''); // poste en base (le gérant voit l'onglet Agence)
+  const [societeAGerant, setSocieteAGerant] = useState(true);
 
   const [profile, setProfile] = useState({
     nom: '',
@@ -51,6 +56,11 @@ export function MonCompte() {
         if (error) throw error;
         if (data) {
           setUserType(data.user_type);
+          setPosteEnregistre(data.poste || '');
+          if (data.user_type === 'constructeur') {
+            const { data: aGerant } = await supabase.rpc('societe_a_un_gerant');
+            setSocieteAGerant(aGerant !== false);
+          }
           setProfile({
             nom: data.nom || '',
             prenom: data.prenom || '',
@@ -100,7 +110,9 @@ export function MonCompte() {
             adresse: profile.adresse,
             ville: profile.ville,
             code_postal: profile.code_postal,
-            poste: profile.poste || null, // ✅ contrôlé en base (un seul gérant auto-déclaré)
+            // ✅ Le rôle est défini par le gérant (onglet Agence) ; envoyé seulement
+            // quand la société n'a pas encore de gérant (contrôlé en base)
+            ...(!societeAGerant ? { poste: profile.poste || null } : {}),
           };
 
       const { error } = await supabase
@@ -110,6 +122,10 @@ export function MonCompte() {
 
       if (error) throw error;
 
+      if (updatePayload.poste !== undefined) {
+        setPosteEnregistre(updatePayload.poste || '');
+        if (updatePayload.poste === 'gerant') setSocieteAGerant(true);
+      }
       refreshProfile?.();
       toast({ title: 'Profil mis à jour ✅', description: 'Vos informations ont été sauvegardées' });
     } catch (error) {
@@ -164,19 +180,23 @@ export function MonCompte() {
     );
   }
 
-  return (
+  const estGerant = userType === 'constructeur' && posteEnregistre === 'gerant';
+
+  const header = (
+    <div>
+      <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#683B11' }}>
+        Mon compte
+      </h1>
+      <p className="text-sm mt-1" style={{ color: '#A3806D' }}>
+        {estGerant
+          ? 'Gérez votre profil, votre équipe et ses accès'
+          : 'Gérez vos informations personnelles et votre mot de passe'}
+      </p>
+    </div>
+  );
+
+  const contenuProfil = (
     <div className="space-y-6 max-w-2xl">
-
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight" style={{ color: '#683B11' }}>
-          Mon compte
-        </h1>
-        <p className="text-sm mt-1" style={{ color: '#A3806D' }}>
-          Gérez vos informations personnelles et votre mot de passe
-        </p>
-      </div>
-
       {/* ─── INFORMATIONS PERSONNELLES ─────────────────────────────────────── */}
       <Card className="border border-[#e8e2d9] shadow-sm bg-white">
         <CardHeader>
@@ -225,19 +245,33 @@ export function MonCompte() {
                 <Label htmlFor="poste" className="flex items-center gap-1">
                   <Briefcase className="h-3 w-3" /> Poste
                 </Label>
-                <Select value={profile.poste} onValueChange={(v) => setProfile(p => ({ ...p, poste: v }))}>
-                  <SelectTrigger id="poste">
-                    <SelectValue placeholder="Sélectionnez votre poste" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {POSTES.map(p => (
-                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Seul le gérant peut supprimer un artisan.
-                </p>
+                {societeAGerant ? (
+                  <>
+                    <Input id="poste" disabled className="bg-slate-50 text-slate-500 cursor-not-allowed"
+                      value={POSTES.find(p => p.value === profile.poste)?.label || 'Non défini'} />
+                    <p className="text-xs text-muted-foreground">
+                      {posteEnregistre === 'gerant'
+                        ? 'Les rôles de l\'équipe se gèrent dans l\'onglet « Agence ».'
+                        : 'Votre rôle est défini par le gérant de la société.'}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Select value={profile.poste} onValueChange={(v) => setProfile(p => ({ ...p, poste: v }))}>
+                      <SelectTrigger id="poste">
+                        <SelectValue placeholder="Sélectionnez votre poste" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {POSTES.map(p => (
+                          <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      La société n'a pas encore de gérant. Le gérant gère ensuite l'équipe, les rôles et les accès.
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
@@ -337,6 +371,31 @@ export function MonCompte() {
           </form>
         </CardContent>
       </Card>
+    </div>
+  );
+
+  if (!estGerant) {
+    return (
+      <div className="space-y-6 max-w-2xl">
+        {header}
+        {contenuProfil}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {header}
+      <Tabs defaultValue="profil">
+        <TabsList>
+          <TabsTrigger value="profil" className="gap-1.5"><User className="h-4 w-4" />Profil</TabsTrigger>
+          <TabsTrigger value="agence" className="gap-1.5"><Building2 className="h-4 w-4" />Agence</TabsTrigger>
+        </TabsList>
+        <TabsContent value="profil" className="mt-4">{contenuProfil}</TabsContent>
+        <TabsContent value="agence" className="mt-4 max-w-5xl">
+          <EquipeAgence currentUserId={user?.id} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
