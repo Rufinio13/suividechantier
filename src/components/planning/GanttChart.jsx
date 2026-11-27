@@ -8,6 +8,7 @@ import { useChantier } from '@/context/ChantierContext';
 import { useSousTraitant } from '@/context/SousTraitantContext';
 import { useConfirm } from '@/hooks/useConfirm';
 import { PASTILLE_MODIF_CLASS } from '@/components/planning/TacheModificationInfo';
+import { estTacheFinie } from '@/lib/tacheStatut';
 import { isJourOuvre, diffJoursOuvres, countJoursTravailles, dateFinTravaillee, modeTache, tacheTravailleLe } from '@/lib/joursOuvres';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -36,7 +37,7 @@ export function GanttChart({ taches, chantierId, onEditTache }) {
       const tacheDateFin = parseISO(tache.datefin);
       let joursEnConflit = new Set();
       let joursIndisponible = new Set();
-      if (tache.assignetype === 'soustraitant' && tache.assigneid) {
+      if (tache.assignetype === 'soustraitant' && tache.assigneid && !estTacheFinie(tache)) {
         try {
           const days = eachDayOfInterval({ start: startOfDay(tacheDateDebut), end: startOfDay(tacheDateFin) });
           for (const day of days) {

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useSousTraitant } from '@/context/SousTraitantContext';
 import { PASTILLE_MODIF_CLASS } from '@/components/planning/TacheModificationInfo';
 import { tacheTravailleLe } from '@/lib/joursOuvres';
+import { estTacheFinie } from '@/lib/tacheStatut';
 
 const JOURS_FERIES = [
   '2025-01-01', '2025-04-21', '2025-05-01', '2025-05-08', '2025-05-29', '2025-06-09',
@@ -91,7 +92,7 @@ export function CalendrierView({
 
     let hasConflictThisDay = false;
     let hasIndisponibiliteThisDay = false;
-    if (tache.assignetype === 'soustraitant' && tache.assigneid) {
+    if (tache.assignetype === 'soustraitant' && tache.assigneid && !estTacheFinie(tache)) {
       try {
         const key = `${tache.assigneid}-${dayStr}`;
         const conflict = conflictsByChantier[key];

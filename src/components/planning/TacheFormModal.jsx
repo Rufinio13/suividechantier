@@ -5,7 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { parseISO, isValid, format, eachDayOfInterval, startOfDay } from "date-fns";
-import { diffJoursOuvres, MODES_JOURS_TRAVAILLES, MODE_OUVRES, modeTache, modeSuggerePourDebut } from "@/lib/joursOuvres";
+import { diffJoursOuvres, MODES_JOURS_TRAVAILLES, MODE_OUVRES, modeTache, modeSuggerePourDebut, tacheTravailleLe } from "@/lib/joursOuvres";
+import { estTacheFinie } from "@/lib/tacheStatut";
 import { fr } from "date-fns/locale";
 import { calculateDateFinLogic, calculateDureeOuvree } from "@/context/chantierContextLogics/tacheLogics";
 import { useSousTraitant } from "@/context/SousTraitantContext";
@@ -28,11 +29,11 @@ export function TacheFormModal({
   const modificationsInfo = useModificationsTache(tache?.id, isOpen);
 
   const tacheConflictInfo = useMemo(() => {
-    if (!tache || !tache.assigneid || tache.assignetype !== 'soustraitant' || !tache.datedebut || !tache.datefin) return null;
+    if (!tache || estTacheFinie(tache) || !tache.assigneid || tache.assignetype !== 'soustraitant' || !tache.datedebut || !tache.datefin) return null;
     try {
       const start = startOfDay(parseISO(tache.datedebut));
       const end = startOfDay(parseISO(tache.datefin));
-      const days = eachDayOfInterval({ start, end });
+      const days = eachDayOfInterval({ start, end }).filter(d => tacheTravailleLe(tache, d));
       for (const day of days) {
         const key = `${tache.assigneid}-${format(day, "yyyy-MM-dd")}`;
         const conflict = conflictsByChantier[key];
@@ -62,12 +63,12 @@ export function TacheFormModal({
   const sortedLots = useMemo(() => [...(globalLots || [])].sort((a, b) => (a.lot || "").localeCompare(b.lot || "")), [globalLots]);
 
   const indisponibiliteInfo = useMemo(() => {
-    if (!formData.assigneid || formData.assignetype !== 'soustraitant' || !formData.datedebut || !formData.datefin) return null;
+    if (estTacheFinie({ ...tache, ...formData }) || !formData.assigneid || formData.assignetype !== 'soustraitant' || !formData.datedebut || !formData.datefin) return null;
     try {
       const start = startOfDay(parseISO(formData.datedebut));
       const end = startOfDay(parseISO(formData.datefin));
       if (!isValid(start) || !isValid(end)) return null;
-      const days = eachDayOfInterval({ start, end });
+      const days = eachDayOfInterval({ start, end }).filter(d => tacheTravailleLe(formData, d));
       for (const day of days) {
         const dateStr = format(day, "yyyy-MM-dd");
         if (isArtisanIndisponible(formData.assigneid, dateStr)) {
@@ -76,7 +77,7 @@ export function TacheFormModal({
       }
     } catch (err) { console.error("Erreur parsing indisponibilité:", err); }
     return null;
-  }, [formData.assigneid, formData.assignetype, formData.datedebut, formData.datefin, isArtisanIndisponible]);
+  }, [tache, formData.assigneid, formData.assignetype, formData.datedebut, formData.datefin, formData.jours_travailles, formData.terminee, formData.constructeur_valide, isArtisanIndisponible]);
 
   useEffect(() => {
     if (!isOpen) return;

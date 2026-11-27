@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/hooks/useAuth";
 import { parseISO, format, eachDayOfInterval, startOfDay } from "date-fns";
 import { addJoursOuvres, dateFinTravaillee, countJoursTravailles, modeTache, tacheTravailleLe, MODE_OUVRES } from "@/lib/joursOuvres";
+import { estTacheFinie } from "@/lib/tacheStatut";
 import { sendNotificationEmail, getArtisanEmailInfo } from "@/lib/sendNotificationEmail";
 
 export const ChantierContext = createContext();
@@ -246,7 +247,7 @@ export function ChantierProvider({ children }) {
   const conflictsByChantier = useMemo(() => {
     const conflicts = {};
     
-    const tachesNonValidees = taches.filter(t => !t.constructeur_valide && !t.terminee);
+    const tachesNonValidees = taches.filter(t => !estTacheFinie(t));
     
     tachesNonValidees.forEach(t => {
       if (!t.assigneid || t.assignetype !== "soustraitant" || !t.datedebut || !t.datefin) return;

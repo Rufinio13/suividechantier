@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { calculateDateFinLogic, calculateDureeOuvree } from '@/context/chantierContextLogics/tacheLogics';
 import { tacheTravailleLe, modeTache, MODES_JOURS_TRAVAILLES } from '@/lib/joursOuvres';
+import { estTacheFinie } from '@/lib/tacheStatut';
 import { TacheModificationInfo, useModificationsTache, PASTILLE_MODIF_CLASS } from '@/components/planning/TacheModificationInfo';
 
 const MIN_DAY_WIDTH = 16;
@@ -70,7 +71,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
   const conflictsByDay = useMemo(() => {
     const conflicts = {};
     const stAssignments = {};
-    const tachesNonValidees = cleanTaches.filter(t => !t.constructeur_valide && !t.terminee);
+    const tachesNonValidees = cleanTaches.filter(t => !estTacheFinie(t));
     tachesNonValidees.forEach(tache => {
       if (tache.assignetype === 'soustraitant' && tache.assigneid && tache.datedebut && tache.datefin) {
         const startDate = safeParseDate(tache.datedebut);
@@ -257,11 +258,11 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
   const handleCloseDialog = () => { setSelectedTask(null); setDayTasksList([]); setDayTaskIndex(0); };
 
   const selectedTaskAlert = useMemo(() => {
-    if (!selectedTask || selectedTask.assignetype !== 'soustraitant' || !selectedTask.assigneid || !selectedTask.datedebut || !selectedTask.datefin) return null;
+    if (!selectedTask || estTacheFinie(selectedTask) || selectedTask.assignetype !== 'soustraitant' || !selectedTask.assigneid || !selectedTask.datedebut || !selectedTask.datefin) return null;
     try {
       const start = startOfDay(parseISO(selectedTask.datedebut));
       const end = startOfDay(parseISO(selectedTask.datefin));
-      const days = eachDayOfInterval({ start, end });
+      const days = eachDayOfInterval({ start, end }).filter(d => tacheTravailleLe(selectedTask, d));
 
       for (const day of days) {
         const dateStr = format(day, 'yyyy-MM-dd');
@@ -378,7 +379,7 @@ export function GlobalGanttChart({ chantiers, taches, initialStartDate, sousTrai
                         if (!tasksForDay || tasksForDay.length === 0) return null;
                         const hasConflict = conflictsByDay[dayKey]?.has(chantier.id);
                         const hasIndisponible = tasksForDay.some(t =>
-                          t.assignetype === 'soustraitant' && t.assigneid && isArtisanIndisponible(t.assigneid, dayKey)
+                          !estTacheFinie(t) && t.assignetype === 'soustraitant' && t.assigneid && isArtisanIndisponible(t.assigneid, dayKey)
                         );
                         const firstTask = tasksForDay[0];
                         const boxColor = getTaskColor(firstTask, hasConflict || hasIndisponible);

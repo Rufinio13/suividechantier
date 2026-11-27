@@ -1,6 +1,8 @@
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { format, parseISO, isPast, eachDayOfInterval, startOfDay } from 'date-fns';
+import { estTacheFinie } from '@/lib/tacheStatut';
+import { tacheTravailleLe } from '@/lib/joursOuvres';
 import { fr } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -60,12 +62,12 @@ export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
 
   // --------------------- CONFLITS ---------------------
   const tacheConflictInfo = useMemo(() => {
-    if (!tache.assigneid || tache.assignetype !== 'soustraitant' || !tache.datedebut || !tache.datefin) return null;
+    if (estTacheFinie(tache) || !tache.assigneid || tache.assignetype !== 'soustraitant' || !tache.datedebut || !tache.datefin) return null;
 
     try {
       const start = startOfDay(parseISO(tache.datedebut));
       const end = startOfDay(parseISO(tache.datefin));
-      const days = eachDayOfInterval({ start, end });
+      const days = eachDayOfInterval({ start, end }).filter(d => tacheTravailleLe(tache, d));
       
       for (const day of days) {
         const key = `${tache.assigneid}-${format(day, "yyyy-MM-dd")}`;
@@ -96,12 +98,12 @@ export function TacheItem({ tache, lots, onEdit, onDelete, conflicts }) {
 
   // --------------------- INDISPONIBILITÉ ARTISAN ---------------------
   const tacheIndisponibiliteInfo = useMemo(() => {
-    if (!tache.assigneid || tache.assignetype !== 'soustraitant' || !tache.datedebut || !tache.datefin) return null;
+    if (estTacheFinie(tache) || !tache.assigneid || tache.assignetype !== 'soustraitant' || !tache.datedebut || !tache.datefin) return null;
 
     try {
       const start = startOfDay(parseISO(tache.datedebut));
       const end = startOfDay(parseISO(tache.datefin));
-      const days = eachDayOfInterval({ start, end });
+      const days = eachDayOfInterval({ start, end }).filter(d => tacheTravailleLe(tache, d));
 
       for (const day of days) {
         const dateStr = format(day, "yyyy-MM-dd");
