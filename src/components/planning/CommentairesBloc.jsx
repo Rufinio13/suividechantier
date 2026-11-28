@@ -3,9 +3,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import { useCommentaires, nouvelId } from '@/context/CommentairesContext.jsx';
-import { Plus, Edit2, Trash2, MessageSquare, Ruler, Check, Archive, ArchiveRestore } from 'lucide-react';
+import { Plus, Edit2, Trash2, MessageSquare, Ruler, Check, Archive, ArchiveRestore, CalendarDays } from 'lucide-react';
 import { SaisieRapide, parseTaches, formatDateHeure } from '@/components/taches/TachesInline.jsx';
 import { TableauPointsBE } from '@/components/taches/PointsBE.jsx';
+import { estPourAujourdhui } from '@/lib/bureauEtudes';
 
 // Couleurs communes : bleu clair en cours, vert clair quand tout est coché, gris si archivé
 const COULEURS = {
@@ -48,8 +49,24 @@ export const CATEGORIES_COMMENTAIRE = {
 
 export const parseLignes = (commentaire) => parseTaches(commentaire.texte);
 
+// Filtre « Aujourd'hui » : la note a au moins une tâche prévue aujourd'hui ou sans date
+export const noteAPourAujourdhui = (commentaire) => parseLignes(commentaire).some(estPourAujourdhui);
+
+// Bouton bascule du filtre « Aujourd'hui »
+export function BoutonAujourdhui({ actif, onClick }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={actif}
+      title="Tâches prévues aujourd'hui, en retard et sans date"
+      className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-3 text-sm font-medium transition ${actif
+        ? 'border-[#9FC760] bg-[#9FC760] text-white'
+        : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}>
+      <CalendarDays size={15} /> Aujourd'hui
+    </button>
+  );
+}
+
 // Une note (journal ou BE) : titre + points à cocher. Utilisée par le Planning et l'onglet BE.
-export function CommentaireCarte({ commentaire, archives }) {
+export function CommentaireCarte({ commentaire, archives, filtreJour = false }) {
   const { toast } = useToast();
   const {
     updateCommentaire, deleteCommentaire, modifierLignes, setArchive, auteur,
@@ -167,6 +184,7 @@ export function CommentaireCarte({ commentaire, archives }) {
         onModifier={(transformer) => modifierLignes(commentaire.id, transformer)}
         onErreur={erreur}
         onAjouter={(point) => ajouterLigne(point)}
+        filtreJour={filtreJour}
       />
 
       <p className="text-xs mt-3 italic text-slate-600">
@@ -188,6 +206,9 @@ export function CommentairesBloc({ categorie, chantierId, commentaires, archives
 
   const [titre, setTitre] = useState('');
   const [envoi, setEnvoi] = useState(false);
+  const [filtreJour, setFiltreJour] = useState(false);
+
+  const notesAffichees = filtreJour ? commentaires.filter(noteAPourAujourdhui) : commentaires;
 
   // Les tâches s'ajoutent ensuite dans le tableau de la note
   const creer = async () => {
@@ -208,10 +229,15 @@ export function CommentairesBloc({ categorie, chantierId, commentaires, archives
   return (
     <Card className={className}>
       <CardHeader>
-        <CardTitle className="text-xl flex items-center">
-          <Icon className="mr-2 h-5 w-5 text-primary" />
-          {theme.titre}{archives ? ' — archivés' : ''}
-        </CardTitle>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-xl flex items-center">
+            <Icon className="mr-2 h-5 w-5 text-primary" />
+            {theme.titre}{archives ? ' — archivés' : ''}
+          </CardTitle>
+          {!archives && commentaires.length > 0 && (
+            <BoutonAujourdhui actif={filtreJour} onClick={() => setFiltreJour(f => !f)} />
+          )}
+        </div>
         <CardDescription>{theme.description}</CardDescription>
 
         {/* Création directe d'un commentaire */}
@@ -226,14 +252,19 @@ export function CommentairesBloc({ categorie, chantierId, commentaires, archives
         )}
       </CardHeader>
       <CardContent>
-        {commentaires.length > 0 ? (
+        {notesAffichees.length > 0 ? (
           <ul className="space-y-3">
-            {commentaires.map(commentaire => (
-              <CommentaireCarte key={commentaire.id} commentaire={commentaire} archives={archives} />
+            {notesAffichees.map(commentaire => (
+              <CommentaireCarte key={commentaire.id} commentaire={commentaire} archives={archives}
+                filtreJour={filtreJour && !archives} />
             ))}
           </ul>
         ) : (
-          <p className="text-muted-foreground text-center py-4">{archives ? theme.videArchive : theme.vide}</p>
+          <p className="text-muted-foreground text-center py-4">
+            {filtreJour && commentaires.length > 0
+              ? "Aucune tâche pour aujourd'hui, en retard ou sans date."
+              : archives ? theme.videArchive : theme.vide}
+          </p>
         )}
       </CardContent>
     </Card>

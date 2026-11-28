@@ -7,7 +7,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useChantier } from '@/context/ChantierContext';
 import { useCommentaires } from '@/context/CommentairesContext.jsx';
 import { parseTaches, SaisieRapide } from '@/components/taches/TachesInline.jsx';
-import { CommentaireCarte } from '@/components/planning/CommentairesBloc.jsx';
+import { CommentaireCarte, BoutonAujourdhui, noteAPourAujourdhui } from '@/components/planning/CommentairesBloc.jsx';
 import { estEnRetard } from '@/lib/bureauEtudes';
 
 const SELECT = 'h-9 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
@@ -30,6 +30,7 @@ export function BureauEtudes() {
 
   const [filtreChantier, setFiltreChantier] = useState('');
   const [filtreStatut, setFiltreStatut] = useState('a_faire');
+  const [filtreJour, setFiltreJour] = useState(false);
 
   // Nouvelle note
   const [nvChantier, setNvChantier] = useState('');
@@ -61,6 +62,7 @@ export function BureauEtudes() {
     notesBE.forEach(note => {
       if (filtreChantier && note.chantier_id !== filtreChantier) return;
       if (filtreStatut === 'a_faire' && !noteARealiser(note)) return;
+      if (filtreJour && !noteAPourAujourdhui(note)) return;
       if (!parChantier.has(note.chantier_id)) parChantier.set(note.chantier_id, []);
       parChantier.get(note.chantier_id).push(note);
     });
@@ -77,7 +79,7 @@ export function BureauEtudes() {
           nbRetard: pts.filter(estEnRetard).length,
         };
       });
-  }, [notesBE, chantiersTries, filtreChantier, filtreStatut]);
+  }, [notesBE, chantiersTries, filtreChantier, filtreStatut, filtreJour]);
 
   const chantiersAvecNotes = useMemo(() => {
     const ids = new Set(notesBE.map(n => n.chantier_id));
@@ -162,6 +164,7 @@ export function BureauEtudes() {
             </button>
           ))}
         </div>
+        <BoutonAujourdhui actif={filtreJour} onClick={() => setFiltreJour(f => !f)} />
       </div>
 
       {/* Tableau : une ligne par chantier, ses notes en dessous */}
@@ -169,7 +172,9 @@ export function BureauEtudes() {
         <p className="py-8 text-center text-sm text-muted-foreground">Chargement…</p>
       ) : sections.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
-          {notesBE.length === 0 ? "Aucune note du bureau d'études pour le moment." : 'Aucune note à réaliser.'}
+          {notesBE.length === 0
+            ? "Aucune note du bureau d'études pour le moment."
+            : filtreJour ? "Aucune tâche pour aujourd'hui, en retard ou sans date." : 'Aucune note à réaliser.'}
         </p>
       ) : (
         <div className="rounded-lg border border-[#e8e2d9] bg-white overflow-hidden">
@@ -194,7 +199,7 @@ export function BureauEtudes() {
               </div>
               <ul className="space-y-3 p-3 sm:p-4">
                 {notes.map(note => (
-                  <CommentaireCarte key={note.id} commentaire={note} archives={false} />
+                  <CommentaireCarte key={note.id} commentaire={note} archives={false} filtreJour={filtreJour} />
                 ))}
               </ul>
             </section>

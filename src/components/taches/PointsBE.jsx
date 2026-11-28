@@ -6,7 +6,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ChevronDown, X, Plus } from 'lucide-react';
 import { pourLaTache, formatDateHeure } from '@/components/taches/TachesInline.jsx';
-import { IMPORTANCES, importanceDe, estEnRetard } from '@/lib/bureauEtudes';
+import { IMPORTANCES, importanceDe, estEnRetard, joursDeRetard, estPourAujourdhui } from '@/lib/bureauEtudes';
 
 // Date ISO → JJ/MM/AAAA (heure locale)
 const formatJour = (iso) => {
@@ -207,9 +207,14 @@ function CarteAjout(props) {
  * - onModifier(transformer) : transformer(lignes) → nouvelles lignes (relu en base avant écriture)
  * - onAjouter(point) : ajoute une tâche ; absent = pas d'ajout
  * - auteur : nom de l'utilisateur connecté (auteur des commentaires)
+ * - filtreJour : n'affiche que les tâches prévues aujourd'hui et celles sans date
  */
-export function TableauPointsBE({ lignes, lectureSeule, auteur, onModifier, onErreur, onAjouter }) {
+export function TableauPointsBE({ lignes, lectureSeule, auteur, onModifier, onErreur, onAjouter, filtreJour = false }) {
   const mobile = useEstMobile();
+  // On garde la position d'origine de chaque tâche : elle sert à la retrouver pour l'enregistrer
+  const visibles = lignes
+    .map((ligne, index) => ({ ligne, index }))
+    .filter(({ ligne }) => !filtreJour || estPourAujourdhui(ligne));
   const [ajoutOuvert, setAjoutOuvert] = useState(false);
   const peutAjouter = !lectureSeule && !!onAjouter;
 
@@ -251,20 +256,41 @@ export function TableauPointsBE({ lignes, lectureSeule, auteur, onModifier, onEr
     </button>
   );
 
-  if (lignes.length === 0 && !ajoutOuvert) {
+  if (visibles.length === 0 && !ajoutOuvert) {
+    if (filtreJour && lignes.length > 0) {
+      return (
+        <>
+          <p className="rounded-md bg-white/70 px-3 py-2 text-sm italic text-slate-500">Aucune tâche pour aujourd'hui.</p>
+          {boutonAjout}
+        </>
+      );
+    }
     return boutonAjout || <p className="rounded-md bg-white/70 px-3 py-2 text-sm italic text-slate-500">Aucune tâche.</p>;
   }
+
+  // Couleur de la ligne : vert si terminée, rouge si en retard
+  const couleurLigne = (ligne, retard) => {
+    if (ligne.checked) return 'bg-green-50 border-green-100';
+    if (retard) return 'bg-red-50 border-red-100';
+    return 'border-slate-100';
+  };
+  const libelleRetard = (ligne) => {
+    const n = joursDeRetard(ligne);
+    return n > 0 ? `Retard ${n} j` : null;
+  };
 
   // ─── Téléphone : une carte par tâche ─────────────────────────────────────
   if (mobile) {
     return (
       <div className="space-y-2">
-        {lignes.map((ligne, index) => {
+        {visibles.map(({ ligne, index }) => {
           const a = actions(ligne, index);
           const retard = estEnRetard(ligne);
           return (
             <div key={ligne.id || index}
-              className={`rounded-lg border p-2.5 ${ligne.checked ? 'border-green-200 bg-green-50' : 'border-slate-200 bg-white'}`}>
+              className={`rounded-lg border p-2.5 ${ligne.checked
+                ? 'border-green-200 bg-green-50'
+                : retard ? 'border-red-200 border-l-4 border-l-red-500 bg-red-50' : 'border-slate-200 bg-white'}`}>
               <div className="flex items-start gap-1">
                 <div className="min-w-0 flex-1">
                   <ChampTexte valeur={ligne.texte} disabled={lectureSeule} obligatoire onEnregistrer={a.texte}
@@ -281,6 +307,7 @@ export function TableauPointsBE({ lignes, lectureSeule, auteur, onModifier, onEr
                 <input type="date" value={ligne.date_prevue || ''} disabled={lectureSeule} aria-label="Date prévisionnelle"
                   onChange={a.date}
                   className={`rounded-md border border-slate-200 bg-white px-2 py-1 text-sm ${retard ? 'font-semibold text-red-700 border-red-300' : 'text-slate-700'}`} />
+                {retard && <span className="text-xs font-semibold text-red-700">{libelleRetard(ligne)}</span>}
                 <PastillePriorite valeur={ligne.importance} disabled={lectureSeule} onChange={a.priorite} />
                 <span className="ml-auto"><CaseTermine ligne={ligne} disabled={lectureSeule} onBasculer={a.termine} /></span>
               </div>
@@ -325,12 +352,13 @@ export function TableauPointsBE({ lignes, lectureSeule, auteur, onModifier, onEr
             </tr>
           </thead>
           <tbody>
-            {lignes.map((ligne, index) => {
+            {visibles.map(({ ligne, index }) => {
               const a = actions(ligne, index);
               const retard = estEnRetard(ligne);
               return (
-                <tr key={ligne.id || index} className={`border-b last:border-0 align-top ${ligne.checked ? 'bg-green-50 border-green-100' : 'border-slate-100'}`}>
-                  <td className="px-1 py-1.5">
+                <tr key={ligne.id || index} className={`border-b last:border-0 align-top ${couleurLigne(ligne, retard)}`}>
+                  {/* Barre rouge à gauche pour les tâches en retard */}
+                  <td className={`px-1 py-1.5 ${retard && !ligne.checked ? 'shadow-[inset_4px_0_0_#ef4444]' : ''}`}>
                     <ChampTexte valeur={ligne.texte} disabled={lectureSeule} obligatoire onEnregistrer={a.texte}
                       className={`font-semibold ${ligne.checked ? 'text-green-900' : 'text-slate-900'}`} />
                     <AnciennesReponses ligne={ligne} />
@@ -340,6 +368,7 @@ export function TableauPointsBE({ lignes, lectureSeule, auteur, onModifier, onEr
                       onChange={a.date}
                       className={`${CHAMP} ${retard ? 'font-semibold text-red-700' : 'text-slate-700'}`}
                       title={retard ? 'Date prévisionnelle dépassée' : undefined} />
+                    {retard && <p className="px-2 text-[11px] font-semibold text-red-700">{libelleRetard(ligne)}</p>}
                   </td>
                   <td className="px-3 py-1.5">
                     <PastillePriorite valeur={ligne.importance} disabled={lectureSeule} onChange={a.priorite} />

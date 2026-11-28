@@ -20,5 +20,19 @@ export const formatDatePrevue = (iso) => {
   return a && m && j ? `${j}/${m}/${a}` : '';
 };
 
+// Nombre de jours de retard (0 si pas en retard)
+export const joursDeRetard = (ligne) => {
+  if (!estEnRetard(ligne)) return 0;
+  const [a, m, j] = ligne.date_prevue.split('-').map(Number);
+  const prevue = new Date(a, m - 1, j);
+  const now = new Date();
+  const jour = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((jour - prevue) / 86400000);
+};
+
+// Filtre « Aujourd'hui » : tâches prévues aujourd'hui, en retard (non terminées) ou sans date
+export const estPourAujourdhui = (ligne) =>
+  !ligne?.date_prevue || ligne.date_prevue === aujourdhuiISO() || estEnRetard(ligne);
+
 export const estEnRetard = (ligne) =>
   !!ligne?.date_prevue && !ligne.checked && ligne.date_prevue < aujourdhuiISO();
